@@ -69,7 +69,7 @@ export default function FlightResults() {
     passengers: "2",
   });
 
-  // Convert search params to Supabase Edge Function format
+  // Convert search params to Supabase Edge Function format - reactive to searchParams changes
   const flightSearchParams: FlightSearchParams = {
     origin: searchParams.from,
     destination: searchParams.to,
@@ -79,8 +79,7 @@ export default function FlightResults() {
     cabin: "economy"
   };
 
-
-  const { data, isLoading, error, refetch } = useQuery<FlightSearchResult>({
+  const { data, isLoading, error, refetch, isFetching } = useQuery<FlightSearchResult>({
     queryKey: ['flights-search', flightSearchParams],
     queryFn: () => searchFlights(flightSearchParams),
     enabled: true
@@ -139,11 +138,16 @@ export default function FlightResults() {
   };
 
   const handleSearch = () => {
+    // Reset selected flights when doing a new search
+    setSelectedOutbound(null);
+    setSelectedReturn(null);
+    
     // Trigger refetch with new search parameters
+    // The query key will automatically update due to flightSearchParams changes
     refetch();
   };
 
-  if (isLoading) {
+  if (isLoading || isFetching) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
@@ -228,7 +232,7 @@ export default function FlightResults() {
               <span className="font-accent font-medium">Find Better Options</span>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
             <div className="space-y-2">
               <Label htmlFor="from" className="font-accent font-semibold text-primary flex items-center">
                 <MapPin className="w-4 h-4 mr-2 text-accent" />
@@ -285,14 +289,40 @@ export default function FlightResults() {
                 data-testid="input-return"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="passengers" className="font-accent font-semibold text-primary flex items-center">
+                <Users className="w-4 h-4 mr-2 text-accent" />
+                Passengers
+              </Label>
+              <Input
+                id="passengers"
+                type="number"
+                min="1"
+                max="9"
+                value={searchParams.passengers}
+                onChange={(e) => setSearchParams(prev => ({ ...prev, passengers: e.target.value }))}
+                className="glass border-0 focus:ring-2 focus:ring-accent font-accent"
+                data-testid="input-passengers"
+              />
+            </div>
             <div className="flex items-end">
               <Button 
                 onClick={handleSearch} 
+                disabled={isFetching}
                 className="btn-luxury w-full font-accent font-semibold" 
                 data-testid="button-search-flights"
               >
-                <Search className="w-4 h-4 mr-2" />
-                Update Search
+                {isFetching ? (
+                  <>
+                    <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Searching...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4 mr-2" />
+                    Update Search
+                  </>
+                )}
               </Button>
             </div>
           </div>
