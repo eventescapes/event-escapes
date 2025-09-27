@@ -3,13 +3,14 @@ import { createServer, type Server } from "http";
 import Stripe from "stripe";
 import { storage } from "./storage";
 import { insertBookingSchema, insertBookingItemSchema } from "@shared/schema";
+import { getSupabaseConfig } from "./supabase-config";
 import { z } from "zod";
 
 // Initialize Stripe only if the secret key is available
 let stripe: Stripe | null = null;
 if (process.env.STRIPE_SECRET_KEY) {
   stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: "2024-06-20",
+    apiVersion: "2025-08-27.basil",
   });
   console.log("✓ Stripe integration enabled");
 } else {
@@ -18,6 +19,20 @@ if (process.env.STRIPE_SECRET_KEY) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
+  // Supabase configuration endpoint
+  app.get("/api/config/supabase", (req, res) => {
+    try {
+      const config = getSupabaseConfig();
+      res.json({
+        url: config.url,
+        anonKey: config.anonKey,
+        isConfigured: config.isConfigured
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error getting Supabase config: " + error.message });
+    }
+  });
+
   // Events
   app.get("/api/events", async (req, res) => {
     try {
