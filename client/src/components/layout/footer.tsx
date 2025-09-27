@@ -1,4 +1,3 @@
-import { Link } from "wouter";
 import { Search, Phone, Mail, MapPin, Calendar, Shield, Award, Heart, Star, Crown, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +6,7 @@ export default function Footer() {
   return (
     <footer className="relative bg-gradient-to-br from-primary via-primary to-background overflow-hidden">
       {/* Premium background effects */}
-      <div className="absolute inset-0 bg-gradient-to-br from-luxury/20 to-accent/10 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-accent/20 to-accent/10 pointer-events-none" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(6,182,212,0.1),transparent_50%)] pointer-events-none" />
       
       <div className="relative py-16 px-6 lg:px-8">
