@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import HotelCard from "@/components/hotel-card";
 import { HotelCardSkeleton } from "@/components/loading-skeleton";
-import { SlidersHorizontal, List, Map } from "lucide-react";
+import { SlidersHorizontal, List, Map, Star, MapPin, Calendar, Users, Filter, ArrowUpDown } from "lucide-react";
 
 interface HotelSearchResult {
   hotels: Array<{
@@ -53,22 +53,24 @@ export default function HotelResults() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen">
-        {/* Header Skeleton */}
-        <div className="bg-card border-b border-border">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="animate-pulse">
-              <div className="h-8 bg-muted rounded w-1/3 mb-2"></div>
-              <div className="h-4 bg-muted rounded w-1/2"></div>
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
+        {/* Premium Header Skeleton */}
+        <div className="glass-card border-b" style={{ borderColor: 'var(--glass-border-color)' }}>
+          <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
+            <div className="animate-luxury-fade-in">
+              <div className="h-10 bg-luxury-gradient-subtle rounded w-1/3 mb-4"></div>
+              <div className="h-6 bg-muted rounded w-1/2"></div>
             </div>
           </div>
         </div>
         
-        {/* Content Skeleton */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="space-y-6">
+        {/* Premium Content Skeleton */}
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
+          <div className="space-y-8">
             {Array.from({ length: 3 }, (_, i) => (
-              <HotelCardSkeleton key={i} />
+              <div key={i} className="animate-luxury-scale-in" style={{ animationDelay: `${i * 200}ms` }}>
+                <HotelCardSkeleton />
+              </div>
             ))}
           </div>
         </div>
@@ -78,39 +80,69 @@ export default function HotelResults() {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-destructive mb-2">Error Loading Hotels</h1>
-          <p className="text-muted-foreground">Please try again later.</p>
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
+        <div className="glass-card p-12 text-center max-w-md mx-auto">
+          <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-6">
+            <MapPin className="w-8 h-8 text-destructive" />
+          </div>
+          <h1 className="font-display text-3xl font-bold text-destructive mb-4">Unable to Load Hotels</h1>
+          <p className="text-muted-foreground font-accent mb-6">We're having trouble finding accommodations. Please try again.</p>
+          <Button 
+            onClick={() => window.location.reload()}
+            className="btn-luxury"
+          >
+            Try Again
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
-      {/* Header with Search Summary */}
-      <div className="bg-card border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold mb-2" data-testid="text-hotels-title">
-                Hotels near {data.eventDetails.name}
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
+      {/* Premium Header with Search Summary */}
+      <div className="glass-card border-b" style={{ borderColor: 'var(--glass-border-color)' }}>
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="animate-luxury-fade-in">
+              <div className="inline-flex items-center bg-luxury-gradient-subtle rounded-full px-4 py-2 mb-4">
+                <Star className="w-4 h-4 text-accent mr-2" />
+                <span className="font-accent font-semibold text-accent text-sm tracking-wide uppercase">Premium Hotels</span>
+              </div>
+              <h1 className="font-display text-3xl lg:text-4xl font-bold text-primary mb-3 tracking-tight" data-testid="text-hotels-title">
+                Luxury Hotels near
+                <span className="text-luxury block">{data.eventDetails.name}</span>
               </h1>
-              <p className="text-muted-foreground" data-testid="text-search-summary">
-                {data.eventDetails.venue} • July 15-17, 2024 • 2 guests
-              </p>
+              <div className="flex flex-wrap items-center gap-4 text-muted-foreground font-accent" data-testid="text-search-summary">
+                <div className="flex items-center">
+                  <MapPin className="w-4 h-4 mr-2 text-accent" />
+                  {data.eventDetails.venue}
+                </div>
+                <div className="flex items-center">
+                  <Calendar className="w-4 h-4 mr-2 text-accent" />
+                  July 15-17, 2024
+                </div>
+                <div className="flex items-center">
+                  <Users className="w-4 h-4 mr-2 text-accent" />
+                  2 guests
+                </div>
+              </div>
             </div>
-            <div className="flex items-center space-x-4 mt-4 md:mt-0">
-              <Button variant="outline" size="sm" data-testid="button-filters">
-                <SlidersHorizontal className="mr-2 h-4 w-4" />
-                Filters
+            <div className="flex items-center gap-4 animate-luxury-slide-in">
+              <Button 
+                variant="outline" 
+                className="btn-luxury-secondary font-accent font-semibold" 
+                data-testid="button-filters"
+              >
+                <Filter className="mr-2 h-4 w-4" />
+                Advanced Filters
               </Button>
-              <div className="flex bg-muted rounded-md p-1">
+              <div className="glass rounded-lg p-1">
                 <Button
                   variant={viewMode === 'list' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setViewMode('list')}
+                  className={viewMode === 'list' ? 'btn-luxury' : 'font-accent'}
                   data-testid="button-list-view"
                 >
                   <List className="mr-2 h-4 w-4" />
@@ -119,11 +151,12 @@ export default function HotelResults() {
                 <Button
                   variant={viewMode === 'map' ? 'default' : 'ghost'}
                   size="sm"
-                  onClick={() => setViewMode('map')}
+                  disabled
+                  className="font-accent opacity-50 cursor-not-allowed"
                   data-testid="button-map-view"
                 >
                   <Map className="mr-2 h-4 w-4" />
-                  Map
+                  Map (Coming Soon)
                 </Button>
               </div>
             </div>
@@ -131,25 +164,43 @@ export default function HotelResults() {
         </div>
       </div>
 
-      {/* Filter Chips */}
-      <div className="bg-background border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-wrap gap-2">
+      {/* Premium Filter Chips */}
+      <div className="bg-luxury-gradient-subtle border-b" style={{ borderColor: 'var(--glass-border-color)' }}>
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-accent font-semibold text-primary">Refine Your Search</h3>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="font-accent text-muted-foreground hover:text-accent"
+              onClick={() => setActiveFilters(['500m'])}
+              data-testid="button-reset-filters"
+            >
+              <ArrowUpDown className="w-4 h-4 mr-2" />
+              Reset Filters
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-3">
             {[
-              { id: '500m', label: '≤ 500m from venue' },
-              { id: '1km', label: '≤ 1km from venue' },
-              { id: '2km', label: '≤ 2km from venue' },
-              { id: '4star', label: '4+ Star Rating' },
-              { id: 'cancellation', label: 'Free Cancellation' },
-              { id: 'under200', label: 'Under $200/night' },
+              { id: '500m', label: '≤ 500m from venue', icon: '📍' },
+              { id: '1km', label: '≤ 1km from venue', icon: '🚶' },
+              { id: '2km', label: '≤ 2km from venue', icon: '🚗' },
+              { id: '4star', label: '4+ Star Rating', icon: '⭐' },
+              { id: 'cancellation', label: 'Free Cancellation', icon: '✅' },
+              { id: 'under200', label: 'Under $200/night', icon: '💰' },
             ].map((filter) => (
               <Badge
                 key={filter.id}
                 variant={activeFilters.includes(filter.id) ? 'default' : 'secondary'}
-                className="cursor-pointer hover:bg-opacity-80 transition-colors"
+                className={`cursor-pointer font-accent font-medium px-4 py-2 transition-all duration-300 hover:scale-105 ${
+                  activeFilters.includes(filter.id) 
+                    ? 'bg-luxury-gradient text-primary shadow-luxury' 
+                    : 'glass hover:shadow-luxury-lg'
+                }`}
                 onClick={() => handleFilterToggle(filter.id)}
                 data-testid={`filter-${filter.id}`}
               >
+                <span className="mr-2">{filter.icon}</span>
                 {filter.label}
               </Badge>
             ))}
@@ -157,30 +208,58 @@ export default function HotelResults() {
         </div>
       </div>
 
-      {/* Results */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="mb-4">
-          <p className="text-muted-foreground" data-testid="text-results-count">
-            Showing {data.hotels.length} hotels • Sorted by distance from venue
-          </p>
+      {/* Premium Results */}
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 space-luxury">
+        <div className="flex justify-between items-center mb-8">
+          <div className="animate-luxury-fade-in">
+            <h2 className="font-display text-2xl font-bold text-primary mb-2">Available Accommodations</h2>
+            <p className="text-muted-foreground font-accent" data-testid="text-results-count">
+              {data.hotels.length} premium hotels • Sorted by proximity to venue
+            </p>
+          </div>
+          <div className="animate-luxury-slide-in">
+            <Button 
+              variant="outline" 
+              className="btn-luxury-secondary font-accent font-medium"
+              data-testid="button-sort-price"
+            >
+              <ArrowUpDown className="w-4 h-4 mr-2" />
+              Sort by Price
+            </Button>
+          </div>
         </div>
 
-        <div className="space-y-6">
-          {data.hotels.map((hotel) => (
-            <HotelCard
+        <div className="space-y-8">
+          {data.hotels.map((hotel, index) => (
+            <div 
               key={hotel.id}
-              hotel={hotel}
-              onSelect={handleHotelSelect}
-            />
+              className="animate-luxury-slide-in"
+              style={{ animationDelay: `${index * 150}ms` }}
+            >
+              <HotelCard
+                hotel={hotel}
+                onSelect={handleHotelSelect}
+              />
+            </div>
           ))}
         </div>
 
-        {/* Empty state if no results */}
+        {/* Premium Empty State */}
         {data.hotels.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground" data-testid="no-hotels-message">
-              No hotels found matching your criteria. Try adjusting your filters.
+          <div className="glass-card p-16 text-center animate-luxury-scale-in">
+            <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
+              <MapPin className="w-12 h-12 text-muted-foreground" />
+            </div>
+            <h3 className="font-display text-2xl font-semibold text-primary mb-4">No Hotels Found</h3>
+            <p className="text-muted-foreground font-accent mb-6 max-w-md mx-auto" data-testid="no-hotels-message">
+              We couldn't find any hotels matching your criteria. Try adjusting your filters or expanding your search area.
             </p>
+            <Button 
+              onClick={() => setActiveFilters(['500m'])}
+              className="btn-luxury-secondary"
+            >
+              Reset All Filters
+            </Button>
           </div>
         )}
       </div>
