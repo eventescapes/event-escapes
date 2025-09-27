@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -17,15 +17,53 @@ export default function Home() {
     date: "",
     category: "",
   });
+  const [searchParams, setSearchParams] = useState<URLSearchParams | null>(null);
+
+  // Parse URL parameters on load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.size > 0) {
+      setSearchFilters({
+        city: params.get('city') || '',
+        date: params.get('date') || '',
+        category: params.get('category') || '',
+      });
+      setSearchParams(params);
+    }
+  }, []);
+
+  // Build API query with search parameters
+  const buildApiQuery = () => {
+    const params = new URLSearchParams();
+    if (searchFilters.city) params.append('city', searchFilters.city);
+    if (searchFilters.category && searchFilters.category !== 'all') params.append('category', searchFilters.category);
+    if (searchFilters.date) {
+      const startDate = new Date(searchFilters.date);
+      params.append('startDate', startDate.toISOString());
+    }
+    return params.toString() ? `/api/events?${params.toString()}` : '/api/events';
+  };
 
   const { data: events, isLoading, error } = useQuery<Event[]>({
-    queryKey: ["/api/events"],
+    queryKey: ['events', searchFilters],
+    queryFn: () => fetch(buildApiQuery()).then(res => {
+      if (!res.ok) throw new Error('Failed to fetch events');
+      return res.json();
+    }),
   });
 
   const handleSearch = () => {
-    // In a real implementation, this would update the query parameters
-    // For now, we'll just log the search
-    console.log("Searching with filters:", searchFilters);
+    // Update URL with search parameters
+    const params = new URLSearchParams();
+    if (searchFilters.city) params.append('city', searchFilters.city);
+    if (searchFilters.category && searchFilters.category !== 'all') params.append('category', searchFilters.category);
+    if (searchFilters.date) params.append('date', searchFilters.date);
+    
+    const newUrl = params.toString() ? `?${params.toString()}` : '';
+    window.history.pushState({}, '', `${window.location.pathname}${newUrl}`);
+    
+    // Trigger new search by updating search params
+    setSearchParams(params);
   };
 
   return (
