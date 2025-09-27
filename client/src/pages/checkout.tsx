@@ -17,10 +17,13 @@ import { z } from "zod";
 
 // Make sure to call `loadStripe` outside of a component's render to avoid
 // recreating the `Stripe` object on every render.
-if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-  throw new Error('Missing required Stripe key: VITE_STRIPE_PUBLIC_KEY');
+let stripePromise: Promise<any> | null = null;
+if (import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
+  stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+  console.log("✓ Stripe payment integration enabled");
+} else {
+  console.log("⚠ Stripe payment integration disabled - payment processing unavailable");
 }
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
 const guestInfoSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -283,26 +286,48 @@ const CheckoutForm = ({ bookingData }: { bookingData: typeof mockBookingData }) 
 
 export default function Checkout() {
   const [clientSecret, setClientSecret] = useState("");
+  const [stripeAvailable, setStripeAvailable] = useState(!!stripePromise);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Create PaymentIntent as soon as the page loads
-    apiRequest("POST", "/api/create-payment-intent", { 
-      amount: mockBookingData.total,
-      bookingId: "temp-booking-id" 
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        setClientSecret(data.clientSecret);
+    // Only create PaymentIntent if Stripe is available
+    if (stripePromise) {
+      apiRequest("POST", "/api/create-payment-intent", { 
+        amount: mockBookingData.total,
+        bookingId: "temp-booking-id" 
       })
-      .catch(() => {
-        toast({
-          title: "Payment Setup Error",
-          description: "Unable to initialize payment. Please refresh the page.",
-          variant: "destructive",
+        .then((res) => res.json())
+        .then((data) => {
+          setClientSecret(data.clientSecret);
+        })
+        .catch((error) => {
+          console.log("Payment setup failed:", error);
+          setStripeAvailable(false);
+          toast({
+            title: "Payment Setup Error",
+            description: "Payment processing is currently unavailable. You can still review your booking details.",
+            variant: "destructive",
+          });
         });
-      });
+    }
   }, [toast]);
+
+  // If Stripe is not available, show the form without payment processing
+  if (!stripeAvailable || !stripePromise) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <h1 className="text-3xl font-bold mb-8" data-testid="text-checkout-title">
+          Review Your Trip
+        </h1>
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-8">
+          <p className="text-yellow-800 dark:text-yellow-200">
+            ⚠ Payment processing is currently unavailable. You can review your trip details below.
+          </p>
+        </div>
+        <CheckoutForm bookingData={mockBookingData} />
+      </div>
+    );
+  }
 
   if (!clientSecret) {
     return (
@@ -321,9 +346,13 @@ export default function Checkout() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Booking Form */}
         <div className="lg:col-span-2">
-          <Elements stripe={stripePromise} options={{ clientSecret }}>
+          {stripePromise && clientSecret ? (
+            <Elements stripe={stripePromise} options={{ clientSecret }}>
+              <CheckoutForm bookingData={mockBookingData} />
+            </Elements>
+          ) : (
             <CheckoutForm bookingData={mockBookingData} />
-          </Elements>
+          )}
         </div>
 
         {/* Booking Summary */}

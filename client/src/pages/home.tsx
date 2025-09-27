@@ -89,7 +89,7 @@ export default function Home() {
                       <SelectValue placeholder="All Events" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Events</SelectItem>
+                      <SelectItem value="all">All Events</SelectItem>
                       <SelectItem value="music">Music Festivals</SelectItem>
                       <SelectItem value="sports">Sports</SelectItem>
                       <SelectItem value="conference">Conferences</SelectItem>

@@ -5,13 +5,16 @@ import { storage } from "./storage";
 import { insertBookingSchema, insertBookingItemSchema } from "@shared/schema";
 import { z } from "zod";
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+// Initialize Stripe only if the secret key is available
+let stripe: Stripe | null = null;
+if (process.env.STRIPE_SECRET_KEY) {
+  stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: "2024-06-20",
+  });
+  console.log("✓ Stripe integration enabled");
+} else {
+  console.log("⚠ Stripe integration disabled - payment routes will be unavailable");
 }
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2023-10-16",
-});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
@@ -233,6 +236,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Stripe payment route for one-time payments
   app.post("/api/create-payment-intent", async (req, res) => {
     try {
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: "Payment processing is currently unavailable. Stripe integration is disabled." 
+        });
+      }
+
       const { amount, bookingId } = req.body;
       
       if (!amount || amount <= 0) {
@@ -254,6 +263,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Webhook for payment confirmation
   app.post("/api/webhooks/stripe", async (req, res) => {
     try {
+      if (!stripe) {
+        console.log("Stripe webhook received but Stripe integration is disabled");
+        return res.status(200).send("OK");
+      }
+
       const sig = req.headers['stripe-signature'] as string;
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
       
