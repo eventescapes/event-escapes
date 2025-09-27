@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { useBooking } from "@/contexts/BookingContext";
 import { apiRequest } from "@/lib/queryClient";
 import { formatCurrency } from "@/lib/utils";
 import { Calendar, Bed, Plane, Music, CreditCard, Bitcoin, Shield, Star, CheckCircle, User, Mail, Phone, Lock, Gift } from "lucide-react";
@@ -36,31 +37,37 @@ const guestInfoSchema = z.object({
 
 type GuestInfo = z.infer<typeof guestInfoSchema>;
 
-// Mock booking data - in real app this would come from booking state/context
-const mockBookingData = {
-  event: {
-    name: "Summer Beats Festival",
-    dates: "July 15-17, 2024",
-    tickets: "General Admission × 2",
-    price: 178,
-  },
-  hotel: {
-    name: "The Plaza Hotel",
-    dates: "July 15-17, 2024 (2 nights)",
-    room: "Deluxe Room × 1",
-    price: 598,
-  },
-  flights: {
-    route: "LAX ↔ JFK",
-    details: "Economy × 2 passengers",
-    price: 1256,
-  },
-  subtotal: 2032,
-  taxes: 203,
-  total: 2235,
+// Helper function to format booking data for display
+const getBookingDisplayData = ({ booking, calculateTotal }: { booking: any, calculateTotal: () => number }) => {
+  const subtotal = calculateTotal();
+  const taxes = Math.round(subtotal * 0.1); // 10% tax
+  const total = subtotal + taxes;
+
+  return {
+    event: {
+      name: booking.selectedEvent?.title || "No Event Selected",
+      dates: booking.selectedEvent?.date || "TBD",
+      tickets: "General Admission × 1",
+      price: booking.selectedEvent?.price || 0,
+    },
+    hotel: {
+      name: booking.selectedHotel?.name || "No Hotel Selected",
+      dates: "TBD",
+      room: "Standard Room × 1",
+      price: booking.selectedHotel?.price || 0,
+    },
+    flights: {
+      route: "TBD",
+      details: "Economy × 1 passenger",
+      price: (booking.selectedOutboundFlight?.price || 0) + (booking.selectedReturnFlight?.price || 0),
+    },
+    subtotal,
+    taxes,
+    total,
+  };
 };
 
-const CheckoutForm = ({ bookingData }: { bookingData: typeof mockBookingData }) => {
+const CheckoutForm = ({ bookingData }: { bookingData: ReturnType<typeof getBookingDisplayData> }) => {
   const stripe = useStripe();
   const elements = useElements();
   const { toast } = useToast();
@@ -365,6 +372,8 @@ const CheckoutForm = ({ bookingData }: { bookingData: typeof mockBookingData }) 
 };
 
 export default function Checkout() {
+  const { booking, calculateTotal } = useBooking();
+  const bookingData = getBookingDisplayData({ booking, calculateTotal });
   const [clientSecret, setClientSecret] = useState("");
   const [stripeAvailable, setStripeAvailable] = useState(!!stripePromise);
   const { toast } = useToast();
@@ -373,7 +382,7 @@ export default function Checkout() {
     // Only create PaymentIntent if Stripe is available
     if (stripePromise) {
       apiRequest("POST", "/api/create-payment-intent", { 
-        amount: mockBookingData.total,
+        amount: bookingData.total,
         bookingId: "temp-booking-id" 
       })
         .then((res) => res.json())
@@ -390,7 +399,7 @@ export default function Checkout() {
           });
         });
     }
-  }, [toast]);
+  }, [bookingData.total, toast]);
 
   // If Stripe is not available, show the form without payment processing
   if (!stripeAvailable || !stripePromise) {
@@ -422,7 +431,7 @@ export default function Checkout() {
               </div>
             </div>
           </div>
-          <CheckoutForm bookingData={mockBookingData} />
+          <CheckoutForm bookingData={bookingData} />
         </div>
       </div>
     );
@@ -465,10 +474,10 @@ export default function Checkout() {
           <div className="lg:col-span-2">
             {stripePromise && clientSecret ? (
               <Elements stripe={stripePromise} options={{ clientSecret }}>
-                <CheckoutForm bookingData={mockBookingData} />
+                <CheckoutForm bookingData={bookingData} />
               </Elements>
             ) : (
-              <CheckoutForm bookingData={mockBookingData} />
+              <CheckoutForm bookingData={bookingData} />
             )}
           </div>
 
@@ -491,18 +500,18 @@ export default function Checkout() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-accent font-semibold text-primary" data-testid="text-event-name">
-                      {mockBookingData.event.name}
+                      {bookingData.event.name}
                     </h3>
                     <p className="text-sm text-muted-foreground font-accent" data-testid="text-event-dates">
-                      {mockBookingData.event.dates}
+                      {bookingData.event.dates}
                     </p>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mb-3 font-accent" data-testid="text-event-tickets">
-                  {mockBookingData.event.tickets}
+                  {bookingData.event.tickets}
                 </p>
                 <p className="text-right font-accent font-bold text-primary text-lg" data-testid="text-event-price">
-                  {formatCurrency(mockBookingData.event.price)}
+                  {formatCurrency(bookingData.event.price)}
                 </p>
               </div>
 
@@ -514,18 +523,18 @@ export default function Checkout() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-accent font-semibold text-primary" data-testid="text-hotel-name">
-                      {mockBookingData.hotel.name}
+                      {bookingData.hotel.name}
                     </h3>
                     <p className="text-sm text-muted-foreground font-accent" data-testid="text-hotel-dates">
-                      {mockBookingData.hotel.dates}
+                      {bookingData.hotel.dates}
                     </p>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mb-3 font-accent" data-testid="text-hotel-room">
-                  {mockBookingData.hotel.room}
+                  {bookingData.hotel.room}
                 </p>
                 <p className="text-right font-accent font-bold text-primary text-lg" data-testid="text-hotel-price">
-                  {formatCurrency(mockBookingData.hotel.price)}
+                  {formatCurrency(bookingData.hotel.price)}
                 </p>
               </div>
 
@@ -540,15 +549,15 @@ export default function Checkout() {
                       Round-trip Flights
                     </h3>
                     <p className="text-sm text-muted-foreground font-accent" data-testid="text-flights-route">
-                      {mockBookingData.flights.route}
+                      {bookingData.flights.route}
                     </p>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mb-3 font-accent" data-testid="text-flights-details">
-                  {mockBookingData.flights.details}
+                  {bookingData.flights.details}
                 </p>
                 <p className="text-right font-accent font-bold text-primary text-lg" data-testid="text-flights-price">
-                  {formatCurrency(mockBookingData.flights.price)}
+                  {formatCurrency(bookingData.flights.price)}
                 </p>
               </div>
 
@@ -557,17 +566,17 @@ export default function Checkout() {
                 <div className="space-y-3 mb-4">
                   <div className="flex justify-between items-center font-accent">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="font-medium text-primary" data-testid="text-subtotal">{formatCurrency(mockBookingData.subtotal)}</span>
+                    <span className="font-medium text-primary" data-testid="text-subtotal">{formatCurrency(bookingData.subtotal)}</span>
                   </div>
                   <div className="flex justify-between items-center font-accent">
                     <span className="text-muted-foreground">Taxes & Fees</span>
-                    <span className="font-medium text-primary" data-testid="text-taxes">{formatCurrency(mockBookingData.taxes)}</span>
+                    <span className="font-medium text-primary" data-testid="text-taxes">{formatCurrency(bookingData.taxes)}</span>
                   </div>
                 </div>
                 <div className="border-t border-accent/20 pt-4">
                   <div className="flex justify-between items-center">
                     <span className="font-display text-xl font-bold text-primary">Total</span>
-                    <span className="font-display text-2xl font-bold text-luxury" data-testid="text-total">{formatCurrency(mockBookingData.total)}</span>
+                    <span className="font-display text-2xl font-bold text-luxury" data-testid="text-total">{formatCurrency(bookingData.total)}</span>
                   </div>
                 </div>
               </div>
