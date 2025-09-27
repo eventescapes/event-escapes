@@ -55,7 +55,6 @@ interface FlightSearchResult {
 }
 
 export default function FlightResults() {
-  console.log('🚁 FlightResults component loaded');
   
   const [, setLocation] = useLocation();
   const [selectedOutbound, setSelectedOutbound] = useState<string | null>(null);
@@ -86,22 +85,6 @@ export default function FlightResults() {
     enabled: true
   });
 
-  // Debug logging
-  console.log('🔍 Query state:', { 
-    isLoading, 
-    hasError: !!error, 
-    hasData: !!data,
-    dataType: typeof data,
-    dataKeys: data ? Object.keys(data) : 'no data'
-  });
-  
-  if (error) {
-    console.error('❌ Flight query error:', error);
-  }
-  
-  if (data) {
-    console.log('📦 Received data in component:', data);
-  }
 
   const bookingMutation = useMutation({
     mutationFn: bookFlight,

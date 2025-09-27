@@ -50,55 +50,63 @@ export { supabase, isSupabaseConfigured, ensureSupabaseInit };
 
 // Data transformation functions
 const transformDuffelFlightToExpectedFormat = (duffelFlight: any) => {
-  // Transform Duffel API flight object to match our FlightSearchResult interface
+  // Transform flight object to match our FlightSearchResult interface
+  // Handle the actual Supabase Edge Function response format
   return {
     id: duffelFlight.id || `flight-${Math.random().toString(36).substr(2, 9)}`,
-    airline: duffelFlight.segments?.[0]?.marketing_carrier?.name || 
+    airline: duffelFlight.airline?.name || 
              duffelFlight.airline || 
+             duffelFlight.segments?.[0]?.marketing_carrier?.name || 
              duffelFlight.operating_carrier?.name || 
              "Unknown Airline",
-    flightNumber: duffelFlight.segments?.[0]?.marketing_carrier_flight_number || 
+    flightNumber: duffelFlight.flightNumber ||
                   duffelFlight.flight_number ||
+                  duffelFlight.segments?.[0]?.marketing_carrier_flight_number || 
                   duffelFlight.segments?.[0]?.operating_carrier_flight_number ||
                   "N/A",
     departure: {
-      airport: duffelFlight.segments?.[0]?.origin?.iata_code || 
-               duffelFlight.departure?.airport || 
+      airport: duffelFlight.departure?.airport || 
+               duffelFlight.segments?.[0]?.origin?.iata_code || 
                duffelFlight.origin?.iata_code ||
                "Unknown",
-      time: duffelFlight.segments?.[0]?.departing_at ? 
-            new Date(duffelFlight.segments[0].departing_at).toLocaleTimeString('en-US', { 
-              hour: '2-digit', 
-              minute: '2-digit', 
-              hour12: false 
-            }) :
-            duffelFlight.departure?.time || "00:00",
-      city: duffelFlight.segments?.[0]?.origin?.city_name || 
-            duffelFlight.departure?.city ||
+      time: duffelFlight.departure?.time || 
+            (duffelFlight.segments?.[0]?.departing_at ? 
+              new Date(duffelFlight.segments[0].departing_at).toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                hour12: false 
+              }) : "00:00"),
+      city: duffelFlight.departure?.city ||
+            duffelFlight.segments?.[0]?.origin?.city_name || 
             "Unknown City"
     },
     arrival: {
-      airport: duffelFlight.segments?.slice(-1)[0]?.destination?.iata_code || 
-               duffelFlight.arrival?.airport ||
+      airport: duffelFlight.arrival?.airport ||
+               duffelFlight.segments?.slice(-1)[0]?.destination?.iata_code || 
                duffelFlight.destination?.iata_code ||
                "Unknown",
-      time: duffelFlight.segments?.slice(-1)[0]?.arriving_at ?
-            new Date(duffelFlight.segments.slice(-1)[0].arriving_at).toLocaleTimeString('en-US', { 
-              hour: '2-digit', 
-              minute: '2-digit', 
-              hour12: false 
-            }) :
-            duffelFlight.arrival?.time || "00:00",
-      city: duffelFlight.segments?.slice(-1)[0]?.destination?.city_name || 
-            duffelFlight.arrival?.city ||
+      time: duffelFlight.arrival?.time ||
+            (duffelFlight.segments?.slice(-1)[0]?.arriving_at ?
+              new Date(duffelFlight.segments.slice(-1)[0].arriving_at).toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                hour12: false 
+              }) : "00:00"),
+      city: duffelFlight.arrival?.city ||
+            duffelFlight.segments?.slice(-1)[0]?.destination?.city_name || 
             "Unknown City"
     },
-    duration: duffelFlight.total_duration || 
-              duffelFlight.duration || 
+    duration: duffelFlight.duration || 
+              duffelFlight.total_duration || 
               "N/A",
-    stops: (duffelFlight.segments?.length || 1) - 1,
-    price: parseFloat(duffelFlight.total_amount || duffelFlight.price || duffelFlight.base_amount || 0),
-    class: duffelFlight.cabin_class || 
+    stops: duffelFlight.stops !== undefined ? duffelFlight.stops : 
+           ((duffelFlight.segments?.length || 1) - 1),
+    price: parseFloat(duffelFlight.price?.amount || 
+                     duffelFlight.price || 
+                     duffelFlight.total_amount || 
+                     duffelFlight.base_amount || 0),
+    class: duffelFlight.class ||
+           duffelFlight.cabin_class || 
            duffelFlight.segments?.[0]?.passengers?.[0]?.cabin_class ||
            "economy",
     amenities: duffelFlight.amenities || 
@@ -108,13 +116,16 @@ const transformDuffelFlightToExpectedFormat = (duffelFlight: any) => {
 };
 
 const transformDuffelResponseToExpectedFormat = (duffelResponse: any) => {
-  console.log('🔄 Transforming Duffel response:', duffelResponse);
-  
   // Handle different possible response structures
   let outbound = [];
   let returnFlights = [];
   
-  if (duffelResponse.outbound) {
+  // Handle the actual Supabase Edge Function response format
+  if (duffelResponse.outboundFlights) {
+    outbound = Array.isArray(duffelResponse.outboundFlights) ? 
+      duffelResponse.outboundFlights.map(transformDuffelFlightToExpectedFormat) : 
+      [];
+  } else if (duffelResponse.outbound) {
     outbound = Array.isArray(duffelResponse.outbound) ? 
       duffelResponse.outbound.map(transformDuffelFlightToExpectedFormat) : 
       [];
@@ -129,7 +140,11 @@ const transformDuffelResponseToExpectedFormat = (duffelResponse: any) => {
     outbound = duffelResponse.map(transformDuffelFlightToExpectedFormat);
   }
   
-  if (duffelResponse.return) {
+  if (duffelResponse.returnFlights) {
+    returnFlights = Array.isArray(duffelResponse.returnFlights) ? 
+      duffelResponse.returnFlights.map(transformDuffelFlightToExpectedFormat) : 
+      [];
+  } else if (duffelResponse.return) {
     returnFlights = Array.isArray(duffelResponse.return) ? 
       duffelResponse.return.map(transformDuffelFlightToExpectedFormat) : 
       [];
@@ -137,18 +152,10 @@ const transformDuffelResponseToExpectedFormat = (duffelResponse: any) => {
     returnFlights = duffelResponse.data.slices[1].offers.map(transformDuffelFlightToExpectedFormat);
   }
   
-  const result = {
+  return {
     outbound: outbound,
     return: returnFlights
   };
-  
-  console.log('✅ Transformed result:', {
-    outbound: result.outbound.length,
-    return: result.return.length,
-    sampleOutbound: result.outbound[0]
-  });
-  
-  return result;
 };
 
 // Flight search and booking functions using Edge Functions
@@ -203,17 +210,8 @@ export const searchFlights = async (params: FlightSearchParams) => {
       throw new Error(`Flight search failed: ${error.message}`);
     }
 
-    console.log('✅ Flight search response from Duffel API:', data);
-    console.log('📊 Response type:', typeof data);
-    console.log('📊 Response structure:', Object.keys(data || {}));
-    
     // Transform the Duffel API response to match our expected format
     const transformedData = transformDuffelResponseToExpectedFormat(data);
-    
-    console.log('📊 Transformed flights:', { 
-      outbound: transformedData?.outbound?.length || 0, 
-      return: transformedData?.return?.length || 0 
-    });
     
     return transformedData;
   } catch (error) {
