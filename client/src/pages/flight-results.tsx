@@ -55,6 +55,8 @@ interface FlightSearchResult {
 }
 
 export default function FlightResults() {
+  console.log('🚁 FlightResults component loaded');
+  
   const [, setLocation] = useLocation();
   const [selectedOutbound, setSelectedOutbound] = useState<string | null>(null);
   const [selectedReturn, setSelectedReturn] = useState<string | null>(null);
