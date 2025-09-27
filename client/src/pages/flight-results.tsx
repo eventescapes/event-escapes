@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import FlightCard from "@/components/flight-card";
 import { FlightCardSkeleton } from "@/components/loading-skeleton";
+import { useBooking } from "@/contexts/BookingContext";
+import { useToast } from "@/hooks/use-toast";
+import { searchFlights, bookFlight, FlightSearchParams } from "@/lib/supabase";
 import { Plane, Calendar, Users, MapPin, Search, ArrowRightLeft, Clock, Star } from "lucide-react";
 
 interface FlightSearchResult {
@@ -54,6 +57,9 @@ interface FlightSearchResult {
 export default function FlightResults() {
   const [, setLocation] = useLocation();
   const [selectedOutbound, setSelectedOutbound] = useState<string | null>(null);
+  const [selectedReturn, setSelectedReturn] = useState<string | null>(null);
+  const { updateSelectedOutboundFlight, updateSelectedReturnFlight } = useBooking();
+  const { toast } = useToast();
   const [searchParams, setSearchParams] = useState({
     from: "LAX",
     to: "JFK",
@@ -62,21 +68,76 @@ export default function FlightResults() {
     passengers: "2",
   });
 
-  const { data, isLoading, error } = useQuery<FlightSearchResult>({
-    queryKey: [`/api/flights/search?from=${searchParams.from}&to=${searchParams.to}&departureDate=${searchParams.departureDate}&returnDate=${searchParams.returnDate}&passengers=${searchParams.passengers}`],
+  // Convert search params to Supabase Edge Function format
+  const flightSearchParams: FlightSearchParams = {
+    origin: searchParams.from,
+    destination: searchParams.to,
+    departureDate: searchParams.departureDate,
+    returnDate: searchParams.returnDate,
+    passengers: parseInt(searchParams.passengers),
+    cabin: "economy"
+  };
+
+  const { data, isLoading, error, refetch } = useQuery<FlightSearchResult>({
+    queryKey: ['flights-search', flightSearchParams],
+    queryFn: () => searchFlights(flightSearchParams),
+    enabled: true
+  });
+
+  const bookingMutation = useMutation({
+    mutationFn: bookFlight,
+    onSuccess: (data) => {
+      toast({
+        title: "Flight Booked Successfully!",
+        description: "Your flight reservation has been confirmed.",
+      });
+      setLocation('/confirmation');
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Booking Failed",
+        description: error.message || "Failed to book flight. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const handleOutboundSelect = (flightId: string) => {
     setSelectedOutbound(flightId);
+    const selectedFlight = data?.outbound.find(f => f.id === flightId);
+    if (selectedFlight) {
+      updateSelectedOutboundFlight({
+        id: selectedFlight.id,
+        airline: selectedFlight.airline,
+        departure: `${selectedFlight.departure.time} ${selectedFlight.departure.airport}`,
+        arrival: `${selectedFlight.arrival.time} ${selectedFlight.arrival.airport}`,
+        duration: selectedFlight.duration,
+        price: selectedFlight.price,
+        stops: selectedFlight.stops,
+      });
+    }
   };
 
-  const handleReturnSelect = () => {
+  const handleReturnSelect = (flightId: string) => {
+    setSelectedReturn(flightId);
+    const selectedFlight = data?.return.find(f => f.id === flightId);
+    if (selectedFlight) {
+      updateSelectedReturnFlight({
+        id: selectedFlight.id,
+        airline: selectedFlight.airline,
+        departure: `${selectedFlight.departure.time} ${selectedFlight.departure.airport}`,
+        arrival: `${selectedFlight.arrival.time} ${selectedFlight.arrival.airport}`,
+        duration: selectedFlight.duration,
+        price: selectedFlight.price,
+        stops: selectedFlight.stops,
+      });
+    }
     setLocation('/checkout');
   };
 
   const handleSearch = () => {
-    // React Query will automatically refetch when queryKey changes
-    // No need to reload the page - searchParams state change will trigger refetch
+    // Trigger refetch with new search parameters
+    refetch();
   };
 
   if (isLoading) {
@@ -310,7 +371,7 @@ export default function FlightResults() {
                 >
                   <FlightCard
                     flight={flight}
-                    onSelect={handleReturnSelect}
+                    onSelect={() => handleReturnSelect(flight.id)}
                     buttonText="Complete Booking"
                     type="return"
                   />
