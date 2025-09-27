@@ -323,6 +323,47 @@
   animation: luxury-slide-in 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+@keyframes luxury-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+  }
+}
+
+.animate-luxury-pulse {
+  animation: luxury-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes luxury-float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-luxury-float {
+  animation: luxury-float 3s ease-in-out infinite;
+}
+
+@keyframes luxury-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-luxury-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.3) 50%, rgba(255,255,255,0.1) 75%);
+  background-size: 200% 100%;
+  animation: luxury-shimmer 2s infinite;
+}
+
 /* Premium Gradients */
 .bg-luxury-gradient {
   background: var(--gradient-luxury);
