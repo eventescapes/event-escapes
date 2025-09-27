@@ -1,0 +1,159 @@
+# EventEscapes - Premium Event-Focused Travel Platform
+
+## Project Overview
+Build a comprehensive event-focused online travel platform called **EventEscapes** using React/Next.js on Replit. This is a premium OTA (Online Travel Agency) that helps users discover events and book complete travel packages (hotels + flights + tickets).
+
+## Design Requirements
+**Modern OTA Design Pack:**
+- Clean, minimal, mobile-first design (Airbnb/Expedia aesthetic)
+- Large event imagery with crisp cards and bold CTAs
+- Professional color scheme: teal/blue (#0891b2) primary, orange (#f97316) accent
+- Great empty states and loading skeletons
+- Responsive grid layouts with smooth animations
+
+## Core User Flow (3-4 Steps Max)
+
+### 1. Search & Curate Events
+- Browse events by city, date, and type (sports, music festivals, conferences)
+- Featured events grid on homepage with "Build my trip" CTAs
+- Event detail pages with hero images, venue map pins, dates
+- "See nearby stays" integration from event to hotels
+
+### 2. Pick Stay / Flight / Tickets
+**Hotels Integration:**
+- Connect to existing Supabase Edge Functions: `/flights-search` and `/flights-book`
+- Display results with list + map view toggle
+- Smart filtering with default sort: **"Closest to venue"** using distance calculations
+- Filter chips: ≤500m, ≤1km, ≤2km, ≤5km from venue
+- Price and rating toggles
+- Distance badges: "350m from venue"
+- Hotel cards showing price, rating, free-cancel tags
+
+**Flights Integration:**
+- Basic round-trip/one-way search using existing Duffel API integration
+- Connect to Supabase Edge Functions (already built and tested)
+- Simple flight results with booking capability
+
+**Event Tickets:**
+- API integration stubs for Ticketmaster/Eventbrite
+- "Add Ticket" step in booking flow
+
+### 3. Review & Pay
+- Single review screen showing: Event • Stay • Flight • Tickets • Total
+- Stripe integration for card payments
+- NowPayments integration for crypto payments
+- Guest checkout (no account required)
+
+### 4. Confirmation
+- Booking confirmation with full itinerary
+- "Create account to manage bookings" (post-booking signup)
+- "Find my booking" flow with email lookup
+
+## Technical Architecture
+
+### Backend Integration
+**Connect to Existing Supabase Setup:**
+- Base URL: Use existing Supabase project
+- Tables: users/profiles, events, bookings, booking_items, payments, saved_items
+- Edge Functions: `/flights-search` and `/flights-book` (already built and tested)
+- Authentication: Guest checkout + optional post-booking signup
+
+### API Integrations Required
+Set up API connectors for:
+- **Supabase REST/RPC** (existing setup)
+- **Hotels API** (RateHawk/WebBeds/HotelBeds) 
+- **Flights** (existing Duffel integration via Supabase)
+- **Event Tickets** (Ticketmaster/Eventbrite stubs)
+- **Stripe** (Payment Intent → confirm → webhook)
+- **NowPayments** (crypto payments)
+
+### Environment Variables Needed
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+HOTELS_API_KEY=
+DUFFEL_API_KEY=
+TICKET_API_KEY=
+STRIPE_SECRET_KEY=
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
+NOWPAYMENTS_API_KEY=
+WEBHOOK_SECRET_KEY=
+```
+
+## Key Pages & Components
+
+### Pages Required
+1. **Home** - Featured events grid with search
+2. **Event Detail** - Hero image, venue info, nearby hotels link
+3. **Hotel Results** - List/map view with distance filtering
+4. **Flight Results** - Simple RT/OW results
+5. **Cart/Review** - Combined booking review
+6. **Checkout** - Guest details + payment options
+7. **Confirmation** - Booking summary + account creation
+8. **Find My Booking** - Email lookup system
+9. **Profile** - User bookings management
+10. **Admin** - Event curation and management
+
+### Reusable Components
+- EventCard (with featured imagery)
+- HotelCard (with distance badges)
+- FlightCard (departure/arrival info)
+- PriceSummary (sticky bottom bar)
+- CheckoutWidget (payment forms)
+- MapView (with venue pins)
+- FilterChips (distance, price, rating)
+- LoadingSkeletons
+- EmptyStates
+
+## Authentication Strategy
+**Guest Checkout (Like Booking.com/Expedia):**
+- Allow booking without account creation
+- Collect email + name during checkout
+- After payment success: show "Create Account" option
+- "Send Magic Link" to claim bookings later
+- Link historical bookings by email when user signs up
+
+## Database Integration
+**Connect to Existing Supabase Schema:**
+- Store event coordinates (lat/lng) for distance calculations
+- Create booking records keyed by email
+- Implement Haversine distance calculation for hotel sorting
+- Backend workflows for payment webhook handling
+
+## UX/UI Requirements
+
+### Mobile-First Design
+- Responsive breakpoints: mobile (320px+), tablet (768px+), desktop (1024px+)
+- Touch-friendly interfaces with proper spacing
+- Smooth transitions and micro-animations
+
+### Loading & Error States
+- Loading skeletons for cards and maps
+- Clear error messages: "Zooming out to 5km...", "No hotels found, try different dates"
+- Graceful fallbacks for API failures
+
+### Performance
+- Fast loading with optimized images
+- Progressive loading for search results
+- Efficient map rendering with venue pins
+
+## Development Approach
+1. **Start with basic routing and navigation**
+2. **Build static pages first** (no API calls initially)
+3. **Add Supabase connection** for events data
+4. **Integrate existing flight functionality** (proven working)
+5. **Add hotel search incrementally**
+6. **Implement booking flow step by step**
+7. **Add payment processing last**
+
+## Success Criteria
+- Clean, professional design matching Airbnb/Expedia standards
+- Seamless event discovery to booking flow
+- Working integration with existing Supabase backend
+- Functional flight booking (using proven Edge Functions)
+- Mobile-responsive across all devices
+- Guest checkout with optional account creation
+- Distance-based hotel sorting from venue coordinates
+
+**Note:** The flight integration backend is already built and tested via Supabase Edge Functions. Focus on connecting the frontend to these existing, working APIs while building out the hotel and event functionality incrementally.
