@@ -1,0 +1,71 @@
+Restructure EventEscapes with premium navigation layout and implement a luxury design system:
+
+HEADER LAYOUT:
+- Left: EventEscapes Logo
+- Center: Hotels | Flights | Event Tickets (centered navigation)
+- Right: Log In | AI Trip Planner
+
+FOOTER PLACEMENT:
+- Footer sections: Find My Booking, Manage Trips | Help, Contact | About, Terms
+
+PREMIUM LUXURY DESIGN SYSTEM:
+
+COLOR PALETTE:
+- Primary: #0f172a (rich navy/black)
+- Secondary: #334155 (charcoal slate)  
+- Accent gold: #f59e0b (luxury gold)
+- Accent teal: #06b6d4 (premium teal)
+- Background: #ffffff with subtle gradients
+- Glass effects: rgba(255,255,255,0.1) overlays
+- Premium grays: #f1f5f9, #e2e8f0, #cbd5e1
+
+TYPOGRAPHY:
+- Headlines: Playfair Display (elegant serif)
+- Body text: Inter (clean sans-serif)
+- Accent text: Montserrat (sophisticated sans-serif)
+- Letter spacing: tracking-wide for headings
+- Generous line heights for readability
+
+PREMIUM COMPONENTS:
+
+Cards & Containers:
+- Glassmorphism effects (backdrop-blur, subtle transparency)
+- Gradient borders: linear-gradient(135deg, gold, teal)
+- Multiple shadow layers for depth
+- Subtle hover animations with scale transforms
+- Premium spacing (24px, 32px, 48px scale)
+
+Buttons:
+- Primary: Gradient backgrounds (gold to teal)
+- Secondary: Glass effect with borders
+- Sophisticated hover states with transforms
+- Elegant shadows and premium typography
+- Generous padding for luxury feel
+
+Hero Sections:
+- High-quality background imagery with elegant overlays
+- Sophisticated gradient treatments
+- Premium text shadows and effects
+- Luxury spacing and positioning
+
+ADVANCED INTERACTIONS:
+- Smooth page transitions (500ms cubic-bezier easing)
+- Micro-animations on hover states
+- Elegant loading states and transitions
+- Parallax scrolling effects where appropriate
+- Premium modal and overlay animations
+
+LAYOUT PRINCIPLES:
+- Generous white space throughout
+- Asymmetrical but balanced compositions
+- High-quality imagery with premium filters
+- Sophisticated grid systems
+- Elegant section dividers and spacing
+
+PAGES TO IMPLEMENT:
+- /hotels - Premium hotel search and booking
+- /flights - Luxury flight search (connect to existing Supabase Edge Functions)
+- /event-tickets - Event ticket search and booking
+- All pages must follow the same premium design language
+
+Apply this luxury design system consistently across ALL components and pages to create a high-end travel platform that competes with premium OTA sites.

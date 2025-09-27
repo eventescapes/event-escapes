@@ -8,9 +8,25 @@ import {
   type BookingItem, 
   type InsertBookingItem,
   type SavedItem,
-  type InsertSavedItem
+  type InsertSavedItem,
+  users,
+  events,
+  bookings,
+  bookingItems,
+  savedItems
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { drizzle } from "drizzle-orm/neon-http";
+import { neon } from "@neondatabase/serverless";
+import { eq, and, desc, gte, lte, like, sql } from "drizzle-orm";
+
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not set");
+}
+
+const client = neon(connectionString);
+const db = drizzle(client);
 
 export interface IStorage {
   // Users
@@ -45,111 +61,99 @@ export interface IStorage {
   deleteSavedItem(id: string): Promise<void>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User> = new Map();
-  private events: Map<string, Event> = new Map();
-  private bookings: Map<string, Booking> = new Map();
-  private bookingItems: Map<string, BookingItem> = new Map();
-  private savedItems: Map<string, SavedItem> = new Map();
-
+export class DatabaseStorage implements IStorage {
   constructor() {
     this.seedData();
   }
 
-  private seedData() {
-    // Seed some example events
-    const sampleEvents: Event[] = [
-      {
-        id: "event-1",
-        title: "Summer Beats Festival",
-        description: "Experience 3 days of incredible music in the heart of New York City",
-        category: "Music Festival",
-        venue: "Central Park Great Lawn",
-        address: "Central Park, New York",
-        city: "New York",
-        country: "USA",
-        latitude: "40.7829",
-        longitude: "-73.9654",
-        startDate: new Date("2024-07-15"),
-        endDate: new Date("2024-07-17"),
-        imageUrl: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
-        priceFrom: "89.00",
-        rating: "4.8",
-        reviewCount: 2340,
-        maxAttendees: 50000,
-        isActive: true,
-        createdAt: new Date(),
-      },
-      {
-        id: "event-2",
-        title: "NBA Finals Game 7",
-        description: "Witness basketball history in the making",
-        category: "Sports",
-        venue: "Madison Square Garden",
-        address: "4 Pennsylvania Plaza, New York",
-        city: "New York",
-        country: "USA",
-        latitude: "40.7505",
-        longitude: "-73.9934",
-        startDate: new Date("2024-08-20"),
-        endDate: new Date("2024-08-20"),
-        imageUrl: "https://images.unsplash.com/photo-1574623452334-1e0ac2b3ccb4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
-        priceFrom: "299.00",
-        rating: "4.9",
-        reviewCount: 1856,
-        maxAttendees: 20000,
-        isActive: true,
-        createdAt: new Date(),
-      },
-      {
-        id: "event-3",
-        title: "TechCon 2024",
-        description: "The premier technology conference featuring industry leaders",
-        category: "Conference",
-        venue: "Moscone Center",
-        address: "747 Howard St, San Francisco",
-        city: "San Francisco",
-        country: "USA",
-        latitude: "37.7840",
-        longitude: "-122.4014",
-        startDate: new Date("2024-09-05"),
-        endDate: new Date("2024-09-07"),
-        imageUrl: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
-        priceFrom: "199.00",
-        rating: "4.7",
-        reviewCount: 892,
-        maxAttendees: 15000,
-        isActive: true,
-        createdAt: new Date(),
-      },
-    ];
+  private async seedData() {
+    try {
+      // Check if events already exist
+      const existingEvents = await db.select().from(events).limit(1);
+      if (existingEvents.length > 0) {
+        console.log("Database already seeded with events");
+        return;
+      }
 
-    sampleEvents.forEach(event => {
-      this.events.set(event.id, event);
-    });
+      // Seed some example events
+      const sampleEvents = [
+        {
+          title: "Summer Beats Festival",
+          description: "Experience 3 days of incredible music in the heart of New York City",
+          category: "Music Festival",
+          venue: "Central Park Great Lawn",
+          address: "Central Park, New York",
+          city: "New York",
+          country: "USA",
+          latitude: "40.7829",
+          longitude: "-73.9654",
+          startDate: new Date("2024-07-15"),
+          endDate: new Date("2024-07-17"),
+          imageUrl: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
+          priceFrom: "89.00",
+          rating: "4.8",
+          reviewCount: 2340,
+          maxAttendees: 50000,
+        },
+        {
+          title: "NBA Finals Game 7",
+          description: "Witness basketball history in the making",
+          category: "Sports",
+          venue: "Madison Square Garden",
+          address: "4 Pennsylvania Plaza, New York",
+          city: "New York",
+          country: "USA",
+          latitude: "40.7505",
+          longitude: "-73.9934",
+          startDate: new Date("2024-08-20"),
+          endDate: new Date("2024-08-20"),
+          imageUrl: "https://images.unsplash.com/photo-1574623452334-1e0ac2b3ccb4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
+          priceFrom: "299.00",
+          rating: "4.9",
+          reviewCount: 1856,
+          maxAttendees: 20000,
+        },
+        {
+          title: "TechCon 2024",
+          description: "The premier technology conference featuring industry leaders",
+          category: "Conference",
+          venue: "Moscone Center",
+          address: "747 Howard St, San Francisco",
+          city: "San Francisco",
+          country: "USA",
+          latitude: "37.7840",
+          longitude: "-122.4014",
+          startDate: new Date("2024-09-05"),
+          endDate: new Date("2024-09-07"),
+          imageUrl: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
+          priceFrom: "199.00",
+          rating: "4.7",
+          reviewCount: 892,
+          maxAttendees: 15000,
+        },
+      ];
+
+      await db.insert(events).values(sampleEvents);
+      console.log("Database seeded with sample events");
+    } catch (error) {
+      console.error("Error seeding database:", error);
+    }
   }
 
   // Users
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return result[0];
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.email === email);
+    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return result[0];
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = {
-      ...insertUser,
-      id,
-      username: insertUser.username ?? null,
-      password: insertUser.password ?? null,
-      createdAt: new Date(),
-      stripeCustomerId: null,
-    };
-    this.users.set(id, user);
-    return user;
+    const result = await db.insert(users).values(insertUser).returning();
+    return result[0];
   }
 
   // Events
@@ -160,137 +164,117 @@ export class MemStorage implements IStorage {
     endDate?: Date; 
     limit?: number; 
   }): Promise<Event[]> {
-    let events = Array.from(this.events.values()).filter(event => event.isActive);
+    const conditions = [eq(events.isActive, true)];
     
     if (filters?.city) {
-      events = events.filter(event => 
-        event.city.toLowerCase().includes(filters.city!.toLowerCase())
-      );
+      conditions.push(like(events.city, `%${filters.city}%`));
     }
     
     if (filters?.category) {
-      events = events.filter(event => 
-        event.category.toLowerCase().includes(filters.category!.toLowerCase())
-      );
+      conditions.push(like(events.category, `%${filters.category}%`));
     }
     
     if (filters?.startDate) {
-      events = events.filter(event => 
-        new Date(event.startDate) >= filters.startDate!
-      );
+      conditions.push(gte(events.startDate, filters.startDate));
     }
     
     if (filters?.endDate) {
-      events = events.filter(event => 
-        new Date(event.endDate) <= filters.endDate!
-      );
+      conditions.push(lte(events.endDate, filters.endDate));
     }
+    
+    let query = db.select().from(events).where(and(...conditions)).orderBy(events.startDate);
     
     if (filters?.limit) {
-      events = events.slice(0, filters.limit);
+      query = query.limit(filters.limit);
     }
     
-    return events.sort((a, b) => 
-      new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
-    );
+    return await query;
   }
 
   async getEvent(id: string): Promise<Event | undefined> {
-    return this.events.get(id);
+    const result = await db.select().from(events).where(eq(events.id, id)).limit(1);
+    return result[0];
   }
 
   async createEvent(insertEvent: InsertEvent): Promise<Event> {
-    const id = randomUUID();
-    const event: Event = {
-      ...insertEvent,
-      id,
-      createdAt: new Date(),
-      isActive: true,
-      reviewCount: 0,
-    };
-    this.events.set(id, event);
-    return event;
+    const result = await db.insert(events).values(insertEvent).returning();
+    return result[0];
   }
 
   // Bookings
   async getBooking(id: string): Promise<Booking | undefined> {
-    return this.bookings.get(id);
+    const result = await db.select().from(bookings).where(eq(bookings.id, id)).limit(1);
+    return result[0];
   }
 
   async getBookingsByEmail(email: string): Promise<Booking[]> {
-    return Array.from(this.bookings.values()).filter(
-      booking => booking.guestEmail === email
-    );
+    return await db.select().from(bookings).where(eq(bookings.guestEmail, email)).orderBy(desc(bookings.createdAt));
   }
 
   async createBooking(insertBooking: InsertBooking): Promise<Booking> {
-    const id = randomUUID();
-    const booking: Booking = {
-      ...insertBooking,
-      id,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    this.bookings.set(id, booking);
-    return booking;
+    const result = await db.insert(bookings).values(insertBooking).returning();
+    return result[0];
   }
 
   async updateBookingStatus(id: string, status: string, paymentIntentId?: string): Promise<Booking> {
-    const booking = this.bookings.get(id);
-    if (!booking) {
-      throw new Error("Booking not found");
-    }
-    
-    const updatedBooking: Booking = {
-      ...booking,
+    const updateData: any = {
       status,
-      stripePaymentIntentId: paymentIntentId || booking.stripePaymentIntentId,
       updatedAt: new Date(),
     };
     
-    this.bookings.set(id, updatedBooking);
-    return updatedBooking;
+    if (paymentIntentId) {
+      updateData.stripePaymentIntentId = paymentIntentId;
+    }
+    
+    const result = await db.update(bookings)
+      .set(updateData)
+      .where(eq(bookings.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error("Booking not found");
+    }
+    
+    return result[0];
   }
 
   // Booking Items
   async getBookingItems(bookingId: string): Promise<BookingItem[]> {
-    return Array.from(this.bookingItems.values()).filter(
-      item => item.bookingId === bookingId
-    );
+    return await db.select().from(bookingItems).where(eq(bookingItems.bookingId, bookingId));
   }
 
   async createBookingItem(insertItem: InsertBookingItem): Promise<BookingItem> {
-    const id = randomUUID();
-    const item: BookingItem = {
-      ...insertItem,
-      id,
-    };
-    this.bookingItems.set(id, item);
-    return item;
+    const result = await db.insert(bookingItems).values(insertItem).returning();
+    return result[0];
   }
 
   // Saved Items
   async getSavedItems(userId?: string, guestEmail?: string): Promise<SavedItem[]> {
-    return Array.from(this.savedItems.values()).filter(item => 
-      (userId && item.userId === userId) || 
-      (guestEmail && item.guestEmail === guestEmail)
-    );
+    const conditions = [];
+    
+    if (userId) {
+      conditions.push(eq(savedItems.userId, userId));
+    }
+    
+    if (guestEmail) {
+      conditions.push(eq(savedItems.guestEmail, guestEmail));
+    }
+    
+    if (conditions.length === 0) {
+      return [];
+    }
+    
+    return await db.select().from(savedItems).where(conditions.length === 1 ? conditions[0] : and(...conditions));
   }
 
   async createSavedItem(insertItem: InsertSavedItem): Promise<SavedItem> {
-    const id = randomUUID();
-    const item: SavedItem = {
-      ...insertItem,
-      id,
-      createdAt: new Date(),
-    };
-    this.savedItems.set(id, item);
-    return item;
+    const result = await db.insert(savedItems).values(insertItem).returning();
+    return result[0];
   }
 
   async deleteSavedItem(id: string): Promise<void> {
-    this.savedItems.delete(id);
+    await db.delete(savedItems).where(eq(savedItems.id, id));
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
