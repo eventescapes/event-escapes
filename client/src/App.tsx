@@ -12,6 +12,7 @@ import FlightResults from "@/pages/flight-results";
 import Checkout from "@/pages/checkout";
 import Confirmation from "@/pages/confirmation";
 import FindBooking from "@/pages/find-booking";
+import EventTickets from "@/pages/event-tickets";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -27,6 +28,7 @@ function Router() {
           <Route path="/checkout" component={Checkout} />
           <Route path="/confirmation" component={Confirmation} />
           <Route path="/find-booking" component={FindBooking} />
+          <Route path="/event-tickets" component={EventTickets} />
           <Route component={NotFound} />
         </Switch>
       </main>
