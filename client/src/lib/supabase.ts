@@ -165,36 +165,30 @@ export const searchFlights = async (params: FlightSearchParams) => {
       throw new Error('Supabase client not configured');
     }
 
-    console.log('🛫 Calling Supabase Edge Function: flights-search');
-    console.log('🔍 Search params:', {
-      origin: params.origin,
-      destination: params.destination, 
-      departureDate: params.departureDate,
-      returnDate: params.returnDate,
-      passengers: params.passengers,
-      cabin: params.cabin
-    });
-    
-    const { data, error } = await supabase.functions.invoke('flights-search', {
-      body: params,
-      headers: {
-        'Content-Type': 'application/json'
+    // Call Edge Function directly (Supabase client invoke has issues)
+    try {
+      const response = await fetch('https://jxrrhsqffnzeljszbecg.supabase.co/functions/v1/flights-search', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabase.supabaseKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(params)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
-    });
-
-    if (error) {
-      console.error('❌ Flight search error:', error);
-      console.error('❌ Full error details:', JSON.stringify(error, null, 2));
-      throw new Error(`Flight search failed: ${error.message || 'Unknown error'}`);
+      
+      const data = await response.json();
+      const transformedData = transformDuffelResponseToExpectedFormat(data);
+      return transformedData;
+      
+    } catch (fetchError) {
+      console.error('💥 Direct fetch failed:', fetchError);
+      throw fetchError;
     }
-
-    console.log('✅ Raw API response received:', data);
-    console.log('📊 Response structure:', Object.keys(data || {}));
-
-    // Transform the Duffel API response to match our expected format
-    const transformedData = transformDuffelResponseToExpectedFormat(data);
-    
-    return transformedData;
   } catch (error) {
     console.error('❌ Error calling flights-search Edge Function:', error);
     throw error;

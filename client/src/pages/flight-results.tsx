@@ -79,6 +79,7 @@ export default function FlightResults() {
     cabin: "economy"
   };
 
+
   const { data, isLoading, error, refetch } = useQuery<FlightSearchResult>({
     queryKey: ['flights-search', flightSearchParams],
     queryFn: () => searchFlights(flightSearchParams),
