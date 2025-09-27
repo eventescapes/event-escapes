@@ -116,40 +116,17 @@ const transformDuffelFlightToExpectedFormat = (duffelFlight: any) => {
 };
 
 const transformDuffelResponseToExpectedFormat = (duffelResponse: any) => {
-  // Handle different possible response structures
+  // Handle the exact Supabase Edge Function response format
   let outbound = [];
   let returnFlights = [];
   
-  // Handle the actual Supabase Edge Function response format
-  if (duffelResponse.outboundFlights) {
-    outbound = Array.isArray(duffelResponse.outboundFlights) ? 
-      duffelResponse.outboundFlights.map(transformDuffelFlightToExpectedFormat) : 
-      [];
-  } else if (duffelResponse.outbound) {
-    outbound = Array.isArray(duffelResponse.outbound) ? 
-      duffelResponse.outbound.map(transformDuffelFlightToExpectedFormat) : 
-      [];
-  } else if (duffelResponse.data?.slices?.[0]?.offers) {
-    // Alternative Duffel structure
-    outbound = duffelResponse.data.slices[0].offers.map(transformDuffelFlightToExpectedFormat);
-  } else if (duffelResponse.offers) {
-    // Direct offers array
-    outbound = duffelResponse.offers.map(transformDuffelFlightToExpectedFormat);
-  } else if (Array.isArray(duffelResponse)) {
-    // Direct array of flights
-    outbound = duffelResponse.map(transformDuffelFlightToExpectedFormat);
+  // Primary format: direct outbound/return arrays
+  if (duffelResponse.outbound && Array.isArray(duffelResponse.outbound)) {
+    outbound = duffelResponse.outbound.map(transformDuffelFlightToExpectedFormat);
   }
   
-  if (duffelResponse.returnFlights) {
-    returnFlights = Array.isArray(duffelResponse.returnFlights) ? 
-      duffelResponse.returnFlights.map(transformDuffelFlightToExpectedFormat) : 
-      [];
-  } else if (duffelResponse.return) {
-    returnFlights = Array.isArray(duffelResponse.return) ? 
-      duffelResponse.return.map(transformDuffelFlightToExpectedFormat) : 
-      [];
-  } else if (duffelResponse.data?.slices?.[1]?.offers) {
-    returnFlights = duffelResponse.data.slices[1].offers.map(transformDuffelFlightToExpectedFormat);
+  if (duffelResponse.return && Array.isArray(duffelResponse.return)) {
+    returnFlights = duffelResponse.return.map(transformDuffelFlightToExpectedFormat);
   }
   
   return {
@@ -207,8 +184,12 @@ export const searchFlights = async (params: FlightSearchParams) => {
 
     if (error) {
       console.error('❌ Flight search error:', error);
-      throw new Error(`Flight search failed: ${error.message}`);
+      console.error('❌ Full error details:', JSON.stringify(error, null, 2));
+      throw new Error(`Flight search failed: ${error.message || 'Unknown error'}`);
     }
+
+    console.log('✅ Raw API response received:', data);
+    console.log('📊 Response structure:', Object.keys(data || {}));
 
     // Transform the Duffel API response to match our expected format
     const transformedData = transformDuffelResponseToExpectedFormat(data);
