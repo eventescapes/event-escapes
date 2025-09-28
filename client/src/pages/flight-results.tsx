@@ -4,6 +4,7 @@ import { baseCard, brandSelected, selectedCard } from '@/components/SelectedCard
 import TripSummary from '@/components/TripSummary';
 import FloatingCheckout from '@/components/FloatingCheckout';
 import SeatMap from '@/components/SeatMap';
+import SeatSelectionModal from '@/components/SeatSelectionModal';
 import { useBooking } from '@/contexts/BookingContext';
 
 interface Flight {
@@ -592,31 +593,19 @@ const FlightSearch = () => {
       )}
 
       {/* Seat Selection Modal */}
-      {showSeatSelection && currentSeatSelection && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" data-testid="seat-selection-modal">
-          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-auto">
-            <div className="p-4 border-b">
-              <h2 className="text-xl font-semibold" data-testid="text-seat-selection-title">
-                Select Seats for {currentSeatSelection.type === 'outbound' ? 'Outbound' : 'Return'} Flight
-              </h2>
-              <p className="text-gray-600 text-sm">
-                {currentSeatSelection.type === 'outbound' ? 
-                  `${searchParams.from} → ${searchParams.to}` : 
-                  `${searchParams.to} → ${searchParams.from}`
-                }
-              </p>
-            </div>
-            <div className="p-4">
-              <SeatMap
-                offerId={currentSeatSelection.offerId}
-                passengers={searchParams.passengers}
-                onSeatsSelected={handleSeatsSelected}
-                onClose={handleCloseSeatSelection}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <SeatSelectionModal
+        isOpen={showSeatSelection && !!currentSeatSelection}
+        onClose={() => setShowSeatSelection(false)}
+        offerId={currentSeatSelection?.offerId || ""}
+        origin={currentSeatSelection?.type === 'outbound' ? searchParams.from : searchParams.to}
+        destination={currentSeatSelection?.type === 'outbound' ? searchParams.to : searchParams.from}
+        passengerIds={Array.from({ length: searchParams.passengers }, (_, i) => `passenger_${i + 1}`)}
+        onContinueWithoutSeats={handleCloseSeatSelection}
+        onSeatChosen={(serviceId, passengerId) => {
+          console.log('[SeatSelection] Seat chosen:', { serviceId, passengerId, offerId: currentSeatSelection?.offerId });
+          // TODO: Handle individual seat selection
+        }}
+      />
         </div>
 
         <div ref={summaryRef}>
@@ -632,10 +621,14 @@ const FlightSearch = () => {
             passengers={searchParams.passengers}
             selectedSeats={selectedSeats}
             onContinue={() => {
-              console.log('Starting seat selection flow');
+              console.log('[SeatSelection] Starting seat selection flow from TripSummary');
               if (selectedFlights.outbound) {
-                setCurrentSeatSelection({ type: 'outbound', offerId: selectedFlights.outbound.id });
+                const offerId = selectedFlights.outbound.id;
+                console.log('[SeatSelection] Triggering modal for outbound flight:', { offerId, airline: selectedFlights.outbound.airline });
+                setCurrentSeatSelection({ type: 'outbound', offerId });
                 setShowSeatSelection(true);
+              } else {
+                console.warn('[SeatSelection] No outbound flight selected');
               }
             }}
           />
@@ -658,10 +651,14 @@ const FlightSearch = () => {
         passengers={searchParams.passengers}
         selectedSeats={selectedSeats}
         onContinue={() => {
-          console.log('Starting seat selection flow from FloatingCheckout');
+          console.log('[SeatSelection] Starting seat selection flow from FloatingCheckout');
           if (selectedFlights.outbound) {
-            setCurrentSeatSelection({ type: 'outbound', offerId: selectedFlights.outbound.id });
+            const offerId = selectedFlights.outbound.id;
+            console.log('[SeatSelection] Triggering modal for outbound flight:', { offerId, airline: selectedFlights.outbound.airline });
+            setCurrentSeatSelection({ type: 'outbound', offerId });
             setShowSeatSelection(true);
+          } else {
+            console.warn('[SeatSelection] No outbound flight selected');
           }
         }}
       />
