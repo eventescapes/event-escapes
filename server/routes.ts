@@ -64,6 +64,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Duffel Seat Map API
+  app.get("/api/seat-maps/:offerId", async (req, res) => {
+    try {
+      const { offerId } = req.params;
+      
+      if (!offerId) {
+        return res.status(400).json({ message: "Offer ID is required" });
+      }
+      
+      if (!process.env.DUFFEL_API_KEY) {
+        return res.status(500).json({ message: "Duffel API key not configured" });
+      }
+      
+      const response = await fetch(`https://api.duffel.com/air/seat_maps/${offerId}`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${process.env.DUFFEL_API_KEY}`,
+          "Duffel-Version": "v1",
+          "Content-Type": "application/json"
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Duffel API error:', response.status, errorText);
+        return res.status(response.status).json({ 
+          message: "Failed to fetch seat map from Duffel API",
+          error: errorText 
+        });
+      }
+      
+      const seatMapData = await response.json();
+      res.json(seatMapData);
+      
+    } catch (error: any) {
+      console.error('Seat map fetch error:', error);
+      res.status(500).json({ message: "Error fetching seat map: " + error.message });
+    }
+  });
+
   // Hotels search (mock for now - would integrate with RateHawk/WebBeds)
   app.get("/api/hotels/search", async (req, res) => {
     try {
