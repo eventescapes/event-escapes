@@ -6,6 +6,7 @@ import FloatingCheckout from '@/components/FloatingCheckout';
 import SeatMap from '@/components/SeatMap';
 import SeatSelectionModal from '@/components/SeatSelectionModal';
 import { useBooking } from '@/contexts/BookingContext';
+import { searchFlights as duffelSearchFlights, createOneWaySearch, createReturnSearch, createMultiCitySearch, type DuffelOffer, type DuffelOfferRequestResponse } from '@/utils/duffel';
 
 interface Flight {
   id: string;
@@ -178,81 +179,78 @@ const FlightSearch = () => {
       e.stopPropagation();
     }
     
-    console.log('=== FLIGHT SEARCH STARTING ===');
+    console.log('=== DUFFEL FLIGHT SEARCH STARTING ===');
     console.log('Search params:', searchParams);
-    
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseKey) {
-      setError('Environment variables not configured. Check Replit Secrets for VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
-      return;
-    }
-    
-    const endpoint = `${supabaseUrl}/functions/v1/flights-search`;
-    console.log('Calling endpoint:', endpoint);
-    console.log('Using auth key:', supabaseKey.substring(0, 20) + '...');
     
     setLoading(true);
     setError(null);
     setSelectedFlights({ outbound: null, return: null });
     
-    const requestBody = {
-      origin: searchParams.from,
-      destination: searchParams.to,
-      departureDate: searchParams.departDate,
-      returnDate: searchParams.returnDate,
-      passengers: searchParams.passengers
-    };
-    
-    console.log('Request body:', requestBody);
-    
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseKey}`
-        },
-        body: JSON.stringify(requestBody)
+      let searchRequest;
+      
+      // Create search request based on trip type
+      switch (searchParams.tripType) {
+        case 'one-way':
+          searchRequest = createOneWaySearch(
+            searchParams.from,
+            searchParams.to,
+            searchParams.departDate,
+            searchParams.passengers,
+            searchParams.cabinClass
+          );
+          break;
+          
+        case 'return':
+          if (!searchParams.returnDate) {
+            throw new Error('Return date is required for return trips');
+          }
+          searchRequest = createReturnSearch(
+            searchParams.from,
+            searchParams.to,
+            searchParams.departDate,
+            searchParams.returnDate,
+            searchParams.passengers,
+            searchParams.cabinClass
+          );
+          break;
+          
+        case 'multi-city':
+          if (!searchParams.multiCitySlices || searchParams.multiCitySlices.length < 2) {
+            throw new Error('Multi-city trips require at least 2 slices');
+          }
+          searchRequest = createMultiCitySearch(
+            searchParams.multiCitySlices,
+            searchParams.passengers,
+            searchParams.cabinClass
+          );
+          break;
+          
+        default:
+          throw new Error('Invalid trip type selected');
+      }
+      
+      console.log('[Duffel] Search request created:', searchRequest);
+      
+      // Call Duffel API
+      const response: DuffelOfferRequestResponse = await duffelSearchFlights(searchRequest);
+      
+      if (!response.data || !response.data.offers) {
+        throw new Error('No flight data received from Duffel API');
+      }
+      
+      console.log(`[Duffel] Received ${response.data.offers.length} offers`);
+      
+      // Store the raw offers data for new display logic
+      setFlights({ 
+        outbound: response.data.offers, // Store all offers, we'll process them in display
+        inbound: [] // Legacy structure - we'll update display logic next
       });
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Response error text:', errorText);
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const responseText = await response.text();
-        console.error('Non-JSON response:', responseText);
-        throw new Error('Server returned non-JSON response. Check if the endpoint is correct.');
-      }
-
-      const raw = await response.json();
-      console.log('Flight data received:', raw);
-      
-      if (raw.error) {
-        throw new Error(raw.error);
-      }
-      
-      const normalize = (raw: FlightSearchResponseRaw): FlightSearchResponse => ({
-        outbound: raw?.outbound ?? [],
-        inbound: raw?.inbound ?? (raw && raw["return"]) ?? [],
-        total_offers: raw?.total_offers,
-      });
-
-      const data = normalize(raw);
-      setFlights({ outbound: data.outbound, inbound: data.inbound });
       
     } catch (err) {
-      console.error('Flight search error:', err);
+      console.error('Duffel flight search error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(`Search failed: ${errorMessage}`);
+      setError(`Flight search failed: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
