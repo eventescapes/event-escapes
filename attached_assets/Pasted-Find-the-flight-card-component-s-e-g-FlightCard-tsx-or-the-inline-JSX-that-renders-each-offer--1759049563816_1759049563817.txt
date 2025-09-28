@@ -1,0 +1,62 @@
+Find the flight card component(s) (e.g., FlightCard.tsx or the inline JSX that renders each offer). 
+Add a shared helper for selected styles and use it for both outbound and return.
+
+1) Create src/components/SelectedCardStyles.ts:
+------------------------------------------------
+export const baseCard =
+  "rounded-2xl border transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer";
+
+export const selectedCard =
+  "border-2 ring-2 ring-offset-2";
+
+export const selectedGreen =
+  "border-green-500 ring-green-400 ring-offset-white bg-green-50";
+
+export const selectedBlue =
+  "border-blue-500 ring-blue-400 ring-offset-white bg-blue-50";
+
+// Option: choose a single brand color for both legs:
+export const brandSelected = selectedGreen; // change to selectedBlue if needed
+------------------------------------------------
+
+2) In the flight card JSX where each offer is rendered, ensure we pass a boolean `selected` prop and apply classes consistently:
+
+Example patch (pseudo-TSX):
+------------------------------------------------
+import { baseCard, brandSelected, selectedCard } from "@/components/SelectedCardStyles";
+
+type Props = {
+  offer: any;
+  selected?: boolean;
+  onSelect: () => void;
+};
+
+export function FlightCard({ offer, selected, onSelect }: Props) {
+  const cls = [
+    baseCard,
+    selected ? `${selectedCard} ${brandSelected}` : "border-gray-200 bg-white"
+  ].join(" ");
+
+  return (
+    <div className={cls} onClick={onSelect} role="button" tabIndex={0}>
+      {/* existing content */}
+      <div className="flex items-center justify-between">
+        {/* airline, times, etc. */}
+        <button
+          className={
+            selected
+              ? "px-4 py-2 rounded-xl bg-green-600 text-white shadow"
+              : "px-4 py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-black"
+          }
+        >
+          {selected ? "Selected ✓" : "Select Flight"}
+        </button>
+      </div>
+    </div>
+  );
+}
+------------------------------------------------
+
+3) Make sure BOTH outbound and inbound lists pass `selected={selectedOutbound?.id===offer.id}` and `selected={selectedInbound?.id===offer.id}` respectively.
+
+Commit: "ui: unify selected styles for outbound/return (single brand color)"
