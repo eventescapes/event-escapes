@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { FlightSearchResponseRaw, FlightSearchResponse } from '@/types/flights';
 
 interface Flight {
@@ -33,6 +33,7 @@ const FlightSearch = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<any>(null);
+  const returnRef = useRef<HTMLDivElement>(null);
 
   // Environment validation on component mount
   useEffect(() => {
@@ -154,6 +155,13 @@ const FlightSearch = () => {
       ...prev,
       [type]: flight
     }));
+    
+    // Auto-scroll to Return section after selecting outbound flight
+    if (type === 'outbound') {
+      setTimeout(() => {
+        returnRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 150);
+    }
   };
 
   const getTotalPrice = () => {
@@ -359,7 +367,7 @@ const FlightSearch = () => {
 
           {/* Return Flights */}
           {flights.inbound?.length > 0 ? (
-            <div data-testid="section-return">
+            <div ref={returnRef} data-testid="section-return">
               <h3 className="text-xl font-bold mb-4 flex items-center" data-testid="text-return-title">
                 <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm mr-3">Return</span>
                 {searchParams.to} → {searchParams.from}
