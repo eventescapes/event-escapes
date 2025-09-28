@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { FlightSearchResponseRaw, FlightSearchResponse } from '@/types/flights';
 import { baseCard, brandSelected, selectedCard } from '@/components/SelectedCardStyles';
+import TripSummary from '@/components/TripSummary';
 
 interface Flight {
   id: string;
@@ -172,7 +173,9 @@ const FlightSearch = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="mx-auto max-w-7xl px-4 md:px-6">
+      <div className="md:grid md:grid-cols-[1fr_320px] md:gap-6">
+        <div>
       {/* Environment Status */}
       {debugInfo && (
         <div className={`border rounded-lg p-4 mb-6 ${debugInfo.hasSupabaseUrl && debugInfo.hasSupabaseKey ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`} data-testid="environment-status">
@@ -440,55 +443,6 @@ const FlightSearch = () => {
             <div className="text-sm text-gray-500">No return flights for these dates.</div>
           )}
 
-          {/* Selection Summary */}
-          {(selectedFlights.outbound || selectedFlights.return) && (
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-6 text-white" data-testid="summary-selection">
-              <div className="text-center">
-                <h3 className="text-2xl font-bold mb-4" data-testid="text-selection-title">Flight Selection Progress</h3>
-                <div className="flex justify-center space-x-8 mb-6">
-                  <div className="text-center">
-                    <div className={`text-3xl mb-2 ${selectedFlights.outbound ? '' : 'opacity-50'}`} data-testid="icon-outbound-status">
-                      {selectedFlights.outbound ? '✅' : '⭕'}
-                    </div>
-                    <div className="text-sm" data-testid="text-outbound-label">Outbound Flight</div>
-                    {selectedFlights.outbound && (
-                      <div className="text-xs mt-1 opacity-90" data-testid="text-outbound-selected-price">
-                        ${Math.round(selectedFlights.outbound.price || 0)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-center">
-                    <div className={`text-3xl mb-2 ${selectedFlights.return ? '' : 'opacity-50'}`} data-testid="icon-return-status">
-                      {selectedFlights.return ? '✅' : '⭕'}
-                    </div>
-                    <div className="text-sm" data-testid="text-return-label">Return Flight</div>
-                    {selectedFlights.return && (
-                      <div className="text-xs mt-1 opacity-90" data-testid="text-return-selected-price">
-                        ${Math.round(selectedFlights.return.price || 0)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                {selectedFlights.outbound && selectedFlights.return && (
-                  <div className="bg-white bg-opacity-20 rounded-lg p-4 mb-6" data-testid="summary-total">
-                    <div className="text-3xl font-bold mb-2" data-testid="text-total-price">
-                      Total: ${Math.round(getTotalPrice())}
-                    </div>
-                    <div className="text-sm opacity-90" data-testid="text-passenger-count">
-                      For {searchParams.passengers} passenger{searchParams.passengers > 1 ? 's' : ''}
-                    </div>
-                  </div>
-                )}
-                
-                <div className="bg-white bg-opacity-20 rounded-lg p-4" data-testid="status-message">
-                  <div className="text-lg font-medium" data-testid="text-status-main">
-                    Flight selection working - ready for payment integration
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -523,6 +477,47 @@ const FlightSearch = () => {
           </button>
         </div>
       )}
+        </div>
+
+        <TripSummary
+          outbound={{
+            price: selectedFlights.outbound?.price ? { amount: selectedFlights.outbound.price, currency: selectedFlights.outbound.currency || 'USD' } : undefined,
+            carrier: selectedFlights.outbound?.airline,
+          }}
+          inbound={{
+            price: selectedFlights.return?.price ? { amount: selectedFlights.return.price, currency: selectedFlights.return.currency || 'USD' } : undefined,
+            carrier: selectedFlights.return?.airline,
+          }}
+          passengers={searchParams.passengers}
+          onContinue={() => {
+            console.log('Continue to payment clicked');
+            // Future: navigate to checkout/payment page
+          }}
+        />
+      </div>
+
+      {/* Mobile sticky total */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-40">
+        <div className="mx-4 mb-4 rounded-2xl bg-white shadow-xl border p-4 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-gray-500">Total</div>
+            <div className="text-base font-semibold">
+              {(selectedFlights.return?.currency || selectedFlights.outbound?.currency || "USD").toUpperCase()} $
+              {(((selectedFlights.outbound?.price||0) + (selectedFlights.return?.price||0)) * searchParams.passengers).toFixed(0)}
+            </div>
+          </div>
+          <button
+            disabled={!(selectedFlights.outbound && selectedFlights.return)}
+            onClick={() => console.log('Mobile continue clicked')}
+            className={
+              "px-5 py-3 rounded-xl text-white font-medium " +
+              ((selectedFlights.outbound && selectedFlights.return) ? "bg-green-600" : "bg-gray-300")
+            }
+          >
+            {(selectedFlights.outbound && selectedFlights.return) ? "Continue" : "Select flights"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
