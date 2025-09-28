@@ -72,11 +72,8 @@ const FlightSearch = () => {
     return { amount: total, currency };
   };
   const [showSeatSelection, setShowSeatSelection] = useState(false);
-  const [currentSeatSelection, setCurrentSeatSelection] = useState<{ type: 'outbound' | 'return'; offerId: string } | null>(null);
-  const [selectedSeats, setSelectedSeats] = useState<{ outbound: SelectedSeat[]; return: SelectedSeat[] }>({
-    outbound: [],
-    return: []
-  });
+  const [currentSeatSelection, setCurrentSeatSelection] = useState<{ sliceIndex: number; offerId: string; sliceOrigin: string; sliceDestination: string } | null>(null);
+  const [selectedSeats, setSelectedSeats] = useState<Record<number, SelectedSeat[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<any>(null);
@@ -103,6 +100,24 @@ const FlightSearch = () => {
       setError('Missing environment variables. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Replit Secrets.');
     }
   }, []);
+
+  // Auto-trigger seat selection when all slices are selected (but not if seats already completed)
+  useEffect(() => {
+    const hasAnySeatData = Object.keys(selectedSeats).length > 0;
+    if (areAllSlicesSelected() && !showSeatSelection && !currentSeatSelection && !hasAnySeatData) {
+      console.log('[SeatSelection] All slices selected, auto-triggering seat selection');
+      const firstOffer = selectedOffers[0];
+      if (firstOffer) {
+        setCurrentSeatSelection({ 
+          sliceIndex: 0, 
+          offerId: firstOffer.offerId,
+          sliceOrigin: firstOffer.flight.departureAirport,
+          sliceDestination: firstOffer.flight.arrivalAirport
+        });
+        setShowSeatSelection(true);
+      }
+    }
+  }, [selectedOffers, showSeatSelection, currentSeatSelection, selectedSeats]);
 
   const handleInputChange = (field: string, value: string | number) => {
     setSearchParams(prev => ({
@@ -141,7 +156,7 @@ const FlightSearch = () => {
           arrivalAirport: slice.destination.iata_code,
           duration: slice.duration,
           stops: slice.segments.length - 1,
-          price: parseFloat(offer.total_amount),
+          price: sliceIndex === 0 ? parseFloat(offer.total_amount) : 0, // Only first slice gets the full price to avoid double counting
           currency: offer.total_currency,
           segments: slice.segments.map(segment => ({
             airline: segment.marketing_carrier?.name || segment.operating_carrier?.name || 'Unknown',
@@ -201,52 +216,77 @@ const FlightSearch = () => {
     if (currentSeatSelection) {
       const updatedSeats = {
         ...selectedSeats,
-        [currentSeatSelection.type]: seats
+        [currentSeatSelection.sliceIndex]: seats
       };
       setSelectedSeats(updatedSeats);
       
-      // If we just selected outbound seats and have a return flight, select return seats next
-      if (currentSeatSelection.type === 'outbound' && selectedFlights.return) {
-        setCurrentSeatSelection({ type: 'return', offerId: selectedFlights.return.id });
+      console.log(`[SeatSelection] Selected seats for slice ${currentSeatSelection.sliceIndex}:`, seats);
+      
+      // Find next slice that needs seat selection
+      const displayData = getFlightDisplayData();
+      const nextSliceIndex = currentSeatSelection.sliceIndex + 1;
+      
+      if (nextSliceIndex < displayData.sliceGroups.length && selectedOffers[nextSliceIndex]) {
+        // Move to next slice seat selection
+        const nextOffer = selectedOffers[nextSliceIndex];
+        const nextFlight = nextOffer.flight;
+        
+        setCurrentSeatSelection({
+          sliceIndex: nextSliceIndex,
+          offerId: nextOffer.offerId,
+          sliceOrigin: nextFlight.departureAirport,
+          sliceDestination: nextFlight.arrivalAirport
+        });
       } else {
         // All seat selection complete, proceed to payment
         setShowSeatSelection(false);
         setCurrentSeatSelection(null);
         
+        // Store seats in booking context (convert to old format for now)
         const finalSeats = {
-          outbound: currentSeatSelection.type === 'outbound' ? seats : updatedSeats.outbound,
-          return: currentSeatSelection.type === 'return' ? seats : updatedSeats.return
+          outbound: updatedSeats[0] || [],
+          return: updatedSeats[1] || []
         };
         
-        // Store seats in booking context
+        // Log warning if multi-city seats beyond slice 1 exist
+        const totalSlices = Object.keys(updatedSeats).length;
+        if (totalSlices > 2) {
+          console.warn('[SeatSelection] Multi-city trip detected with', totalSlices, 'slices. Only first 2 slices will be stored in booking context. Full seat data:', updatedSeats);
+        }
+        
         updateSelectedSeats(finalSeats);
         
-        // Store flights in booking context
-        if (selectedFlights.outbound) {
+        // Store flights in booking context using selectedOffers data
+        const offers = Object.values(selectedOffers);
+        if (offers.length > 0) {
+          // Store first offer as outbound
+          const outboundOffer = offers[0];
           updateSelectedOutboundFlight({
-            id: selectedFlights.outbound.id,
-            airline: selectedFlights.outbound.airline,
-            departure: selectedFlights.outbound.departure_time,
-            arrival: selectedFlights.outbound.arrival_time,
-            duration: selectedFlights.outbound.duration,
-            price: selectedFlights.outbound.price,
-            stops: 0 // Default value, could be enhanced
+            id: outboundOffer.offerId,
+            airline: outboundOffer.flight.airline,
+            departure: outboundOffer.flight.departure_time,
+            arrival: outboundOffer.flight.arrival_time,
+            duration: outboundOffer.flight.duration,
+            price: outboundOffer.price,
+            stops: outboundOffer.flight.stops || 0
           });
         }
         
-        if (selectedFlights.return) {
+        if (offers.length > 1) {
+          // Store second offer as return
+          const returnOffer = offers[1];
           updateSelectedReturnFlight({
-            id: selectedFlights.return.id,
-            airline: selectedFlights.return.airline,
-            departure: selectedFlights.return.departure_time,
-            arrival: selectedFlights.return.arrival_time,
-            duration: selectedFlights.return.duration,
-            price: selectedFlights.return.price,
-            stops: 0 // Default value, could be enhanced
+            id: returnOffer.offerId,
+            airline: returnOffer.flight.airline,
+            departure: returnOffer.flight.departure_time,
+            arrival: returnOffer.flight.arrival_time,
+            duration: returnOffer.flight.duration,
+            price: returnOffer.price,
+            stops: returnOffer.flight.stops || 0
           });
         }
         
-        console.log('All seats selected, proceed to payment', finalSeats);
+        console.log('[SeatSelection] Complete! Final seats:', updatedSeats);
         // TODO: Navigate to checkout/payment page
       }
     }
@@ -256,31 +296,36 @@ const FlightSearch = () => {
     setShowSeatSelection(false);
     setCurrentSeatSelection(null);
     
+    // Update selectedSeats to prevent auto-trigger loop
+    setSelectedSeats({ 0: [], 1: [] });
+    
     // Store empty seats in booking context
     updateSelectedSeats({ outbound: [], return: [] });
     
-    // Store flights in booking context even if skipping seats
-    if (selectedFlights.outbound) {
+    // Store flights in booking context even if skipping seats (using selectedOffers)
+    if (selectedOffers[0]) {
+      const outboundOffer = selectedOffers[0];
       updateSelectedOutboundFlight({
-        id: selectedFlights.outbound.id,
-        airline: selectedFlights.outbound.airline,
-        departure: selectedFlights.outbound.departure_time,
-        arrival: selectedFlights.outbound.arrival_time,
-        duration: selectedFlights.outbound.duration,
-        price: selectedFlights.outbound.price,
-        stops: 0
+        id: outboundOffer.offerId,
+        airline: outboundOffer.flight.airline,
+        departure: outboundOffer.flight.departure_time,
+        arrival: outboundOffer.flight.arrival_time,
+        duration: outboundOffer.flight.duration,
+        price: outboundOffer.price,
+        stops: outboundOffer.flight.stops || 0
       });
     }
     
-    if (selectedFlights.return) {
+    if (selectedOffers[1]) {
+      const returnOffer = selectedOffers[1];
       updateSelectedReturnFlight({
-        id: selectedFlights.return.id,
-        airline: selectedFlights.return.airline,
-        departure: selectedFlights.return.departure_time,
-        arrival: selectedFlights.return.arrival_time,
-        duration: selectedFlights.return.duration,
-        price: selectedFlights.return.price,
-        stops: 0
+        id: returnOffer.offerId,
+        airline: returnOffer.flight.airline,
+        departure: returnOffer.flight.departure_time,
+        arrival: returnOffer.flight.arrival_time,
+        duration: returnOffer.flight.duration,
+        price: returnOffer.price,
+        stops: returnOffer.flight.stops || 0
       });
     }
     
@@ -434,12 +479,13 @@ const FlightSearch = () => {
         }, 150);
       }
     }
+
+    // Auto-trigger logic moved to useEffect to avoid stale state
   };
 
   const getTotalPrice = () => {
-    const outboundPrice = selectedFlights.outbound?.price || 0;
-    const returnPrice = selectedFlights.return?.price || 0;
-    return (outboundPrice + returnPrice) * searchParams.passengers;
+    const offerTotal = getOffersTotalPrice();
+    return offerTotal.amount; // Duffel already includes all passengers in total_amount
   };
 
   return (
@@ -626,7 +672,7 @@ const FlightSearch = () => {
                     <div 
                       key={`${flight.offerId}-${sliceIndex}-${flightIndex}`}
                       className={`p-6 ${baseCard} ${
-                        selectedFlights.outbound?.id === flight.id 
+                        selectedOffers[sliceIndex]?.offerId === flight.offerId 
                           ? `${selectedCard} ${brandSelected}` 
                           : 'border-gray-200 bg-white'
                       }`}
@@ -748,8 +794,8 @@ const FlightSearch = () => {
         isOpen={showSeatSelection && !!currentSeatSelection}
         onClose={() => setShowSeatSelection(false)}
         offerId={currentSeatSelection?.offerId || ""}
-        origin={currentSeatSelection?.type === 'outbound' ? searchParams.from : searchParams.to}
-        destination={currentSeatSelection?.type === 'outbound' ? searchParams.to : searchParams.from}
+        origin={currentSeatSelection?.sliceOrigin || ""}
+        destination={currentSeatSelection?.sliceDestination || ""}
         passengerIds={Array.from({ length: searchParams.passengers }, (_, i) => `passenger_${i + 1}`)}
         onContinueWithoutSeats={handleCloseSeatSelection}
         onSeatChosen={(serviceId, passengerId) => {
@@ -762,24 +808,32 @@ const FlightSearch = () => {
         <div ref={summaryRef}>
           <TripSummary
             outbound={{
-              price: selectedFlights.outbound?.price ? { amount: selectedFlights.outbound.price, currency: selectedFlights.outbound.currency || 'USD' } : undefined,
-              carrier: selectedFlights.outbound?.airline,
+              price: selectedOffers[0] ? { amount: selectedOffers[0].price, currency: selectedOffers[0].currency } : undefined,
+              carrier: selectedOffers[0]?.flight?.airline,
             }}
             inbound={{
-              price: selectedFlights.return?.price ? { amount: selectedFlights.return.price, currency: selectedFlights.return.currency || 'USD' } : undefined,
-              carrier: selectedFlights.return?.airline,
+              price: selectedOffers[1] ? { amount: selectedOffers[1].price, currency: selectedOffers[1].currency } : undefined,
+              carrier: selectedOffers[1]?.flight?.airline,
             }}
             passengers={searchParams.passengers}
-            selectedSeats={selectedSeats}
+            selectedSeats={{ outbound: selectedSeats[0] || [], return: selectedSeats[1] || [] }}
             onContinue={() => {
               console.log('[SeatSelection] Starting seat selection flow from TripSummary');
-              if (selectedFlights.outbound) {
-                const offerId = selectedFlights.outbound.id;
-                console.log('[SeatSelection] Triggering modal for outbound flight:', { offerId, airline: selectedFlights.outbound.airline });
-                setCurrentSeatSelection({ type: 'outbound', offerId });
-                setShowSeatSelection(true);
+              if (areAllSlicesSelected()) {
+                // Start seat selection with first slice
+                const firstOffer = selectedOffers[0];
+                if (firstOffer) {
+                  console.log('[SeatSelection] Triggering modal for first slice:', { offerId: firstOffer.offerId });
+                  setCurrentSeatSelection({ 
+                    sliceIndex: 0, 
+                    offerId: firstOffer.offerId,
+                    sliceOrigin: firstOffer.flight.departureAirport,
+                    sliceDestination: firstOffer.flight.arrivalAirport
+                  });
+                  setShowSeatSelection(true);
+                }
               } else {
-                console.warn('[SeatSelection] No outbound flight selected');
+                console.warn('[SeatSelection] Not all slices selected');
               }
             }}
           />
@@ -788,28 +842,36 @@ const FlightSearch = () => {
 
       <FloatingCheckout
         outbound={{
-          price: selectedFlights.outbound ? {
-            amount: selectedFlights.outbound.price,
-            currency: selectedFlights.outbound.currency
+          price: selectedOffers[0] ? {
+            amount: selectedOffers[0].price,
+            currency: selectedOffers[0].currency
           } : undefined
         }}
         inbound={{
-          price: selectedFlights.return ? {
-            amount: selectedFlights.return.price,
-            currency: selectedFlights.return.currency
+          price: selectedOffers[1] ? {
+            amount: selectedOffers[1].price,
+            currency: selectedOffers[1].currency
           } : undefined
         }}
         passengers={searchParams.passengers}
-        selectedSeats={selectedSeats}
+        selectedSeats={{ outbound: selectedSeats[0] || [], return: selectedSeats[1] || [] }}
         onContinue={() => {
           console.log('[SeatSelection] Starting seat selection flow from FloatingCheckout');
-          if (selectedFlights.outbound) {
-            const offerId = selectedFlights.outbound.id;
-            console.log('[SeatSelection] Triggering modal for outbound flight:', { offerId, airline: selectedFlights.outbound.airline });
-            setCurrentSeatSelection({ type: 'outbound', offerId });
-            setShowSeatSelection(true);
+          if (areAllSlicesSelected()) {
+            // Start seat selection with first slice
+            const firstOffer = selectedOffers[0];
+            if (firstOffer) {
+              console.log('[SeatSelection] Triggering modal for first slice:', { offerId: firstOffer.offerId });
+              setCurrentSeatSelection({ 
+                sliceIndex: 0, 
+                offerId: firstOffer.offerId,
+                sliceOrigin: firstOffer.flight.departureAirport,
+                sliceDestination: firstOffer.flight.arrivalAirport
+              });
+              setShowSeatSelection(true);
+            }
           } else {
-            console.warn('[SeatSelection] No outbound flight selected');
+            console.warn('[SeatSelection] Not all slices selected');
           }
         }}
       />
