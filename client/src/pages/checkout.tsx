@@ -75,6 +75,7 @@ const CheckoutForm = ({ bookingData }: { bookingData: ReturnType<typeof getBooki
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [isProcessing, setIsProcessing] = useState(false);
+  const { booking } = useBooking(); // Access booking context directly
 
   const form = useForm<GuestInfo>({
     resolver: zodResolver(guestInfoSchema),
@@ -111,13 +112,58 @@ const CheckoutForm = ({ bookingData }: { bookingData: ReturnType<typeof getBooki
             variant: "destructive",
           });
         } else {
-          // Create booking record
+          // Create booking record with flight and seat data  
+          // Access the actual booking context data
+          
+          // Prepare flight data if flights are selected
+          let flightData = null;
+          if (booking.selectedOutboundFlight || booking.selectedReturnFlight) {
+            flightData = {
+              offerId: booking.selectedOutboundFlight?.id || booking.selectedReturnFlight?.id || 'unknown-offer-id', // TODO: Store proper offer_id in BookingContext
+              slices: [] as any[], // Type as any[] to avoid TypeScript never[] error
+              currency: 'USD',
+              passengers: 1, // TODO: Get from search params
+              totalPrice: (booking.selectedOutboundFlight?.price || 0) + (booking.selectedReturnFlight?.price || 0),
+              tripType: booking.selectedReturnFlight ? 'return' : 'one-way'
+            };
+            
+            // Add outbound slice
+            if (booking.selectedOutboundFlight) {
+              flightData.slices.push({
+                index: 0,
+                type: 'outbound',
+                airline: booking.selectedOutboundFlight.airline,
+                departure: booking.selectedOutboundFlight.departure,
+                arrival: booking.selectedOutboundFlight.arrival,
+                duration: booking.selectedOutboundFlight.duration,
+                price: booking.selectedOutboundFlight.price,
+                stops: booking.selectedOutboundFlight.stops
+              });
+            }
+            
+            // Add return slice
+            if (booking.selectedReturnFlight) {
+              flightData.slices.push({
+                index: 1,
+                type: 'return',
+                airline: booking.selectedReturnFlight.airline,
+                departure: booking.selectedReturnFlight.departure,
+                arrival: booking.selectedReturnFlight.arrival,
+                duration: booking.selectedReturnFlight.duration,
+                price: booking.selectedReturnFlight.price,
+                stops: booking.selectedReturnFlight.stops
+              });
+            }
+          }
+
           await apiRequest("POST", "/api/bookings", {
             guestEmail: data.email,
             guestName: `${data.firstName} ${data.lastName}`,
             guestPhone: data.phone,
             totalAmount: bookingData.total,
             status: "confirmed",
+            flightData,
+            selectedSeats: booking.selectedSeats || {}
           });
 
           setLocation("/confirmation");
