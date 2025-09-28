@@ -1,0 +1,40 @@
+Update the flights page to unify search and seat selection with Duffel API:
+
+1. Flight Search:
+   - Use Duffel’s /air/offer_requests to search flights.
+   - Support:
+     • One-way (1 slice: origin, destination, date)
+     • Return (2 slices: outbound + inbound)
+     • Multi-city (3+ slices, each with its own origin, destination, date)
+   - Add UI controls for trip type (one-way, return, multi-city).
+   - Display offers grouped by slice (Outbound, Return, Next City, etc).
+   - Show airline, flight number, departure/arrival times, duration, price.
+
+2. Flight Selection:
+   - Allow user to select one offer per slice (outbound + return, or multiple slices).
+   - Store selected offer_id(s) and display a running Trip Summary with total price.
+
+3. Seat Selection:
+   - Once all required slices are selected, automatically trigger seat selection modal.
+   - Call Duffel `GET /air/seat_maps?offer_id=<offer_id>` for each selected slice.
+   - If seat maps are available:
+       • Render a visual grid with rows and seats.
+       • Mark available seats (green), occupied (grey), extra legroom or premium (special color).
+       • Show seat price if applicable.
+       • Allow one seat selection per passenger per segment.
+   - If seat maps are not available:
+       • Show message “No seat map available for this flight. Continue without seats.”
+       • Provide [Close] and [Continue without seats] buttons.
+
+4. Order Preparation:
+   - Save selected seat service_ids.
+   - Only enable “Continue to Payment” button after seat selection is complete (or skipped).
+   - Pass selected offer_ids + seat service_ids into the order creation payload.
+
+5. UX polish:
+   - Modal must always have a Close (X) button.
+   - Seat selection should happen before payment, never after.
+   - If multi-slice, guide user slice by slice (next seat map opens after previous is confirmed).
+   - Make Trip Summary sticky/floating on desktop + mobile.
+
+Goal: One clean flow — Search → Select flights → Select seats → Continue to Payment.
