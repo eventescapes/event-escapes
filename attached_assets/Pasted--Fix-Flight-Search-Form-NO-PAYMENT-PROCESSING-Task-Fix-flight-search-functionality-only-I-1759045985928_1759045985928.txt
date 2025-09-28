@@ -1,0 +1,65 @@
+# Fix Flight Search Form - NO PAYMENT PROCESSING
+
+## Task: Fix flight search functionality only
+
+**IMPORTANT: Do NOT add any payment processing, Stripe integration, or booking features.**
+
+## Current Issues to Fix:
+
+1. **Form inputs crash/reload page** when users type in departure/destination fields
+2. **Search button doesn't trigger API calls** to the working Supabase backend
+3. **Flight selection buttons are inactive** - don't respond to clicks
+4. **Date defaults showing wrong year** - should be 2025/future dates
+
+## What's Already Working:
+- ✅ Supabase backend with Duffel API integration (tested and confirmed working)
+- ✅ Real flight data available via `/functions/v1/flights-search` endpoint
+- ✅ Backend expects: `{origin, destination, departureDate, returnDate, passengers}`
+
+## Required Changes:
+
+### 1. Fix Form State Management
+- Remove any `<form>` wrappers that cause page reloads
+- Use proper React `useState` for all form inputs
+- Prevent default form submission behavior
+
+### 2. Fix API Call Parameters
+- Frontend currently sends: `departure_date, return_date` (snake_case)  
+- Backend expects: `departureDate, returnDate` (camelCase)
+- Update parameter names to match working backend
+
+### 3. Fix Event Handlers
+- Make all input fields editable without page crashes
+- Connect "Search Flights" button to actual API endpoint
+- Make flight selection buttons functional with proper state tracking
+
+### 4. Update Default Dates
+- Change from 2024 dates to current 2025 dates
+- Ensure dates are always in the future (Duffel requirement)
+
+## Working API Endpoint:
+```
+POST ${VITE_SUPABASE_URL}/functions/v1/flights-search
+Headers: Authorization: Bearer ${VITE_SUPABASE_ANON_KEY}
+Body: {
+  "origin": "LAX",
+  "destination": "JFK", 
+  "departureDate": "2025-10-15",
+  "returnDate": "2025-10-22",
+  "passengers": 1
+}
+```
+
+## DO NOT:
+- Add any Stripe imports or payment processing
+- Create booking/checkout flows
+- Add credit card forms
+- Implement payment intents
+
+## Expected Result:
+- Users can type in form fields without crashes
+- Search button triggers real flight data from Duffel API
+- Flight results display with working selection buttons
+- No payment processing - just flight search and selection
+
+Focus only on making the flight search form functional. Payment integration will be added separately later.
