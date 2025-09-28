@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import type { FlightSearchResponseRaw, FlightSearchResponse } from '@/types/flights';
+import type { FlightSearchResponseRaw, FlightSearchResponse, SelectedSeat } from '@/types/flights';
 import { baseCard, brandSelected, selectedCard } from '@/components/SelectedCardStyles';
 import TripSummary from '@/components/TripSummary';
 import FloatingCheckout from '@/components/FloatingCheckout';
+import SeatMap from '@/components/SeatMap';
 
 interface Flight {
   id: string;
@@ -32,6 +33,12 @@ const FlightSearch = () => {
   }>({
     outbound: null,
     return: null
+  });
+  const [showSeatSelection, setShowSeatSelection] = useState(false);
+  const [currentSeatSelection, setCurrentSeatSelection] = useState<{ type: 'outbound' | 'return'; offerId: string } | null>(null);
+  const [selectedSeats, setSelectedSeats] = useState<{ outbound: SelectedSeat[]; return: SelectedSeat[] }>({
+    outbound: [],
+    return: []
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +72,36 @@ const FlightSearch = () => {
       ...prev,
       [field]: value
     }));
+  };
+
+  const handleSeatsSelected = (seats: SelectedSeat[]) => {
+    if (currentSeatSelection) {
+      setSelectedSeats(prev => ({
+        ...prev,
+        [currentSeatSelection.type]: seats
+      }));
+      
+      // If we just selected outbound seats and have a return flight, select return seats next
+      if (currentSeatSelection.type === 'outbound' && selectedFlights.return) {
+        setCurrentSeatSelection({ type: 'return', offerId: selectedFlights.return.id });
+      } else {
+        // All seat selection complete, proceed to payment
+        setShowSeatSelection(false);
+        setCurrentSeatSelection(null);
+        console.log('All seats selected, proceed to payment', {
+          outbound: currentSeatSelection.type === 'outbound' ? seats : selectedSeats.outbound,
+          return: currentSeatSelection.type === 'return' ? seats : selectedSeats.return
+        });
+        // TODO: Navigate to checkout/payment page
+      }
+    }
+  };
+
+  const handleCloseSeatSelection = () => {
+    setShowSeatSelection(false);
+    setCurrentSeatSelection(null);
+    console.log('Seat selection skipped, proceed to payment without seats');
+    // TODO: Navigate to checkout/payment page
   };
 
   const searchFlights = async (e?: React.MouseEvent) => {
@@ -489,6 +526,33 @@ const FlightSearch = () => {
           </button>
         </div>
       )}
+
+      {/* Seat Selection Modal */}
+      {showSeatSelection && currentSeatSelection && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" data-testid="seat-selection-modal">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-auto">
+            <div className="p-4 border-b">
+              <h2 className="text-xl font-semibold" data-testid="text-seat-selection-title">
+                Select Seats for {currentSeatSelection.type === 'outbound' ? 'Outbound' : 'Return'} Flight
+              </h2>
+              <p className="text-gray-600 text-sm">
+                {currentSeatSelection.type === 'outbound' ? 
+                  `${searchParams.from} → ${searchParams.to}` : 
+                  `${searchParams.to} → ${searchParams.from}`
+                }
+              </p>
+            </div>
+            <div className="p-4">
+              <SeatMap
+                offerId={currentSeatSelection.offerId}
+                passengers={searchParams.passengers}
+                onSeatsSelected={handleSeatsSelected}
+                onClose={handleCloseSeatSelection}
+              />
+            </div>
+          </div>
+        </div>
+      )}
         </div>
 
         <div ref={summaryRef}>
@@ -502,9 +566,13 @@ const FlightSearch = () => {
               carrier: selectedFlights.return?.airline,
             }}
             passengers={searchParams.passengers}
+            selectedSeats={selectedSeats}
             onContinue={() => {
-              console.log('Continue to payment clicked');
-              // Future: navigate to checkout/payment page
+              console.log('Starting seat selection flow');
+              if (selectedFlights.outbound) {
+                setCurrentSeatSelection({ type: 'outbound', offerId: selectedFlights.outbound.id });
+                setShowSeatSelection(true);
+              }
             }}
           />
         </div>
@@ -524,9 +592,13 @@ const FlightSearch = () => {
           } : undefined
         }}
         passengers={searchParams.passengers}
+        selectedSeats={selectedSeats}
         onContinue={() => {
-          console.log('Continue to payment clicked from FloatingCheckout');
-          // Future: navigate to checkout/payment page
+          console.log('Starting seat selection flow from FloatingCheckout');
+          if (selectedFlights.outbound) {
+            setCurrentSeatSelection({ type: 'outbound', offerId: selectedFlights.outbound.id });
+            setShowSeatSelection(true);
+          }
         }}
       />
     </div>

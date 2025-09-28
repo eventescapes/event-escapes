@@ -1,4 +1,5 @@
 import React from "react";
+import type { SelectedSeat } from "@/types/flights";
 
 type Money = { amount: number; currency: string };
 
@@ -13,16 +14,23 @@ export default function TripSummary({
   outbound,
   inbound,
   passengers = 1,
+  selectedSeats,
   onContinue,
 }: {
   outbound?: { price?: Money; carrier?: string; dep?: string; arr?: string };
   inbound?: { price?: Money; carrier?: string; dep?: string; arr?: string };
   passengers?: number;
+  selectedSeats?: { outbound: SelectedSeat[]; return: SelectedSeat[] };
   onContinue?: () => void;
 }) {
+  const seatTotalOutbound = selectedSeats?.outbound.reduce((sum, seat) => sum + seat.price, 0) || 0;
+  const seatTotalReturn = selectedSeats?.return.reduce((sum, seat) => sum + seat.price, 0) || 0;
+  
   const total =
     (outbound?.price?.amount || 0) +
-    (inbound?.price?.amount || 0);
+    (inbound?.price?.amount || 0) +
+    seatTotalOutbound +
+    seatTotalReturn;
 
   const currency =
     inbound?.price?.currency ||
@@ -52,6 +60,33 @@ export default function TripSummary({
               <div className="text-sm font-medium">{fmt(inbound?.price)}</div>
             </div>
           </div>
+
+          {/* Seat Information */}
+          {(selectedSeats?.outbound.length || selectedSeats?.return.length) && (
+            <div className="border-t pt-3">
+              <div className="text-xs uppercase text-gray-500 mb-2">Selected Seats</div>
+              {selectedSeats?.outbound.length > 0 && (
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-sm">
+                    Outbound: {selectedSeats.outbound.map(seat => seat.designator).join(', ')}
+                  </div>
+                  <div className="text-sm font-medium">
+                    {selectedSeats.outbound[0]?.currency} ${seatTotalOutbound.toFixed(0)}
+                  </div>
+                </div>
+              )}
+              {selectedSeats?.return.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <div className="text-sm">
+                    Return: {selectedSeats.return.map(seat => seat.designator).join(', ')}
+                  </div>
+                  <div className="text-sm font-medium">
+                    {selectedSeats.return[0]?.currency} ${seatTotalReturn.toFixed(0)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="border-t pt-3">
             <div className="flex items-center justify-between">

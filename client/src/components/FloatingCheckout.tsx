@@ -1,4 +1,5 @@
 import React from "react";
+import type { SelectedSeat } from "@/types/flights";
 
 type Money = { amount: number; currency: string };
 
@@ -6,16 +7,20 @@ export default function FloatingCheckout({
   outbound,
   inbound,
   passengers = 1,
+  selectedSeats,
   onContinue,
 }: {
   outbound?: { price?: Money };
   inbound?: { price?: Money };
   passengers?: number;
+  selectedSeats?: { outbound: SelectedSeat[]; return: SelectedSeat[] };
   onContinue: () => void;
 }) {
   const ob = Number(outbound?.price?.amount || 0);
   const ib = Number(inbound?.price?.amount || 0);
-  const total = ob + ib;
+  const seatTotalOutbound = selectedSeats?.outbound.reduce((sum, seat) => sum + seat.price, 0) || 0;
+  const seatTotalReturn = selectedSeats?.return.reduce((sum, seat) => sum + seat.price, 0) || 0;
+  const total = ob + ib + seatTotalOutbound + seatTotalReturn;
   const ccy = (inbound?.price?.currency || outbound?.price?.currency || "AUD").toUpperCase();
   const ready = ob > 0 && ib > 0;
 
