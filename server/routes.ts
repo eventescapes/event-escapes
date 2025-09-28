@@ -81,8 +81,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${process.env.DUFFEL_API_KEY}`,
-          "Duffel-Version": "v1",
-          "Content-Type": "application/json"
+          "Duffel-Version": "v2",
+          "Content-Type": "application/json",
+          "Accept-Encoding": "gzip"
         }
       });
       
