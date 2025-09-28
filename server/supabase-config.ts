@@ -1,7 +1,10 @@
 // Server-side Supabase configuration
+import { ServerEnv, assertSecretsReady } from "./env";
+
 export const getSupabaseConfig = () => {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  assertSecretsReady(["SUPABASE_URL", "SUPABASE_ANON_KEY"]);
+  const supabaseUrl = ServerEnv.SUPABASE_URL;
+  const supabaseAnonKey = ServerEnv.SUPABASE_ANON_KEY;
   
   console.log('Supabase config check:', {
     hasUrl: !!supabaseUrl,
