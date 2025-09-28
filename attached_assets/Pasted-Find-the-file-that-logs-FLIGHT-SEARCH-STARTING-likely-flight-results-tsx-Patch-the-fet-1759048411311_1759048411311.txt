@@ -1,0 +1,52 @@
+Find the file that logs “=== FLIGHT SEARCH STARTING ===” (likely flight-results.tsx). 
+Patch the fetch/parse logic so the API field named `return` (a reserved word) is aliased to `inbound`.
+
+1) Create src/types/flights.ts (if missing) with:
+------------------------------------------------
+export type FlightOffer = Record<string, any>;
+
+export interface FlightSearchResponseRaw {
+  outbound?: FlightOffer[];
+  inbound?: FlightOffer[];
+  // Some providers send `return` – keep it as an index access only.
+  [key: string]: any;
+}
+
+export interface FlightSearchResponse {
+  outbound: FlightOffer[];
+  inbound: FlightOffer[];
+  total_offers?: number;
+}
+------------------------------------------------
+
+2) In the component that calls the search (the file you found), make these changes:
+
+- State should be:
+const [flights, setFlights] = useState<{ outbound: any[]; inbound: any[] }>({ outbound: [], inbound: [] });
+
+- After `const res = await fetch(...)` and `const raw = await res.json()`, normalize like:
+import type { FlightSearchResponseRaw, FlightSearchResponse } from "@/types/flights";
+
+const normalize = (raw: FlightSearchResponseRaw): FlightSearchResponse => ({
+  outbound: raw?.outbound ?? [],
+  inbound: raw?.inbound ?? (raw && raw["return"]) ?? [],
+  total_offers: raw?.total_offers,
+});
+
+const data = normalize(raw);
+setFlights({ outbound: data.outbound, inbound: data.inbound });
+
+- In the JSX, render both legs:
+{flights.outbound?.length > 0 && <Section title="Outbound" items={flights.outbound} />}
+{flights.inbound?.length > 0 ? (
+  <Section title="Return" items={flights.inbound} />
+) : (
+  <div className="text-sm text-gray-500">No return flights for these dates.</div>
+)}
+
+(If there’s no Section component, map like you already do for outbound but using `flights.inbound`.)
+
+3) Add a small counter near your green “Search Results” banner:
+Found {flights.outbound.length} outbound and {flights.inbound.length} return flights.
+
+4) Commit as: "fix: alias API ‘return’ to inbound and render return leg"
