@@ -1,0 +1,57 @@
+Redesign and fix the flight search interface copying the best UI patterns from Kayak, Google Flights, and Expedia:
+
+CRITICAL FUNCTIONALITY FIXES:
+- Fix form inputs: Make departure/destination city fields fully editable
+- Update dates: Change default dates from 2024 to current 2025 dates
+- Enable "Update Search" button to trigger new API calls and refresh results
+- Make "Select Outbound" buttons functional for flight selection
+- Add return flight selection for round-trip bookings
+- Fix passenger count selector to allow changes
+- Ensure all form state updates properly trigger new searches
+
+SEARCH FORM IMPROVEMENTS:
+- Make a prominent, centered search bar like Kayak
+- Add autocomplete for city/airport selection  
+- Use intuitive date pickers with calendar widgets
+- Add passenger count selector with +/- buttons
+- Include cabin class dropdown (Economy, Premium, Business, First)
+- Make all form fields fully editable and functional
+
+RESULTS PAGE REDESIGN:
+- Copy Kayak's clean, minimal flight cards design
+- Add color-coded pricing like top OTAs
+- Include airline logos and clear departure/arrival times
+- Show flight duration, stops, and amenities clearly
+- Add working "Select Flight" buttons that lead to booking flow
+
+FILTERS & SORTING:
+- Add left sidebar with price, duration, and airline filters
+- Include sort options: Price, Duration, Departure Time
+- Copy Google Flights' progressive disclosure approach
+
+INTERACTIVE FEATURES:
+- Make search modification form fully functional
+- Add loading states during searches
+- Include social proof elements ("X people viewing this flight")
+- Add urgency indicators for limited availability
+- Implement proper error handling for failed searches
+
+BOOKING FLOW COMPLETION:
+- Create flight selection state management
+- Add passenger details collection form
+- Implement "Continue to Booking" workflow
+- Add payment preparation steps
+
+MODERN UX PATTERNS:
+- Mobile-first responsive design
+- Smooth animations and transitions
+- Clear call-to-action buttons
+- Professional airline-style typography
+
+DUFFEL API INTEGRATION:
+- Replace current mock data with real Duffel offer requests
+- Implement proper offer request creation with slices
+- Add real-time flight data retrieval
+- Handle multiple airline responses properly
+
+The current system shows results but lacks interactivity. Fix all functional issues while upgrading to industry-leading design patterns. Users should be able to modify searches, select flights, and proceed to booking seamlessly.

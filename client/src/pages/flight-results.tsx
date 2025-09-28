@@ -9,7 +9,7 @@ import { FlightCardSkeleton } from "@/components/loading-skeleton";
 import { useBooking } from "@/contexts/BookingContext";
 import { useToast } from "@/hooks/use-toast";
 import { searchFlights, bookFlight, FlightSearchParams } from "@/lib/supabase";
-import { Plane, Calendar, Users, MapPin, Search, ArrowRightLeft, Clock, Star } from "lucide-react";
+import { Plane, Calendar, Users, MapPin, Search, ArrowRightLeft, Clock, Star, Plus, Minus } from "lucide-react";
 
 interface FlightSearchResult {
   outbound: Array<{
@@ -64,9 +64,10 @@ export default function FlightResults() {
   const [searchParams, setSearchParams] = useState({
     from: "LAX",
     to: "JFK",
-    departureDate: "2024-07-15",
-    returnDate: "2024-07-17",
+    departureDate: "2025-01-15",
+    returnDate: "2025-01-22",
     passengers: "2",
+    cabin: "economy"
   });
 
   // Convert search params to Supabase Edge Function format - reactive to searchParams changes
@@ -76,7 +77,7 @@ export default function FlightResults() {
     departureDate: searchParams.departureDate,
     returnDate: searchParams.returnDate,
     passengers: parseInt(searchParams.passengers),
-    cabin: "economy"
+    cabin: searchParams.cabin
   };
 
   const { data, isLoading, error, refetch, isFetching } = useQuery<FlightSearchResult>({
@@ -223,107 +224,136 @@ export default function FlightResults() {
           </div>
         </div>
 
-        {/* Premium Flight Search Form */}
-        <div className="glass-card p-8 mb-12 animate-luxury-slide-in">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-display text-2xl font-semibold text-primary">Modify Your Search</h2>
-            <div className="flex items-center text-accent">
-              <Search className="w-5 h-5 mr-2" />
-              <span className="font-accent font-medium">Find Better Options</span>
+        {/* Kayak-Style Flight Search Form */}
+        <div className="relative max-w-6xl mx-auto mb-12">
+          <div className="glass-card p-6 md:p-8 rounded-2xl shadow-2xl border border-white/20 animate-luxury-slide-in">
+            <div className="text-center mb-6">
+              <h2 className="font-display text-2xl font-bold text-primary mb-2">Modify Your Search</h2>
+              <p className="text-muted-foreground font-accent">Find the perfect flight for your journey</p>
             </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="from" className="font-accent font-semibold text-primary flex items-center">
-                <MapPin className="w-4 h-4 mr-2 text-accent" />
-                Departure City
-              </Label>
-              <Input
-                id="from"
-                type="text"
-                value={`${searchParams.from} - Los Angeles`}
-                onChange={(e) => setSearchParams(prev => ({ ...prev, from: e.target.value.split(' - ')[0] }))}
-                className="glass border-0 focus:ring-2 focus:ring-accent font-accent"
-                data-testid="input-from"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="to" className="font-accent font-semibold text-primary flex items-center">
-                <MapPin className="w-4 h-4 mr-2 text-accent" />
-                Destination
-              </Label>
-              <Input
-                id="to"
-                type="text"
-                value={`${searchParams.to} - New York`}
-                onChange={(e) => setSearchParams(prev => ({ ...prev, to: e.target.value.split(' - ')[0] }))}
-                className="glass border-0 focus:ring-2 focus:ring-accent font-accent"
-                data-testid="input-to"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="departure" className="font-accent font-semibold text-primary flex items-center">
-                <Calendar className="w-4 h-4 mr-2 text-accent" />
-                Departure
-              </Label>
-              <Input
-                id="departure"
-                type="date"
-                value={searchParams.departureDate}
-                onChange={(e) => setSearchParams(prev => ({ ...prev, departureDate: e.target.value }))}
-                className="glass border-0 focus:ring-2 focus:ring-accent font-accent"
-                data-testid="input-departure"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="return" className="font-accent font-semibold text-primary flex items-center">
-                <Calendar className="w-4 h-4 mr-2 text-accent" />
-                Return
-              </Label>
-              <Input
-                id="return"
-                type="date"
-                value={searchParams.returnDate}
-                onChange={(e) => setSearchParams(prev => ({ ...prev, returnDate: e.target.value }))}
-                className="glass border-0 focus:ring-2 focus:ring-accent font-accent"
-                data-testid="input-return"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="passengers" className="font-accent font-semibold text-primary flex items-center">
-                <Users className="w-4 h-4 mr-2 text-accent" />
-                Passengers
-              </Label>
-              <Input
-                id="passengers"
-                type="number"
-                min="1"
-                max="9"
-                value={searchParams.passengers}
-                onChange={(e) => setSearchParams(prev => ({ ...prev, passengers: e.target.value }))}
-                className="glass border-0 focus:ring-2 focus:ring-accent font-accent"
-                data-testid="input-passengers"
-              />
-            </div>
-            <div className="flex items-end">
-              <Button 
-                onClick={handleSearch} 
-                disabled={isFetching}
-                className="btn-luxury w-full font-accent font-semibold" 
-                data-testid="button-search-flights"
-              >
-                {isFetching ? (
-                  <>
-                    <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Searching...
-                  </>
-                ) : (
-                  <>
-                    <Search className="w-4 h-4 mr-2" />
-                    Update Search
-                  </>
-                )}
-              </Button>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+              {/* From */}
+              <div className="lg:col-span-2">
+                <Label className="text-sm font-semibold text-primary mb-2 block">From</Label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-accent" />
+                  <Input
+                    value={searchParams.from}
+                    onChange={(e) => setSearchParams(prev => ({ ...prev, from: e.target.value }))}
+                    placeholder="LAX"
+                    className="pl-10 h-12 border-2 border-muted focus:border-accent rounded-lg bg-white/50 backdrop-blur font-medium"
+                    data-testid="input-from"
+                  />
+                </div>
+              </div>
+              
+              {/* To */}
+              <div className="lg:col-span-2">
+                <Label className="text-sm font-semibold text-primary mb-2 block">To</Label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-accent" />
+                  <Input
+                    value={searchParams.to}
+                    onChange={(e) => setSearchParams(prev => ({ ...prev, to: e.target.value }))}
+                    placeholder="JFK"
+                    className="pl-10 h-12 border-2 border-muted focus:border-accent rounded-lg bg-white/50 backdrop-blur font-medium"
+                    data-testid="input-to"
+                  />
+                </div>
+              </div>
+              
+              {/* Departure */}
+              <div className="lg:col-span-2">
+                <Label className="text-sm font-semibold text-primary mb-2 block">Departure</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-accent" />
+                  <Input
+                    type="date"
+                    value={searchParams.departureDate}
+                    onChange={(e) => setSearchParams(prev => ({ ...prev, departureDate: e.target.value }))}
+                    className="pl-10 h-12 border-2 border-muted focus:border-accent rounded-lg bg-white/50 backdrop-blur font-medium"
+                    data-testid="input-departure"
+                  />
+                </div>
+              </div>
+              
+              {/* Return */}
+              <div className="lg:col-span-2">
+                <Label className="text-sm font-semibold text-primary mb-2 block">Return</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-accent" />
+                  <Input
+                    type="date"
+                    value={searchParams.returnDate}
+                    onChange={(e) => setSearchParams(prev => ({ ...prev, returnDate: e.target.value }))}
+                    className="pl-10 h-12 border-2 border-muted focus:border-accent rounded-lg bg-white/50 backdrop-blur font-medium"
+                    data-testid="input-return"
+                  />
+                </div>
+              </div>
+              
+              {/* Passengers */}
+              <div className="lg:col-span-2">
+                <Label className="text-sm font-semibold text-primary mb-2 block">Passengers</Label>
+                <div className="flex items-center border-2 border-muted rounded-lg bg-white/50 backdrop-blur h-12">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSearchParams(prev => ({ ...prev, passengers: Math.max(1, parseInt(prev.passengers) - 1).toString() }))}
+                    className="h-full px-3 hover:bg-accent/10"
+                    disabled={parseInt(searchParams.passengers) <= 1}
+                  >
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                  <div className="flex-1 text-center font-bold text-primary bg-transparent border-0">
+                    {searchParams.passengers}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSearchParams(prev => ({ ...prev, passengers: Math.min(9, parseInt(prev.passengers) + 1).toString() }))}
+                    className="h-full px-3 hover:bg-accent/10"
+                    disabled={parseInt(searchParams.passengers) >= 9}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Cabin Class */}
+              <div className="lg:col-span-1">
+                <Label className="text-sm font-semibold text-primary mb-2 block">Class</Label>
+                <select 
+                  value={searchParams.cabin}
+                  onChange={(e) => setSearchParams(prev => ({ ...prev, cabin: e.target.value }))}
+                  className="w-full h-12 border-2 border-muted focus:border-accent rounded-lg bg-white/50 backdrop-blur font-medium px-3"
+                  data-testid="select-cabin"
+                >
+                  <option value="economy">Economy</option>
+                  <option value="premium_economy">Premium</option>
+                  <option value="business">Business</option>
+                  <option value="first">First</option>
+                </select>
+              </div>
+              
+              {/* Search Button */}
+              <div className="lg:col-span-1">
+                <Button 
+                  onClick={handleSearch} 
+                  disabled={isFetching}
+                  className="w-full h-12 bg-gradient-to-r from-accent to-luxury text-white font-bold rounded-lg hover:from-accent/90 hover:to-luxury/90 transition-all duration-300 shadow-lg" 
+                  data-testid="button-search-flights"
+                >
+                  {isFetching ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Search className="w-5 h-5" />
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
