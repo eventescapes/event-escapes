@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { FlightSearchResponseRaw, FlightSearchResponse, SelectedSeat } from '@/types/flights';
+import type { FlightSearchResponseRaw, FlightSearchResponse, SelectedSeat, TripType, FlightSearchParams } from '@/types/flights';
 import { baseCard, brandSelected, selectedCard } from '@/components/SelectedCardStyles';
 import TripSummary from '@/components/TripSummary';
 import FloatingCheckout from '@/components/FloatingCheckout';
@@ -20,12 +20,15 @@ interface Flight {
 }
 
 const FlightSearch = () => {
-  const [searchParams, setSearchParams] = useState({
+  const [searchParams, setSearchParams] = useState<FlightSearchParams>({
+    tripType: 'return' as TripType,
     from: 'LAX',
     to: 'JFK',
     departDate: '2025-10-05',
     returnDate: '2025-10-12',
-    passengers: 1
+    passengers: 1,
+    cabinClass: 'economy',
+    multiCitySlices: []
   });
 
   const [flights, setFlights] = useState<{ outbound: any[]; inbound: any[] }>({ outbound: [], inbound: [] });
@@ -306,6 +309,26 @@ const FlightSearch = () => {
       <div className="bg-white rounded-xl shadow-lg p-6 mb-8" data-testid="form-flight-search">
         <h2 className="text-2xl font-bold mb-6 text-center" data-testid="text-search-title">Search Real Flights</h2>
         
+        {/* Trip Type Selector */}
+        <div className="flex justify-center mb-6">
+          <div className="bg-gray-100 rounded-lg p-1 inline-flex" data-testid="trip-type-selector">
+            {(['one-way', 'return', 'multi-city'] as TripType[]).map((type) => (
+              <button
+                key={type}
+                onClick={() => handleInputChange('tripType', type)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  searchParams.tripType === type
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                data-testid={`button-trip-type-${type}`}
+              >
+                {type === 'one-way' ? 'One Way' : type === 'return' ? 'Return' : 'Multi-City'}
+              </button>
+            ))}
+          </div>
+        </div>
+        
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium mb-2">From</label>
@@ -345,17 +368,19 @@ const FlightSearch = () => {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Return</label>
-            <input
-              type="date"
-              value={searchParams.returnDate}
-              onChange={(e) => handleInputChange('returnDate', e.target.value)}
-              min={searchParams.departDate}
-              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              data-testid="input-return"
-            />
-          </div>
+          {searchParams.tripType === 'return' && (
+            <div>
+              <label className="block text-sm font-medium mb-2">Return</label>
+              <input
+                type="date"
+                value={searchParams.returnDate || ''}
+                onChange={(e) => handleInputChange('returnDate', e.target.value)}
+                min={searchParams.departDate}
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                data-testid="input-return"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium mb-2">Passengers</label>
@@ -368,6 +393,21 @@ const FlightSearch = () => {
               {[1,2,3,4,5,6].map(num => (
                 <option key={num} value={num}>{num} passenger{num > 1 ? 's' : ''}</option>
               ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Class</label>
+            <select
+              value={searchParams.cabinClass}
+              onChange={(e) => handleInputChange('cabinClass', e.target.value)}
+              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              data-testid="select-cabin-class"
+            >
+              <option value="economy">Economy</option>
+              <option value="premium_economy">Premium Economy</option>
+              <option value="business">Business</option>
+              <option value="first">First Class</option>
             </select>
           </div>
 
