@@ -82,6 +82,90 @@ const FlightSearch = () => {
 
   const { updateSelectedSeats, updateSelectedOutboundFlight, updateSelectedReturnFlight } = useBooking();
 
+  // Helper function to convert Duffel offers to display format grouped by slice
+  const processOffersForDisplay = (offers: DuffelOffer[]) => {
+    if (!offers || offers.length === 0) return [];
+
+    // Group offers by slice - each slice represents a leg of the journey (outbound, return, etc.)
+    const sliceGroups: { [sliceIndex: number]: any[] } = {};
+
+    offers.forEach(offer => {
+      offer.slices.forEach((slice, sliceIndex) => {
+        if (!sliceGroups[sliceIndex]) {
+          sliceGroups[sliceIndex] = [];
+        }
+
+        // Convert slice to display format
+        const displayFlight = {
+          id: offer.id,
+          offerId: offer.id,
+          sliceId: slice.id,
+          sliceIndex,
+          airline: slice.segments[0]?.marketing_carrier?.name || slice.segments[0]?.operating_carrier?.name || 'Unknown',
+          airlineCode: slice.segments[0]?.marketing_carrier?.iata_code || slice.segments[0]?.operating_carrier?.iata_code || '',
+          flight_number: slice.segments[0]?.flight_number || '',
+          departure_time: slice.segments[0]?.departing_at || '',
+          arrival_time: slice.segments[slice.segments.length - 1]?.arriving_at || '',
+          departureAirport: slice.origin.iata_code,
+          arrivalAirport: slice.destination.iata_code,
+          duration: slice.duration,
+          stops: slice.segments.length - 1,
+          price: parseFloat(offer.total_amount),
+          currency: offer.total_currency,
+          segments: slice.segments.map(segment => ({
+            airline: segment.marketing_carrier?.name || segment.operating_carrier?.name || 'Unknown',
+            flightNumber: segment.flight_number,
+            departureTime: segment.departing_at,
+            arrivalTime: segment.arriving_at,
+            duration: segment.duration,
+            aircraft: segment.aircraft?.name
+          }))
+        };
+
+        sliceGroups[sliceIndex].push(displayFlight);
+      });
+    });
+
+    return sliceGroups;
+  };
+
+  // Get processed flight data for display
+  const getFlightDisplayData = () => {
+    if (!flights.outbound || flights.outbound.length === 0) {
+      return { sliceGroups: [], hasResults: false };
+    }
+
+    const sliceGroups = processOffersForDisplay(flights.outbound);
+    return { 
+      sliceGroups: Object.entries(sliceGroups).map(([index, flights]) => ({
+        sliceIndex: parseInt(index),
+        flights,
+        title: getSliceTitle(parseInt(index))
+      })),
+      hasResults: Object.keys(sliceGroups).length > 0
+    };
+  };
+
+  // Get title for slice based on trip type and slice index
+  const getSliceTitle = (sliceIndex: number): string => {
+    switch (searchParams.tripType) {
+      case 'one-way':
+        return `${searchParams.from} → ${searchParams.to}`;
+      case 'return':
+        return sliceIndex === 0 
+          ? `Outbound: ${searchParams.from} → ${searchParams.to}`
+          : `Return: ${searchParams.to} → ${searchParams.from}`;
+      case 'multi-city':
+        if (searchParams.multiCitySlices && searchParams.multiCitySlices[sliceIndex]) {
+          const slice = searchParams.multiCitySlices[sliceIndex];
+          return `${slice.origin} → ${slice.destination}`;
+        }
+        return `Slice ${sliceIndex + 1}`;
+      default:
+        return `Slice ${sliceIndex + 1}`;
+    }
+  };
+
   const handleSeatsSelected = (seats: SelectedSeat[]) => {
     if (currentSeatSelection) {
       const updatedSeats = {
@@ -443,160 +527,118 @@ const FlightSearch = () => {
       )}
 
       {/* Flight Results */}
-      {(flights.outbound?.length > 0 || flights.inbound?.length > 0) && (
-        <div className="space-y-8" data-testid="results-container">
-          {/* Results Summary */}
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4" data-testid="results-summary">
-            <h3 className="font-medium text-green-800" data-testid="text-results-title">Search Results</h3>
-            <p className="text-sm text-green-700" data-testid="text-results-count">
-              Found {flights.outbound.length} outbound and {flights.inbound.length} return flights.
-            </p>
+      {(() => {
+        const displayData = getFlightDisplayData();
+        return displayData.hasResults && (
+          <div className="space-y-8" data-testid="results-container">
+            {/* Results Summary */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4" data-testid="results-summary">
+              <h3 className="font-medium text-green-800" data-testid="text-results-title">Search Results</h3>
+              <p className="text-sm text-green-700" data-testid="text-results-count">
+                Found {displayData.sliceGroups.reduce((total, group) => total + group.flights.length, 0)} flight options across {displayData.sliceGroups.length} slice(s).
+              </p>
+            </div>
+
+            {/* Display flight slices */}
+            {displayData.sliceGroups.map((sliceGroup, sliceIndex) => (
+              <div key={`slice-${sliceIndex}`} data-testid={`section-slice-${sliceIndex}`}>
+                <h3 className="text-xl font-bold mb-4 flex items-center" data-testid={`text-slice-title-${sliceIndex}`}>
+                  <span className={`px-3 py-1 rounded-full text-sm mr-3 ${
+                    sliceIndex === 0 ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                  }`}>
+                    {sliceGroup.title}
+                  </span>
+                </h3>
+                
+                <div className="space-y-4">
+                  {sliceGroup.flights.map((flight, flightIndex) => (
+                    <div 
+                      key={`${flight.offerId}-${sliceIndex}-${flightIndex}`}
+                      className={`p-6 ${baseCard} ${
+                        selectedFlights.outbound?.id === flight.id 
+                          ? `${selectedCard} ${brandSelected}` 
+                          : 'border-gray-200 bg-white'
+                      }`}
+                      data-testid={`card-flight-${sliceIndex}-${flightIndex}`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="flex-1">
+                          <div className="flex items-center mb-3">
+                            <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded text-sm font-medium" data-testid={`text-airline-${sliceIndex}-${flightIndex}`}>
+                              {flight.airline || 'Airline'}
+                            </span>
+                            <span className="ml-3 text-gray-600 text-sm" data-testid={`text-flight-number-${sliceIndex}-${flightIndex}`}>
+                              {flight.flight_number || `Flight ${flightIndex + 1}`}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center space-x-6">
+                            <div className="text-center">
+                              <div className="font-bold text-xl" data-testid={`text-departure-time-${sliceIndex}-${flightIndex}`}>
+                                {flight.departure_time ? new Date(flight.departure_time).toLocaleTimeString('en-US', { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                }) : 'N/A'}
+                              </div>
+                              <div className="text-gray-600 text-sm" data-testid={`text-departure-airport-${sliceIndex}-${flightIndex}`}>
+                                {flight.departureAirport}
+                              </div>
+                            </div>
+                            
+                            <div className="flex-1 text-center">
+                              <div className="text-sm text-gray-600" data-testid={`text-duration-${sliceIndex}-${flightIndex}`}>
+                                {flight.duration || 'N/A'}
+                              </div>
+                              <div className="border-t border-gray-300 my-2 relative">
+                                <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 bg-white px-2">✈️</div>
+                              </div>
+                              <div className="text-xs text-gray-500" data-testid={`text-stops-${sliceIndex}-${flightIndex}`}>
+                                {flight.stops === 0 ? 'Direct' : `${flight.stops} stop${flight.stops > 1 ? 's' : ''}`}
+                              </div>
+                            </div>
+                            
+                            <div className="text-center">
+                              <div className="font-bold text-xl" data-testid={`text-arrival-time-${sliceIndex}-${flightIndex}`}>
+                                {flight.arrival_time ? new Date(flight.arrival_time).toLocaleTimeString('en-US', { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                }) : 'N/A'}
+                              </div>
+                              <div className="text-gray-600 text-sm" data-testid={`text-arrival-airport-${sliceIndex}-${flightIndex}`}>
+                                {flight.arrivalAirport}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="ml-8 text-right">
+                          <div className="text-3xl font-bold text-green-600 mb-1" data-testid={`text-price-${sliceIndex}-${flightIndex}`}>
+                            ${flight.price ? Math.round(flight.price) : 'N/A'}
+                          </div>
+                          <div className="text-sm text-gray-600 mb-3" data-testid={`text-currency-${sliceIndex}-${flightIndex}`}>
+                            {flight.currency || 'USD'}
+                          </div>
+                          <button
+                            onClick={() => handleFlightSelect(flight, sliceIndex === 0 ? 'outbound' : 'return')}
+                            className={`px-4 py-2 rounded-xl font-medium transition-all ${
+                              selectedFlights.outbound?.id === flight.id
+                                ? 'bg-green-600 text-white shadow'
+                                : 'bg-yellow-400 hover:bg-yellow-500 text-black'
+                            }`}
+                            data-testid={`button-select-flight-${sliceIndex}-${flightIndex}`}
+                          >
+                            {selectedFlights.outbound?.id === flight.id ? 'Selected ✓' : 'Select Flight'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-
-          {/* Outbound Flights */}
-          {flights.outbound?.length > 0 && (
-            <div data-testid="section-outbound">
-              <h3 className="text-xl font-bold mb-4 flex items-center" data-testid="text-outbound-title">
-                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm mr-3">Outbound</span>
-                {searchParams.from} → {searchParams.to}
-              </h3>
-              <div className="space-y-4">
-                {flights.outbound.map((flight, index) => (
-                  <div 
-                    key={flight.id || index}
-                    className={`p-6 ${baseCard} ${
-                      selectedFlights.outbound?.id === flight.id 
-                        ? `${selectedCard} ${brandSelected}` 
-                        : 'border-gray-200 bg-white'
-                    }`}
-                    data-testid={`card-outbound-flight-${index}`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <div className="flex items-center mb-3">
-                          <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded text-sm font-medium" data-testid={`text-airline-${index}`}>
-                            {flight.airline || 'Airline'}
-                          </span>
-                          <span className="ml-3 text-gray-600 text-sm" data-testid={`text-flight-number-${index}`}>
-                            {flight.flight_number || `Flight ${index + 1}`}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-6">
-                          <div className="text-center">
-                            <div className="font-bold text-xl" data-testid={`text-departure-time-${index}`}>{flight.departure_time || 'N/A'}</div>
-                            <div className="text-gray-600 text-sm" data-testid={`text-departure-airport-${index}`}>{searchParams.from}</div>
-                          </div>
-                          <div className="flex-1 text-center">
-                            <div className="text-sm text-gray-600" data-testid={`text-duration-${index}`}>{flight.duration || 'N/A'}</div>
-                            <div className="border-t border-gray-300 my-2 relative">
-                              <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 bg-white px-2">✈️</div>
-                            </div>
-                            <div className="text-xs text-gray-500" data-testid={`text-stops-${index}`}>{flight.stops || 'N/A'}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-bold text-xl" data-testid={`text-arrival-time-${index}`}>{flight.arrival_time || 'N/A'}</div>
-                            <div className="text-gray-600 text-sm" data-testid={`text-arrival-airport-${index}`}>{searchParams.to}</div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="ml-8 text-right">
-                        <div className="text-3xl font-bold text-green-600 mb-1" data-testid={`text-price-${index}`}>
-                          ${flight.price ? Math.round(flight.price) : 'N/A'}
-                        </div>
-                        <div className="text-sm text-gray-600 mb-3" data-testid={`text-currency-${index}`}>{flight.currency || 'USD'}</div>
-                        <button
-                          onClick={() => handleFlightSelect(flight, 'outbound')}
-                          className={`px-4 py-2 rounded-xl font-medium transition-all ${
-                            selectedFlights.outbound?.id === flight.id
-                              ? 'bg-green-600 text-white shadow'
-                              : 'bg-yellow-400 hover:bg-yellow-500 text-black'
-                          }`}
-                          data-testid={`button-select-outbound-${index}`}
-                        >
-                          {selectedFlights.outbound?.id === flight.id ? 'Selected ✓' : 'Select Flight'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Return Flights */}
-          {flights.inbound?.length > 0 ? (
-            <div ref={returnRef} data-testid="section-return">
-              <h3 className="text-xl font-bold mb-4 flex items-center" data-testid="text-return-title">
-                <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm mr-3">Return</span>
-                {searchParams.to} → {searchParams.from}
-              </h3>
-              <div className="space-y-4">
-                {flights.inbound.map((flight, index) => (
-                  <div 
-                    key={flight.id || index}
-                    className={`p-6 ${baseCard} ${
-                      selectedFlights.return?.id === flight.id 
-                        ? `${selectedCard} ${brandSelected}` 
-                        : 'border-gray-200 bg-white'
-                    }`}
-                    data-testid={`card-return-flight-${index}`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <div className="flex items-center mb-3">
-                          <span className="bg-green-100 text-green-800 px-3 py-1 rounded text-sm font-medium" data-testid={`text-return-airline-${index}`}>
-                            {flight.airline || 'Airline'}
-                          </span>
-                          <span className="ml-3 text-gray-600 text-sm" data-testid={`text-return-flight-number-${index}`}>
-                            {flight.flight_number || `Flight ${index + 1}`}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-6">
-                          <div className="text-center">
-                            <div className="font-bold text-xl" data-testid={`text-return-departure-time-${index}`}>{flight.departure_time || 'N/A'}</div>
-                            <div className="text-gray-600 text-sm" data-testid={`text-return-departure-airport-${index}`}>{searchParams.to}</div>
-                          </div>
-                          <div className="flex-1 text-center">
-                            <div className="text-sm text-gray-600" data-testid={`text-return-duration-${index}`}>{flight.duration || 'N/A'}</div>
-                            <div className="border-t border-gray-300 my-2 relative">
-                              <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 bg-white px-2">✈️</div>
-                            </div>
-                            <div className="text-xs text-gray-500" data-testid={`text-return-stops-${index}`}>{flight.stops || 'N/A'}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-bold text-xl" data-testid={`text-return-arrival-time-${index}`}>{flight.arrival_time || 'N/A'}</div>
-                            <div className="text-gray-600 text-sm" data-testid={`text-return-arrival-airport-${index}`}>{searchParams.from}</div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="ml-8 text-right">
-                        <div className="text-3xl font-bold text-green-600 mb-1" data-testid={`text-return-price-${index}`}>
-                          ${flight.price ? Math.round(flight.price) : 'N/A'}
-                        </div>
-                        <div className="text-sm text-gray-600 mb-3" data-testid={`text-return-currency-${index}`}>{flight.currency || 'USD'}</div>
-                        <button
-                          onClick={() => handleFlightSelect(flight, 'return')}
-                          className={`px-4 py-2 rounded-xl font-medium transition-all ${
-                            selectedFlights.return?.id === flight.id
-                              ? 'bg-green-600 text-white shadow'
-                              : 'bg-yellow-400 hover:bg-yellow-500 text-black'
-                          }`}
-                          data-testid={`button-select-return-${index}`}
-                        >
-                          {selectedFlights.return?.id === flight.id ? 'Selected ✓' : 'Select Flight'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="text-sm text-gray-500">No return flights for these dates.</div>
-          )}
-
-        </div>
-      )}
+        );
+      })()}
 
       {/* Loading State */}
       {loading && (
