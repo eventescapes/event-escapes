@@ -15,12 +15,14 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatCurrency } from "@/lib/utils";
 import { Calendar, Bed, Plane, Music, CreditCard, Bitcoin, Shield, Star, CheckCircle, User, Mail, Phone, Lock, Gift } from "lucide-react";
 import { z } from "zod";
+import { Env, assertSecretsReady } from "@/config/env";
 
 // Make sure to call `loadStripe` outside of a component's render to avoid
 // recreating the `Stripe` object on every render.
-let stripePromise: Promise<any> | null = null;
-if (import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-  stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+let stripePromise: ReturnType<typeof loadStripe> | null = null;
+assertSecretsReady(["STRIPE_PUBLISHABLE_KEY"]);
+if (Env.STRIPE_PUBLISHABLE_KEY) {
+  stripePromise = loadStripe(Env.STRIPE_PUBLISHABLE_KEY);
   console.log("✓ Stripe payment integration enabled");
 } else {
   console.log("⚠ Stripe payment integration disabled - payment processing unavailable");
@@ -472,7 +474,7 @@ export default function Checkout() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
           {/* Premium Booking Form */}
           <div className="lg:col-span-2">
-            {stripePromise && clientSecret ? (
+            {stripePromise !== null && clientSecret ? (
               <Elements stripe={stripePromise} options={{ clientSecret }}>
                 <CheckoutForm bookingData={bookingData} />
               </Elements>
