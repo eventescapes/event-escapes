@@ -1,6 +1,7 @@
 /* server/env.ts */
 type EnvKeys = {
   STRIPE_SECRET_KEY?: string;
+  TESTING_STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   DUFFEL_API_KEY?: string;
   SUPABASE_URL?: string;
@@ -14,7 +15,7 @@ const e = (key: keyof EnvKeys): string | undefined => {
 };
 
 export const ServerEnv = {
-  STRIPE_SECRET_KEY: e("STRIPE_SECRET_KEY"),
+  STRIPE_SECRET_KEY: e("STRIPE_SECRET_KEY") || e("TESTING_STRIPE_SECRET_KEY"),
   STRIPE_WEBHOOK_SECRET: e("STRIPE_WEBHOOK_SECRET"),
   DUFFEL_API_KEY: e("DUFFEL_API_KEY"),
   SUPABASE_URL: e("SUPABASE_URL") || e("NEXT_PUBLIC_SUPABASE_URL"),
