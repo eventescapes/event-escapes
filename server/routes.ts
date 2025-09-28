@@ -5,11 +5,13 @@ import { storage } from "./storage";
 import { insertBookingSchema, insertBookingItemSchema } from "@shared/schema";
 import { getSupabaseConfig } from "./supabase-config";
 import { z } from "zod";
+import { ServerEnv, assertSecretsReady } from "./env";
 
 // Initialize Stripe only if the secret key is available
 let stripe: Stripe | null = null;
-if (process.env.STRIPE_SECRET_KEY) {
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+assertSecretsReady(["STRIPE_SECRET_KEY"]);
+if (ServerEnv.STRIPE_SECRET_KEY) {
+  stripe = new Stripe(ServerEnv.STRIPE_SECRET_KEY, {
     apiVersion: "2025-08-27.basil",
   });
   console.log("✓ Stripe integration enabled");
@@ -73,14 +75,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Offer ID is required" });
       }
       
-      if (!process.env.DUFFEL_API_KEY) {
+      assertSecretsReady(["DUFFEL_API_KEY"]);
+      if (!ServerEnv.DUFFEL_API_KEY) {
         return res.status(500).json({ message: "Duffel API key not configured" });
       }
       
       const response = await fetch(`https://api.duffel.com/air/seat_maps?offer_id=${offerId}`, {
         method: "GET",
         headers: {
-          "Authorization": `Bearer ${process.env.DUFFEL_API_KEY}`,
+          "Authorization": `Bearer ${ServerEnv.DUFFEL_API_KEY}`,
           "Duffel-Version": "v2",
           "Content-Type": "application/json",
           "Accept-Encoding": "gzip"
@@ -325,7 +328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const sig = req.headers['stripe-signature'] as string;
-      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+      const webhookSecret = ServerEnv.STRIPE_WEBHOOK_SECRET;
       
       if (!webhookSecret) {
         console.log("Webhook secret not configured, skipping verification");
