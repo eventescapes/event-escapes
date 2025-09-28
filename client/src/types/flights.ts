@@ -1,3 +1,4 @@
+// Legacy types (keep for backward compatibility during migration)
 export type FlightOffer = Record<string, any>;
 
 export interface FlightSearchResponseRaw {
@@ -11,6 +12,64 @@ export interface FlightSearchResponse {
   outbound: FlightOffer[];
   inbound: FlightOffer[];
   total_offers?: number;
+}
+
+// New Duffel-based types
+export type TripType = 'one-way' | 'return' | 'multi-city';
+
+export interface FlightSearchParams {
+  tripType: TripType;
+  from: string;
+  to: string;
+  departDate: string;
+  returnDate?: string;
+  passengers: number;
+  cabinClass?: 'first' | 'business' | 'premium_economy' | 'economy';
+  multiCitySlices?: Array<{
+    origin: string;
+    destination: string;
+    departure_date: string;
+  }>;
+}
+
+// Simplified flight representation for UI display
+export interface FlightDisplay {
+  offerId: string;
+  sliceId: string;
+  airline: string;
+  airlineCode: string;
+  flightNumber: string;
+  departureTime: string;
+  arrivalTime: string;
+  departureAirport: string;
+  arrivalAirport: string;
+  duration: string;
+  stops: number;
+  stopDetails?: string[];
+  price: number;
+  currency: string;
+  segments: Array<{
+    airline: string;
+    flightNumber: string;
+    departureTime: string;
+    arrivalTime: string;
+    duration: string;
+    aircraft?: string;
+  }>;
+}
+
+// Selected flights state for different trip types
+export interface SelectedFlights {
+  offers: Array<{
+    offerId: string;
+    sliceIndex: number;
+    totalAmount: string;
+    totalCurrency: string;
+    display: FlightDisplay;
+  }>;
+  totalPrice: number;
+  currency: string;
+  isComplete: boolean; // true when all required slices are selected
 }
 
 // Duffel Seat Map API Types
