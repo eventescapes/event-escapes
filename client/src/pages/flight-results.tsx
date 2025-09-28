@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { FlightSearchResponseRaw, FlightSearchResponse } from '@/types/flights';
+import { baseCard, brandSelected, selectedCard } from '@/components/SelectedCardStyles';
 
 interface Flight {
   id: string;
@@ -308,8 +309,10 @@ const FlightSearch = () => {
                 {flights.outbound.map((flight, index) => (
                   <div 
                     key={flight.id || index}
-                    className={`bg-white rounded-lg shadow-md p-6 border-2 transition-all hover:shadow-lg ${
-                      selectedFlights.outbound?.id === flight.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    className={`p-6 ${baseCard} ${
+                      selectedFlights.outbound?.id === flight.id 
+                        ? `${selectedCard} ${brandSelected}` 
+                        : 'border-gray-200 bg-white'
                     }`}
                     data-testid={`card-outbound-flight-${index}`}
                   >
@@ -348,10 +351,10 @@ const FlightSearch = () => {
                         <div className="text-sm text-gray-600 mb-3" data-testid={`text-currency-${index}`}>{flight.currency || 'USD'}</div>
                         <button
                           onClick={() => handleFlightSelect(flight, 'outbound')}
-                          className={`px-6 py-3 rounded-lg font-medium transition-all ${
+                          className={`px-4 py-2 rounded-xl font-medium transition-all ${
                             selectedFlights.outbound?.id === flight.id
-                              ? 'bg-blue-600 text-white shadow-md'
-                              : 'bg-yellow-500 hover:bg-yellow-600 text-black shadow-sm hover:shadow-md'
+                              ? 'bg-green-600 text-white shadow'
+                              : 'bg-yellow-400 hover:bg-yellow-500 text-black'
                           }`}
                           data-testid={`button-select-outbound-${index}`}
                         >
@@ -376,8 +379,10 @@ const FlightSearch = () => {
                 {flights.inbound.map((flight, index) => (
                   <div 
                     key={flight.id || index}
-                    className={`bg-white rounded-lg shadow-md p-6 border-2 transition-all hover:shadow-lg ${
-                      selectedFlights.return?.id === flight.id ? 'border-green-500 bg-green-50' : 'border-gray-200'
+                    className={`p-6 ${baseCard} ${
+                      selectedFlights.return?.id === flight.id 
+                        ? `${selectedCard} ${brandSelected}` 
+                        : 'border-gray-200 bg-white'
                     }`}
                     data-testid={`card-return-flight-${index}`}
                   >
@@ -416,10 +421,10 @@ const FlightSearch = () => {
                         <div className="text-sm text-gray-600 mb-3" data-testid={`text-return-currency-${index}`}>{flight.currency || 'USD'}</div>
                         <button
                           onClick={() => handleFlightSelect(flight, 'return')}
-                          className={`px-6 py-3 rounded-lg font-medium transition-all ${
+                          className={`px-4 py-2 rounded-xl font-medium transition-all ${
                             selectedFlights.return?.id === flight.id
-                              ? 'bg-green-600 text-white shadow-md'
-                              : 'bg-yellow-500 hover:bg-yellow-600 text-black shadow-sm hover:shadow-md'
+                              ? 'bg-green-600 text-white shadow'
+                              : 'bg-yellow-400 hover:bg-yellow-500 text-black'
                           }`}
                           data-testid={`button-select-return-${index}`}
                         >
