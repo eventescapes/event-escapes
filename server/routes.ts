@@ -234,10 +234,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Bookings
   app.post("/api/bookings", async (req, res) => {
     try {
-      const bookingData = insertBookingSchema.parse(req.body);
+      // Parse basic booking data and separate flight/seat data
+      const { flightData, selectedSeats, ...bookingInfo } = req.body;
+      const bookingData = insertBookingSchema.parse(bookingInfo);
+      
+      // Create the main booking record
       const booking = await storage.createBooking(bookingData);
+      console.log(`[Booking] Created booking ${booking.id} for ${booking.guestEmail}`);
+      
+      // If flight data is provided, create booking items for flights
+      if (flightData && flightData.offerId) {
+        console.log(`[Booking] Adding flight item with offer_id: ${flightData.offerId}`);
+        
+        // Create flight booking item with Duffel offer data
+        const flightBookingItem = {
+          bookingId: booking.id,
+          type: "flight",
+          itemId: flightData.offerId, // Store Duffel offer_id
+          details: {
+            offerId: flightData.offerId,
+            slices: flightData.slices || [],
+            currency: flightData.currency,
+            passengers: flightData.passengers,
+            selectedSeats: selectedSeats || {},
+            tripType: flightData.tripType,
+            searchParams: flightData.searchParams
+          },
+          quantity: 1,
+          unitPrice: flightData.totalPrice || 0,
+          totalPrice: flightData.totalPrice || 0
+        };
+        
+        await storage.createBookingItem(flightBookingItem);
+        console.log(`[Booking] Added flight booking item for offer ${flightData.offerId}`);
+      }
+      
       res.json(booking);
     } catch (error: any) {
+      console.error("[Booking] Error creating booking:", error);
       res.status(400).json({ message: "Error creating booking: " + error.message });
     }
   });

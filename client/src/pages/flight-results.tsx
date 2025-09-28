@@ -441,7 +441,7 @@ const FlightSearch = () => {
     }
   };
 
-  // New handler for Duffel offers
+  // New handler for Duffel offers - enforces single-offer selection across all slices
   const handleOfferSelect = (flight: any, sliceIndex: number) => {
     console.log(`[Duffel] Selecting flight for slice ${sliceIndex}:`, {
       offerId: flight.offerId,
@@ -450,16 +450,48 @@ const FlightSearch = () => {
       price: flight.price
     });
     
-    setSelectedOffers(prev => ({
-      ...prev,
-      [sliceIndex]: {
-        offerId: flight.offerId,
-        sliceId: flight.sliceId,
-        flight: flight,
-        price: flight.price,
-        currency: flight.currency
-      }
-    }));
+    // Get the full offer to find all slices
+    const selectedOffer = flights.outbound?.find(offer => offer.id === flight.offerId);
+    
+    if (!selectedOffer) {
+      console.error('[Duffel] Could not find offer data for offer_id:', flight.offerId);
+      return;
+    }
+
+    // Enforce single-offer selection: select corresponding slices from the same offer
+    console.log(`[Duffel] Enforcing single-offer selection for offer_id: ${flight.offerId}`);
+    const newSelectedOffers: typeof selectedOffers = {};
+    
+    selectedOffer.slices.forEach((slice: any, idx: number) => {
+      const sliceFlight = {
+        id: selectedOffer.id,
+        offerId: selectedOffer.id,
+        sliceId: slice.id,
+        sliceIndex: idx,
+        airline: slice.segments[0]?.marketing_carrier?.name || slice.segments[0]?.operating_carrier?.name || 'Unknown',
+        airlineCode: slice.segments[0]?.marketing_carrier?.iata_code || slice.segments[0]?.operating_carrier?.iata_code || '',
+        flight_number: slice.segments[0]?.flight_number || '',
+        departure_time: slice.segments[0]?.departing_at || '',
+        arrival_time: slice.segments[slice.segments.length - 1]?.arriving_at || '',
+        departureAirport: slice.origin.iata_code,
+        arrivalAirport: slice.destination.iata_code,
+        duration: slice.duration,
+        stops: slice.segments.length - 1,
+        price: idx === 0 ? parseFloat(selectedOffer.total_amount) : 0, // Only first slice gets price to avoid double counting
+        currency: selectedOffer.total_currency,
+      };
+
+      newSelectedOffers[idx] = {
+        offerId: selectedOffer.id,
+        sliceId: slice.id,
+        flight: sliceFlight,
+        price: sliceFlight.price,
+        currency: sliceFlight.currency
+      };
+    });
+
+    setSelectedOffers(newSelectedOffers);
+    console.log(`[Duffel] Selected complete offer with ${selectedOffer.slices.length} slices:`, newSelectedOffers);
 
     // Auto-scroll to next slice or trip summary
     const displayData = getFlightDisplayData();
