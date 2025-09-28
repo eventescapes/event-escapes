@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { FlightSearchResponseRaw, FlightSearchResponse } from '@/types/flights';
 
 interface Flight {
   id: string;
@@ -12,11 +13,6 @@ interface Flight {
   currency: string;
 }
 
-interface FlightResults {
-  outbound: Flight[];
-  return: Flight[];
-}
-
 const FlightSearch = () => {
   const [searchParams, setSearchParams] = useState({
     from: 'LAX',
@@ -26,7 +22,7 @@ const FlightSearch = () => {
     passengers: 1
   });
 
-  const [flightResults, setFlightResults] = useState<FlightResults | null>(null);
+  const [flights, setFlights] = useState<{ outbound: any[]; inbound: any[] }>({ outbound: [], inbound: [] });
   const [selectedFlights, setSelectedFlights] = useState<{
     outbound: Flight | null;
     return: Flight | null;
@@ -127,14 +123,21 @@ const FlightSearch = () => {
         throw new Error('Server returned non-JSON response. Check if the endpoint is correct.');
       }
 
-      const data = await response.json();
-      console.log('Flight data received:', data);
+      const raw = await response.json();
+      console.log('Flight data received:', raw);
       
-      if (data.error) {
-        throw new Error(data.error);
+      if (raw.error) {
+        throw new Error(raw.error);
       }
       
-      setFlightResults(data);
+      const normalize = (raw: FlightSearchResponseRaw): FlightSearchResponse => ({
+        outbound: raw?.outbound ?? [],
+        inbound: raw?.inbound ?? (raw && raw["return"]) ?? [],
+        total_offers: raw?.total_offers,
+      });
+
+      const data = normalize(raw);
+      setFlights({ outbound: data.outbound, inbound: data.inbound });
       
     } catch (err) {
       console.error('Flight search error:', err);
@@ -276,25 +279,25 @@ const FlightSearch = () => {
       )}
 
       {/* Flight Results */}
-      {flightResults && (
+      {(flights.outbound?.length > 0 || flights.inbound?.length > 0) && (
         <div className="space-y-8" data-testid="results-container">
           {/* Results Summary */}
           <div className="bg-green-50 border border-green-200 rounded-lg p-4" data-testid="results-summary">
             <h3 className="font-medium text-green-800" data-testid="text-results-title">Search Results</h3>
             <p className="text-sm text-green-700" data-testid="text-results-count">
-              Found {flightResults.outbound?.length || 0} outbound and {flightResults.return?.length || 0} return flights
+              Found {flights.outbound.length} outbound and {flights.inbound.length} return flights.
             </p>
           </div>
 
           {/* Outbound Flights */}
-          {flightResults.outbound && flightResults.outbound.length > 0 && (
+          {flights.outbound?.length > 0 && (
             <div data-testid="section-outbound">
               <h3 className="text-xl font-bold mb-4 flex items-center" data-testid="text-outbound-title">
                 <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm mr-3">Outbound</span>
                 {searchParams.from} → {searchParams.to}
               </h3>
               <div className="space-y-4">
-                {flightResults.outbound.map((flight, index) => (
+                {flights.outbound.map((flight, index) => (
                   <div 
                     key={flight.id || index}
                     className={`bg-white rounded-lg shadow-md p-6 border-2 transition-all hover:shadow-lg ${
@@ -355,14 +358,14 @@ const FlightSearch = () => {
           )}
 
           {/* Return Flights */}
-          {flightResults.return && flightResults.return.length > 0 && (
+          {flights.inbound?.length > 0 ? (
             <div data-testid="section-return">
               <h3 className="text-xl font-bold mb-4 flex items-center" data-testid="text-return-title">
                 <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm mr-3">Return</span>
                 {searchParams.to} → {searchParams.from}
               </h3>
               <div className="space-y-4">
-                {flightResults.return.map((flight, index) => (
+                {flights.inbound.map((flight, index) => (
                   <div 
                     key={flight.id || index}
                     className={`bg-white rounded-lg shadow-md p-6 border-2 transition-all hover:shadow-lg ${
@@ -420,6 +423,8 @@ const FlightSearch = () => {
                 ))}
               </div>
             </div>
+          ) : (
+            <div className="text-sm text-gray-500">No return flights for these dates.</div>
           )}
 
           {/* Selection Summary */}
@@ -489,7 +494,7 @@ const FlightSearch = () => {
       )}
 
       {/* No Results */}
-      {flightResults && (!flightResults.outbound || flightResults.outbound.length === 0) && !loading && (
+      {(!flights.outbound || flights.outbound.length === 0) && !loading && (
         <div className="text-center py-16" data-testid="no-results-container">
           <div className="text-6xl mb-4">✈️</div>
           <h3 className="text-xl font-bold text-gray-700 mb-2" data-testid="text-no-results-title">No flights found</h3>
@@ -497,7 +502,7 @@ const FlightSearch = () => {
             No flights available for this route and date combination
           </p>
           <button
-            onClick={() => setFlightResults(null)}
+            onClick={() => setFlights({ outbound: [], inbound: [] })}
             className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
             data-testid="button-try-new-search"
           >
