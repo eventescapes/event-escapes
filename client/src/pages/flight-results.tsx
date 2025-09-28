@@ -40,6 +40,37 @@ const FlightSearch = () => {
     outbound: null,
     return: null
   });
+
+  // New Duffel-based selected flights state
+  const [selectedOffers, setSelectedOffers] = useState<{
+    [sliceIndex: number]: {
+      offerId: string;
+      sliceId: string;
+      flight: any;
+      price: number;
+      currency: string;
+    };
+  }>({});
+
+  // Check if all required slices are selected
+  const areAllSlicesSelected = () => {
+    const displayData = getFlightDisplayData();
+    if (!displayData.hasResults) return false;
+    
+    return displayData.sliceGroups.every((_, sliceIndex) => 
+      selectedOffers[sliceIndex] !== undefined
+    );
+  };
+
+  // Calculate total price for selected Duffel offers
+  const getOffersTotalPrice = () => {
+    const selectedOffersList = Object.values(selectedOffers);
+    if (selectedOffersList.length === 0) return { amount: 0, currency: 'USD' };
+    
+    const total = selectedOffersList.reduce((sum, offer) => sum + offer.price, 0);
+    const currency = selectedOffersList[0]?.currency || 'USD';
+    return { amount: total, currency };
+  };
   const [showSeatSelection, setShowSeatSelection] = useState(false);
   const [currentSeatSelection, setCurrentSeatSelection] = useState<{ type: 'outbound' | 'return'; offerId: string } | null>(null);
   const [selectedSeats, setSelectedSeats] = useState<{ outbound: SelectedSeat[]; return: SelectedSeat[] }>({
@@ -365,6 +396,46 @@ const FlightSearch = () => {
     }
   };
 
+  // New handler for Duffel offers
+  const handleOfferSelect = (flight: any, sliceIndex: number) => {
+    console.log(`[Duffel] Selecting flight for slice ${sliceIndex}:`, {
+      offerId: flight.offerId,
+      sliceId: flight.sliceId,
+      airline: flight.airline,
+      price: flight.price
+    });
+    
+    setSelectedOffers(prev => ({
+      ...prev,
+      [sliceIndex]: {
+        offerId: flight.offerId,
+        sliceId: flight.sliceId,
+        flight: flight,
+        price: flight.price,
+        currency: flight.currency
+      }
+    }));
+
+    // Auto-scroll to next slice or trip summary
+    const displayData = getFlightDisplayData();
+    const nextSliceIndex = sliceIndex + 1;
+    
+    if (nextSliceIndex < displayData.sliceGroups.length) {
+      // Scroll to next slice
+      setTimeout(() => {
+        const nextSliceElement = document.querySelector(`[data-testid="section-slice-${nextSliceIndex}"]`);
+        nextSliceElement?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 150);
+    } else {
+      // All slices selected, scroll to trip summary (desktop only)
+      if (window.matchMedia("(min-width: 768px)").matches) {
+        setTimeout(() => {
+          summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 150);
+      }
+    }
+  };
+
   const getTotalPrice = () => {
     const outboundPrice = selectedFlights.outbound?.price || 0;
     const returnPrice = selectedFlights.return?.price || 0;
@@ -619,15 +690,15 @@ const FlightSearch = () => {
                             {flight.currency || 'USD'}
                           </div>
                           <button
-                            onClick={() => handleFlightSelect(flight, sliceIndex === 0 ? 'outbound' : 'return')}
+                            onClick={() => handleOfferSelect(flight, sliceIndex)}
                             className={`px-4 py-2 rounded-xl font-medium transition-all ${
-                              selectedFlights.outbound?.id === flight.id
+                              selectedOffers[sliceIndex]?.offerId === flight.offerId
                                 ? 'bg-green-600 text-white shadow'
                                 : 'bg-yellow-400 hover:bg-yellow-500 text-black'
                             }`}
                             data-testid={`button-select-flight-${sliceIndex}-${flightIndex}`}
                           >
-                            {selectedFlights.outbound?.id === flight.id ? 'Selected ✓' : 'Select Flight'}
+                            {selectedOffers[sliceIndex]?.offerId === flight.offerId ? 'Selected ✓' : 'Select Flight'}
                           </button>
                         </div>
                       </div>
