@@ -1,0 +1,230 @@
+Goal: Fix seat-selection modal UX and verify Duffel calls. If a seat map isn't available, let the user continue or retry without blocking.
+
+Tasks:
+
+1) Create a reusable modal with proper exits.
+------------------------------------------------
+// src/components/Modal.tsx
+import React, { useEffect, useRef } from "react";
+
+type Props = {
+  isOpen: boolean;
+  title?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+};
+
+export default function Modal({ isOpen, title, onClose, children }: Props) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      aria-modal="true"
+      role="dialog"
+    >
+      <div
+        className="absolute inset-0 bg-black/30"
+        onClick={onClose}
+        aria-label="Backdrop"
+      />
+      <div
+        ref={ref}
+        className="relative z-10 w-full max-w-3xl rounded-2xl bg-white shadow-xl border p-0 overflow-hidden"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <h3 className="text-lg font-semibold">{title}</h3>
+          <button
+            onClick={onClose}
+            className="rounded-full p-2 hover:bg-gray-100"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+------------------------------------------------
+
+2) Centralize Duffel seat-map fetch with strong logging and correct endpoint (query param).
+------------------------------------------------
+// src/utils/duffel.ts
+import { Env, assertSecretsReady } from "@/config/env";
+
+assertSecretsReady(["DUFFEL_API_KEY"]);
+
+export type SeatMapsResponse = any;
+
+export async function fetchSeatMaps(offerId: string): Promise<SeatMapsResponse> {
+  const url = `https://api.duffel.com/air/seat_maps?offer_id=${encodeURIComponent(offerId)}`;
+  const started = Date.now();
+  console.log("[Duffel] GET", url);
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${Env.DUFFEL_API_KEY}`,
+      "Duffel-Version": "v1",
+      "Content-Type": "application/json",
+    },
+  });
+
+  const dur = Date.now() - started;
+  console.log("[Duffel] Seat maps status:", res.status, res.statusText, `(${dur}ms)`);
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.warn("[Duffel] Seat maps error body:", text.slice(0, 600));
+    throw new Error(`Seat maps failed: ${res.status}`);
+  }
+
+  const json = await res.json();
+  console.log("[Duffel] Seat maps payload keys:", Object.keys(json || {}));
+  return json;
+}
+------------------------------------------------
+
+3) Build SeatSelectionModal that uses the Modal, fetches seat maps, and handles empty cases with CTA buttons.
+------------------------------------------------
+// src/components/SeatSelectionModal.tsx
+import React, { useEffect, useState } from "react";
+import Modal from "@/components/Modal";
+import { fetchSeatMaps } from "@/utils/duffel";
+
+type Props = {
+  isOpen: boolean;
+  onClose: () => void;
+  offerId: string;
+  origin: string;
+  destination: string;
+  passengerIds: string[]; // map seats to these if available
+  onContinueWithoutSeats: () => void; // proceed flow even if no seat map
+  onSeatChosen?: (serviceId: string, passengerId: string) => void;
+};
+
+export default function SeatSelectionModal({
+  isOpen, onClose, offerId, origin, destination, passengerIds,
+  onContinueWithoutSeats, onSeatChosen
+}: Props) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [seatMaps, setSeatMaps] = useState<any>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setLoading(true);
+    setError(null);
+    setSeatMaps(null);
+    fetchSeatMaps(offerId)
+      .then((data) => {
+        setSeatMaps(data);
+      })
+      .catch((e) => {
+        setError(e.message || "Seat map fetch failed");
+      })
+      .finally(() => setLoading(false));
+  }, [isOpen, offerId]);
+
+  const noSeatMap =
+    !loading &&
+    !error &&
+    (!seatMaps || !Array.isArray(seatMaps?.data) || seatMaps.data.length === 0);
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Select Seats for ${origin} → ${destination}`}
+    >
+      {loading && <div className="text-sm text-gray-600">Loading seat map…</div>}
+
+      {error && (
+        <div className="space-y-4">
+          <div className="rounded-md bg-red-50 border border-red-200 p-3 text-red-700 text-sm">
+            Couldn’t load seat map ({error}).
+          </div>
+          <div className="flex gap-2">
+            <button className="px-4 py-2 rounded-lg bg-gray-200" onClick={onClose}>Close</button>
+            <button
+              className="px-4 py-2 rounded-lg bg-green-600 text-white"
+              onClick={onContinueWithoutSeats}
+            >
+              Continue without seats
+            </button>
+          </div>
+        </div>
+      )}
+
+      {noSeatMap && (
+        <div className="space-y-4">
+          <div className="rounded-md bg-yellow-50 border border-yellow-200 p-3 text-yellow-800 text-sm">
+            Seat selection isn’t available for this flight. You can continue and choose seats
+            later with the airline, or pick another flight.
+          </div>
+          <div className="flex gap-2">
+            <button className="px-4 py-2 rounded-lg bg-gray-200" onClick={onClose}>Choose another flight</button>
+            <button
+              className="px-4 py-2 rounded-lg bg-green-600 text-white"
+              onClick={onContinueWithoutSeats}
+            >
+              Continue without seats
+            </button>
+          </div>
+          <details className="text-xs text-gray-500">
+            <summary>Debug</summary>
+            <pre className="whitespace-pre-wrap break-words">{JSON.stringify(seatMaps, null, 2)}</pre>
+          </details>
+        </div>
+      )}
+
+      {!loading && !error && seatMaps?.data?.length > 0 && (
+        <div>
+          {/* TODO: render your real seat map UI here.
+              For now, show a minimal placeholder so flow works. */}
+          <div className="text-sm text-gray-600 mb-3">
+            Seat map loaded for {seatMaps.data.length} segment(s). Rendering soon…
+          </div>
+          <div className="flex gap-2">
+            <button className="px-4 py-2 rounded-lg bg-gray-200" onClick={onClose}>Close</button>
+            <button
+              className="px-4 py-2 rounded-lg bg-green-600 text-white"
+              onClick={onContinueWithoutSeats}
+            >
+              Skip seats & continue
+            </button>
+          </div>
+          <details className="text-xs text-gray-500 mt-3">
+            <summary>Debug</summary>
+            <pre className="whitespace-pre-wrap break-words">{JSON.stringify(seatMaps, null, 2)}</pre>
+          </details>
+        </div>
+      )}
+    </Modal>
+  );
+}
+------------------------------------------------
+
+4) Wire this modal into the flights page:
+   - Add state: isSeatModalOpen, activeOfferId, etc.
+   - When user clicks “Select seats”, open modal with the selected offerId.
+   - If user presses “Continue without seats”, set a flag (e.g., seatsSkipped[offerId]=true) and proceed to the return leg or checkout.
+
+5) Remove existing seat modal markup that lacks a close button / ESC handling.
+
+6) Add console logging around the trigger so we can confirm the Duffel call happened (log the offerId, headers, and status; already done in utils).
+
+Commit: "feat(seats): modal with close/escape/backdrop, robust Duffel seat-map call, graceful no-seat-map path"
