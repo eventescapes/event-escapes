@@ -1,0 +1,78 @@
+Create a bottom-fixed checkout bar that shows the running total and a “Continue to Payment” button. 
+Show it when either (a) both flights are selected, or (b) on mobile whenever a flight is selected.
+
+1) Create src/components/CheckoutBar.tsx:
+------------------------------------------------
+import React from "react";
+
+export default function CheckoutBar({
+  outboundTotal = 0,
+  inboundTotal = 0,
+  currency = "AUD",
+  canContinue = false,
+  onContinue,
+}: {
+  outboundTotal?: number;
+  inboundTotal?: number;
+  currency?: string;
+  canContinue: boolean;
+  onContinue: () => void;
+}) {
+  const total = (outboundTotal || 0) + (inboundTotal || 0);
+
+  return (
+    <div className="fixed bottom-0 inset-x-0 z-50">
+      <div className="mx-3 mb-3 rounded-2xl border border-gray-200 bg-white shadow-xl">
+        <div className="flex items-center justify-between gap-3 p-4">
+          <div className="flex flex-col">
+            <span className="text-xs text-gray-500">Total</span>
+            <span className="text-lg font-semibold">
+              {currency.toUpperCase()} ${total.toFixed(0)}
+            </span>
+          </div>
+          <button
+            disabled={!canContinue}
+            onClick={onContinue}
+            className={
+              "px-5 py-3 rounded-xl text-white font-medium " +
+              (canContinue ? "bg-green-600 hover:bg-green-700" : "bg-gray-300 cursor-not-allowed")
+            }
+          >
+            {canContinue ? "Continue to Payment" : "Select both flights"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+------------------------------------------------
+
+2) In the flights page, import and render it once at the bottom:
+import CheckoutBar from "@/components/CheckoutBar";
+
+const obAmt = Number(selectedOutbound?.price?.amount || 0);
+const ibAmt = Number(selectedInbound?.price?.amount || 0);
+const ccy = (selectedInbound?.price?.currency || selectedOutbound?.price?.currency || "AUD") as string;
+const both = Boolean(selectedOutbound && selectedInbound);
+
+<CheckoutBar
+  outboundTotal={obAmt}
+  inboundTotal={ibAmt}
+  currency={ccy}
+  canContinue={both}
+  onContinue={() => router.push("/checkout")}
+/>
+
+3) Visibility rule:
+- Always render on mobile (smaller than md).
+- On desktop, only render when the user is scrolled away from the summary OR when both legs are selected.
+
+Simplest approach: always render; CSS hides it above md when not needed.
+Wrap with classes:
+<div className="md:hidden">
+  <CheckoutBar .../>
+</div>
+
+(Optionally keep it visible on desktop too; it won’t hurt.)
+
+Commit: "feat: floating checkout bar (mobile-first) with live total"
