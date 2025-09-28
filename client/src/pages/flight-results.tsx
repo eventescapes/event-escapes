@@ -36,6 +36,7 @@ const FlightSearch = () => {
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   const returnRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement | null>(null);
 
   // Environment validation on component mount
   useEffect(() => {
@@ -163,6 +164,16 @@ const FlightSearch = () => {
       setTimeout(() => {
         returnRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 150);
+    }
+    
+    // Auto-scroll to Trip Summary after selecting return flight (desktop only)
+    if (type === 'return') {
+      // only on desktop (matches md breakpoint)
+      if (window.matchMedia("(min-width: 768px)").matches) {
+        setTimeout(() => {
+          summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 50);
+      }
     }
   };
 
@@ -479,21 +490,23 @@ const FlightSearch = () => {
       )}
         </div>
 
-        <TripSummary
-          outbound={{
-            price: selectedFlights.outbound?.price ? { amount: selectedFlights.outbound.price, currency: selectedFlights.outbound.currency || 'USD' } : undefined,
-            carrier: selectedFlights.outbound?.airline,
-          }}
-          inbound={{
-            price: selectedFlights.return?.price ? { amount: selectedFlights.return.price, currency: selectedFlights.return.currency || 'USD' } : undefined,
-            carrier: selectedFlights.return?.airline,
-          }}
-          passengers={searchParams.passengers}
-          onContinue={() => {
-            console.log('Continue to payment clicked');
-            // Future: navigate to checkout/payment page
-          }}
-        />
+        <div ref={summaryRef}>
+          <TripSummary
+            outbound={{
+              price: selectedFlights.outbound?.price ? { amount: selectedFlights.outbound.price, currency: selectedFlights.outbound.currency || 'USD' } : undefined,
+              carrier: selectedFlights.outbound?.airline,
+            }}
+            inbound={{
+              price: selectedFlights.return?.price ? { amount: selectedFlights.return.price, currency: selectedFlights.return.currency || 'USD' } : undefined,
+              carrier: selectedFlights.return?.airline,
+            }}
+            passengers={searchParams.passengers}
+            onContinue={() => {
+              console.log('Continue to payment clicked');
+              // Future: navigate to checkout/payment page
+            }}
+          />
+        </div>
       </div>
 
       {/* Mobile sticky total */}
