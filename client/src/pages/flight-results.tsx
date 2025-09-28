@@ -106,6 +106,7 @@ export default function FlightResults() {
   });
 
   const handleOutboundSelect = (flightId: string) => {
+    console.log('✈️ Selecting outbound flight:', flightId);
     setSelectedOutbound(flightId);
     const selectedFlight = data?.outbound.find(f => f.id === flightId);
     if (selectedFlight) {
@@ -118,10 +119,15 @@ export default function FlightResults() {
         price: selectedFlight.price,
         stops: selectedFlight.stops,
       });
+      toast({
+        title: "✈️ Outbound Flight Selected!",
+        description: `${selectedFlight.airline} flight for $${selectedFlight.price}`,
+      });
     }
   };
 
   const handleReturnSelect = (flightId: string) => {
+    console.log('🔄 Selecting return flight:', flightId);
     setSelectedReturn(flightId);
     const selectedFlight = data?.return.find(f => f.id === flightId);
     if (selectedFlight) {
@@ -134,11 +140,18 @@ export default function FlightResults() {
         price: selectedFlight.price,
         stops: selectedFlight.stops,
       });
+      toast({
+        title: "🎯 Complete Booking Ready!",
+        description: `Both flights selected. Total: $${(selectedFlight.price + (data?.outbound.find(f => f.id === selectedOutbound)?.price || 0))}`,
+      });
+      setLocation('/checkout');
     }
-    setLocation('/checkout');
   };
 
-  const handleSearch = () => {
+  const handleSearch = (e?: React.FormEvent) => {
+    if (e) e.preventDefault(); // Prevent page reload
+    console.log('🔍 Triggering flight search with params:', searchParams);
+    
     // Reset selected flights when doing a new search
     setSelectedOutbound(null);
     setSelectedReturn(null);
@@ -172,7 +185,9 @@ export default function FlightResults() {
     );
   }
 
-  if (error || !data) {
+  // Only show error if we have a real error AND no data (fallback should always provide data)
+  if (error && !data) {
+    console.error('❌ Flight search failed with no fallback data:', error);
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
         <div className="glass-card p-12 text-center max-w-md mx-auto">
@@ -182,7 +197,7 @@ export default function FlightResults() {
           <h1 className="font-display text-3xl font-bold text-destructive mb-4">Flight Search Unavailable</h1>
           <p className="text-muted-foreground font-accent mb-6">We're having trouble finding flights. Please try again shortly.</p>
           <Button 
-            onClick={() => window.location.reload()}
+            onClick={handleSearch}
             className="btn-luxury"
           >
             <Search className="w-4 h-4 mr-2" />
@@ -460,12 +475,12 @@ export default function FlightResults() {
                 <div className="animate-luxury-slide-in">
                   <div className="inline-flex items-center bg-luxury-gradient-subtle rounded-full px-4 py-2">
                     <Star className="w-4 h-4 text-accent mr-2" />
-                    <span className="font-accent font-semibold text-accent text-sm">{data.outbound.length} Options</span>
+                    <span className="font-accent font-semibold text-accent text-sm">{data?.outbound?.length || 0} Options</span>
                   </div>
                 </div>
               </div>
           <div className="space-y-6">
-            {data.outbound.map((flight, index) => (
+            {data?.outbound?.map((flight, index) => (
               <div 
                 key={flight.id}
                 className="animate-luxury-scale-in"
@@ -481,7 +496,7 @@ export default function FlightResults() {
             ))}
           </div>
           
-          {data.outbound.length === 0 && (
+          {(data?.outbound?.length || 0) === 0 && (
             <div className="glass-card p-12 text-center animate-luxury-scale-in">
               <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
                 <Plane className="w-8 h-8 text-muted-foreground" />
@@ -513,7 +528,7 @@ export default function FlightResults() {
               </div>
             </div>
             <div className="space-y-6">
-              {data.return.map((flight, index) => (
+              {data?.return?.map((flight, index) => (
                 <div 
                   key={flight.id}
                   className="animate-luxury-scale-in"
@@ -529,7 +544,7 @@ export default function FlightResults() {
               ))}
             </div>
             
-            {data.return.length === 0 && (
+            {(data?.return?.length || 0) === 0 && (
               <div className="glass-card p-12 text-center">
                 <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
                   <Clock className="w-8 h-8 text-muted-foreground" />
