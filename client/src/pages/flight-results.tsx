@@ -358,25 +358,112 @@ export default function FlightResults() {
           </div>
         </div>
 
-        {/* Premium Outbound Flights */}
-        <div className="mb-12">
-          <div className="flex items-center justify-between mb-8">
-            <div className="animate-luxury-fade-in">
-              <h2 className="font-display text-3xl font-bold text-primary mb-2" data-testid="text-outbound-title">
-                Outbound Journey
-              </h2>
-              <p className="text-muted-foreground font-accent flex items-center">
-                <Calendar className="w-4 h-4 mr-2 text-accent" />
-                Departing {searchParams.departureDate}
-              </p>
-            </div>
-            <div className="animate-luxury-slide-in">
-              <div className="inline-flex items-center bg-luxury-gradient-subtle rounded-full px-4 py-2">
-                <Star className="w-4 h-4 text-accent mr-2" />
-                <span className="font-accent font-semibold text-accent text-sm">{data.outbound.length} Options</span>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Filters Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="glass-card p-6 rounded-xl sticky top-6">
+              <h3 className="font-display text-xl font-bold text-primary mb-6">Filter Flights</h3>
+              
+              {/* Sort Options */}
+              <div className="mb-6">
+                <Label className="text-sm font-semibold text-primary mb-3 block">Sort by</Label>
+                <select className="w-full p-3 border-2 border-muted rounded-lg bg-white/50 backdrop-blur font-medium">
+                  <option value="price">Price (Low to High)</option>
+                  <option value="duration">Duration</option>
+                  <option value="departure">Departure Time</option>
+                  <option value="arrival">Arrival Time</option>
+                </select>
+              </div>
+              
+              {/* Price Range */}
+              <div className="mb-6">
+                <Label className="text-sm font-semibold text-primary mb-3 block">Price Range</Label>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input type="checkbox" id="price-low" className="rounded" />
+                    <label htmlFor="price-low" className="text-sm">Under $300</label>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full ml-auto">Great Deal</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input type="checkbox" id="price-mid" className="rounded" />
+                    <label htmlFor="price-mid" className="text-sm">$300 - $500</label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input type="checkbox" id="price-high" className="rounded" />
+                    <label htmlFor="price-high" className="text-sm">$500+</label>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Airlines */}
+              <div className="mb-6">
+                <Label className="text-sm font-semibold text-primary mb-3 block">Airlines</Label>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input type="checkbox" id="american" className="rounded" />
+                    <label htmlFor="american" className="text-sm">American Airlines</label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input type="checkbox" id="delta" className="rounded" />
+                    <label htmlFor="delta" className="text-sm">Delta Airlines</label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input type="checkbox" id="united" className="rounded" />
+                    <label htmlFor="united" className="text-sm">United Airlines</label>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Stops */}
+              <div className="mb-6">
+                <Label className="text-sm font-semibold text-primary mb-3 block">Stops</Label>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input type="checkbox" id="direct" className="rounded" />
+                    <label htmlFor="direct" className="text-sm">Direct flights only</label>
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full ml-auto">Fastest</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input type="checkbox" id="one-stop" className="rounded" />
+                    <label htmlFor="one-stop" className="text-sm">1 stop or fewer</label>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+          
+          {/* Flight Results */}
+          <div className="lg:col-span-3">
+            {/* Social Proof & Urgency */}
+            <div className="mb-6 p-4 bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium text-gray-700">127 people viewing flights to {searchParams.to}</span>
+                </div>
+                <div className="text-sm font-semibold text-orange-600">Book within 24h for best prices!</div>
+              </div>
+            </div>
+            
+            {/* Outbound Flights */}
+            <div className="mb-12">
+              <div className="flex items-center justify-between mb-8">
+                <div className="animate-luxury-fade-in">
+                  <h2 className="font-display text-3xl font-bold text-primary mb-2" data-testid="text-outbound-title">
+                    Outbound Journey
+                  </h2>
+                  <p className="text-muted-foreground font-accent flex items-center">
+                    <Calendar className="w-4 h-4 mr-2 text-accent" />
+                    Departing {searchParams.departureDate}
+                  </p>
+                </div>
+                <div className="animate-luxury-slide-in">
+                  <div className="inline-flex items-center bg-luxury-gradient-subtle rounded-full px-4 py-2">
+                    <Star className="w-4 h-4 text-accent mr-2" />
+                    <span className="font-accent font-semibold text-accent text-sm">{data.outbound.length} Options</span>
+                  </div>
+                </div>
+              </div>
           <div className="space-y-6">
             {data.outbound.map((flight, index) => (
               <div 
@@ -474,6 +561,8 @@ export default function FlightResults() {
             </div>
           </div>
         )}
+          </div>
+        </div>
       </div>
     </div>
   );
