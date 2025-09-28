@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { FlightSearchResponseRaw, FlightSearchResponse } from '@/types/flights';
 import { baseCard, brandSelected, selectedCard } from '@/components/SelectedCardStyles';
 import TripSummary from '@/components/TripSummary';
+import FloatingCheckout from '@/components/FloatingCheckout';
 
 interface Flight {
   id: string;
@@ -186,7 +187,7 @@ const FlightSearch = () => {
   return (
     <div className="mx-auto max-w-7xl px-4 md:px-6">
       <div className="md:grid md:grid-cols-[1fr_320px] md:gap-6">
-        <div>
+        <div className="pb-28">
       {/* Environment Status */}
       {debugInfo && (
         <div className={`border rounded-lg p-4 mb-6 ${debugInfo.hasSupabaseUrl && debugInfo.hasSupabaseKey ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`} data-testid="environment-status">
@@ -509,28 +510,25 @@ const FlightSearch = () => {
         </div>
       </div>
 
-      {/* Mobile sticky total */}
-      <div className="md:hidden fixed bottom-0 inset-x-0 z-40">
-        <div className="mx-4 mb-4 rounded-2xl bg-white shadow-xl border p-4 flex items-center justify-between">
-          <div>
-            <div className="text-xs text-gray-500">Total</div>
-            <div className="text-base font-semibold">
-              {(selectedFlights.return?.currency || selectedFlights.outbound?.currency || "USD").toUpperCase()} $
-              {(((selectedFlights.outbound?.price||0) + (selectedFlights.return?.price||0)) * searchParams.passengers).toFixed(0)}
-            </div>
-          </div>
-          <button
-            disabled={!(selectedFlights.outbound && selectedFlights.return)}
-            onClick={() => console.log('Mobile continue clicked')}
-            className={
-              "px-5 py-3 rounded-xl text-white font-medium " +
-              ((selectedFlights.outbound && selectedFlights.return) ? "bg-green-600" : "bg-gray-300")
-            }
-          >
-            {(selectedFlights.outbound && selectedFlights.return) ? "Continue" : "Select flights"}
-          </button>
-        </div>
-      </div>
+      <FloatingCheckout
+        outbound={{
+          price: selectedFlights.outbound ? {
+            amount: selectedFlights.outbound.price,
+            currency: selectedFlights.outbound.currency
+          } : undefined
+        }}
+        inbound={{
+          price: selectedFlights.return ? {
+            amount: selectedFlights.return.price,
+            currency: selectedFlights.return.currency
+          } : undefined
+        }}
+        passengers={searchParams.passengers}
+        onContinue={() => {
+          console.log('Continue to payment clicked from FloatingCheckout');
+          // Future: navigate to checkout/payment page
+        }}
+      />
     </div>
   );
 };
