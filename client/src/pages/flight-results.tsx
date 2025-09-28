@@ -1,5 +1,22 @@
 import { useState } from 'react';
 
+interface Flight {
+  id: string;
+  airline: string;
+  flight_number: string;
+  departure_time: string;
+  arrival_time: string;
+  duration: string;
+  stops: string;
+  price: number;
+  currency: string;
+}
+
+interface FlightResults {
+  outbound: Flight[];
+  return: Flight[];
+}
+
 const FlightSearch = () => {
   // Current date for proper validation
   const today = new Date().toISOString().split('T')[0];
@@ -13,16 +30,19 @@ const FlightSearch = () => {
     passengers: 1
   });
 
-  const [flightResults, setFlightResults] = useState(null);
-  const [selectedFlights, setSelectedFlights] = useState({
+  const [flightResults, setFlightResults] = useState<FlightResults | null>(null);
+  const [selectedFlights, setSelectedFlights] = useState<{
+    outbound: Flight | null;
+    return: Flight | null;
+  }>({
     outbound: null,
     return: null
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Fixed: Proper input handling without page reloads
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (field: string, value: string | number) => {
     setSearchParams(prev => ({
       ...prev,
       [field]: value
@@ -30,7 +50,7 @@ const FlightSearch = () => {
   };
 
   // Fixed: Connect to your working Duffel API
-  const searchFlights = async (e) => {
+  const searchFlights = async (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
     
     setLoading(true);
@@ -63,7 +83,8 @@ const FlightSearch = () => {
       setFlightResults(data);
       
     } catch (err) {
-      setError(`Search failed: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      setError(`Search failed: ${errorMessage}`);
       console.error('Flight search error:', err);
     } finally {
       setLoading(false);
@@ -71,7 +92,7 @@ const FlightSearch = () => {
   };
 
   // Fixed: Working flight selection
-  const handleFlightSelect = (flight, type) => {
+  const handleFlightSelect = (flight: Flight, type: 'outbound' | 'return') => {
     setSelectedFlights(prev => ({
       ...prev,
       [type]: flight
@@ -79,8 +100,8 @@ const FlightSearch = () => {
   };
 
   const getTotalPrice = () => {
-    const outboundPrice = parseFloat(selectedFlights.outbound?.price || 0);
-    const returnPrice = parseFloat(selectedFlights.return?.price || 0);
+    const outboundPrice = selectedFlights.outbound?.price || 0;
+    const returnPrice = selectedFlights.return?.price || 0;
     return (outboundPrice + returnPrice) * searchParams.passengers;
   };
 
@@ -113,7 +134,7 @@ const FlightSearch = () => {
               onChange={(e) => handleInputChange('from', e.target.value.toUpperCase())}
               placeholder="LAX"
               className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              maxLength="3"
+              maxLength={3}
               data-testid="input-from"
             />
           </div>
@@ -126,7 +147,7 @@ const FlightSearch = () => {
               onChange={(e) => handleInputChange('to', e.target.value.toUpperCase())}
               placeholder="JFK"
               className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              maxLength="3"
+              maxLength={3}
               data-testid="input-to"
             />
           </div>
