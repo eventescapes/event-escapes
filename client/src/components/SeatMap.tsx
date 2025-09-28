@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Loader2, Plane } from "lucide-react";
 import { fetchSeatMap } from "@/utils/duffel";
-import { SeatMapResponse, SeatElement, SelectedSeat } from "@/types/flights";
+import { SeatMapResponse, SeatMap as SeatMapData, SeatElement, SelectedSeat } from "@/types/flights";
 
 interface SeatMapProps {
   offerId: string;
@@ -19,6 +19,9 @@ export default function SeatMap({ offerId, passengers, onSeatsSelected, onClose 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSeats, setSelectedSeats] = useState<{ [passengerId: string]: SelectedSeat }>({});
+  
+  // Generate stable passenger IDs based on passenger count
+  const passengerIds = Array.from({ length: passengers }, (_, i) => `passenger_${i + 1}`);
 
   useEffect(() => {
     const loadSeatMap = async () => {
@@ -42,8 +45,6 @@ export default function SeatMap({ offerId, passengers, onSeatsSelected, onClose 
   const handleSeatClick = (seat: SeatElement, cabinClass: string) => {
     if (!seat.available_services || seat.available_services.length === 0) return;
 
-    const currentPassengerId = `passenger_${Object.keys(selectedSeats).length + 1}`;
-    
     // Check if this seat is already selected by another passenger
     const isAlreadySelected = Object.values(selectedSeats).some(selectedSeat => selectedSeat.seatId === seat.id);
     
@@ -65,7 +66,13 @@ export default function SeatMap({ offerId, passengers, onSeatsSelected, onClose 
       return;
     }
 
-    // Select seat for current passenger
+    // Find next available passenger ID that hasn't been assigned
+    const nextPassengerId = passengerIds.find(id => !selectedSeats[id]);
+    if (!nextPassengerId) {
+      return; // All passengers have seats assigned
+    }
+
+    // Select seat for the next available passenger
     const service = seat.available_services[0]; // Take first available service
     const newSeat: SelectedSeat = {
       seatId: seat.id,
@@ -73,13 +80,13 @@ export default function SeatMap({ offerId, passengers, onSeatsSelected, onClose 
       serviceId: service.id,
       price: parseFloat(service.total_amount),
       currency: service.total_currency,
-      passengerId: currentPassengerId,
+      passengerId: nextPassengerId,
       characteristics: seat.characteristics
     };
 
     setSelectedSeats(prev => ({
       ...prev,
-      [currentPassengerId]: newSeat
+      [nextPassengerId]: newSeat
     }));
   };
 
@@ -129,7 +136,7 @@ export default function SeatMap({ offerId, passengers, onSeatsSelected, onClose 
     );
   }
 
-  if (!seatMapData) {
+  if (!seatMapData || !seatMapData.data || seatMapData.data.length === 0) {
     return (
       <Card className="w-full max-w-4xl mx-auto" data-testid="seat-map-no-data">
         <CardContent className="p-8 text-center">
@@ -187,75 +194,82 @@ export default function SeatMap({ offerId, passengers, onSeatsSelected, onClose 
             </div>
           )}
 
-          {/* Seat Map */}
+          {/* Seat Map - Iterate through all seat maps */}
           <div className="space-y-8" data-testid="seat-map-cabins">
-            {seatMapData.data.cabins.map((cabin, cabinIndex) => (
-              <div key={cabinIndex} className="border rounded-lg p-4">
-                <h3 className="font-medium mb-4 text-center" data-testid={`text-cabin-class-${cabinIndex}`}>
-                  {cabin.cabin_class} Class
+            {seatMapData.data.map((seatMap: SeatMapData, seatMapIndex) => (
+              <div key={seatMapIndex} className="space-y-6">
+                <h3 className="text-lg font-semibold text-center" data-testid={`text-flight-segment-${seatMapIndex}`}>
+                  Flight Segment {seatMapIndex + 1}
                 </h3>
-                <div className="space-y-2" data-testid={`cabin-rows-${cabinIndex}`}>
-                  {cabin.rows.map((row, rowIndex) => (
-                    <div key={rowIndex} className="flex justify-center gap-1" data-testid={`row-${rowIndex}`}>
-                      {row.sections.map((section, sectionIndex) => (
-                        <div key={sectionIndex} className="flex gap-1" data-testid={`section-${sectionIndex}`}>
-                          {section.elements.map((element, elementIndex) => {
-                            if (element.type === "aisle") {
-                              return (
-                                <div key={elementIndex} className="w-8 flex items-center justify-center text-gray-400">
-                                  |
-                                </div>
-                              );
-                            }
-                            
-                            if (element.type === "seat") {
-                              const isAvailable = element.available_services && element.available_services.length > 0;
-                              const service = element.available_services?.[0];
-                              
-                              return (
-                                <Tooltip key={elementIndex}>
-                                  <TooltipTrigger>
-                                    <div
-                                      className={`w-8 h-8 text-xs rounded flex items-center justify-center border transition-all ${getSeatColor(element)}`}
-                                      onClick={() => isAvailable && handleSeatClick(element, cabin.cabin_class)}
-                                      data-testid={`seat-${element.designator || element.id}`}
-                                    >
-                                      {element.designator || "💺"}
+                {seatMap.cabins.map((cabin, cabinIndex) => (
+                  <div key={cabinIndex} className="border rounded-lg p-4">
+                    <h4 className="font-medium mb-4 text-center" data-testid={`text-cabin-class-${seatMapIndex}-${cabinIndex}`}>
+                      {cabin.cabin_class} Class
+                    </h4>
+                    <div className="space-y-2" data-testid={`cabin-rows-${seatMapIndex}-${cabinIndex}`}>
+                      {cabin.rows.map((row, rowIndex) => (
+                        <div key={rowIndex} className="flex justify-center gap-1" data-testid={`row-${seatMapIndex}-${rowIndex}`}>
+                          {row.sections.map((section, sectionIndex) => (
+                            <div key={sectionIndex} className="flex gap-1" data-testid={`section-${seatMapIndex}-${sectionIndex}`}>
+                              {section.elements.map((element, elementIndex) => {
+                                if (element.type === "aisle") {
+                                  return (
+                                    <div key={elementIndex} className="w-8 flex items-center justify-center text-gray-400">
+                                      |
                                     </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <div className="text-sm">
-                                      <div className="font-medium">{element.designator || element.name}</div>
-                                      {element.characteristics && element.characteristics.length > 0 && (
-                                        <div className="text-xs text-gray-600">
-                                          {element.characteristics.join(", ")}
+                                  );
+                                }
+                                
+                                if (element.type === "seat") {
+                                  const isAvailable = element.available_services && element.available_services.length > 0;
+                                  const service = element.available_services?.[0];
+                                  
+                                  return (
+                                    <Tooltip key={elementIndex}>
+                                      <TooltipTrigger>
+                                        <div
+                                          className={`w-8 h-8 text-xs rounded flex items-center justify-center border transition-all ${getSeatColor(element)}`}
+                                          onClick={() => isAvailable && handleSeatClick(element, cabin.cabin_class)}
+                                          data-testid={`seat-${element.designator || element.id}`}
+                                        >
+                                          {element.designator || "💺"}
                                         </div>
-                                      )}
-                                      {service && (
-                                        <div className="text-xs">
-                                          {service.total_currency} ${service.total_amount}
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <div className="text-sm">
+                                          <div className="font-medium">{element.designator || element.name}</div>
+                                          {element.characteristics && element.characteristics.length > 0 && (
+                                            <div className="text-xs text-gray-600">
+                                              {element.characteristics.join(", ")}
+                                            </div>
+                                          )}
+                                          {service && (
+                                            <div className="text-xs">
+                                              {service.total_currency} ${service.total_amount}
+                                            </div>
+                                          )}
+                                          {!isAvailable && (
+                                            <div className="text-xs text-red-600">Unavailable</div>
+                                          )}
                                         </div>
-                                      )}
-                                      {!isAvailable && (
-                                        <div className="text-xs text-red-600">Unavailable</div>
-                                      )}
-                                    </div>
-                                  </TooltipContent>
-                                </Tooltip>
-                              );
-                            }
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  );
+                                }
 
-                            return (
-                              <div key={elementIndex} className="w-8 h-8 flex items-center justify-center text-gray-400">
-                                {getSeatIcon(element)}
-                              </div>
-                            );
-                          })}
+                                return (
+                                  <div key={elementIndex} className="w-8 h-8 flex items-center justify-center text-gray-400">
+                                    {getSeatIcon(element)}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
                         </div>
                       ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             ))}
           </div>

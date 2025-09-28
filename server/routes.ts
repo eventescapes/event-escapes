@@ -77,7 +77,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Duffel API key not configured" });
       }
       
-      const response = await fetch(`https://api.duffel.com/air/seat_maps/${offerId}`, {
+      const response = await fetch(`https://api.duffel.com/air/seat_maps?offer_id=${offerId}`, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${process.env.DUFFEL_API_KEY}`,

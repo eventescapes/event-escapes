@@ -48,13 +48,15 @@ export interface SeatMapCabin {
   };
 }
 
+export interface SeatMap {
+  id: string;
+  cabins: SeatMapCabin[];
+  slice_index: number;
+  segment_index: number;
+}
+
 export interface SeatMapResponse {
-  data: {
-    id: string;
-    cabins: SeatMapCabin[];
-    slice_index: number;
-    segment_index: number;
-  };
+  data: SeatMap[];
 }
 
 export interface SelectedSeat {
