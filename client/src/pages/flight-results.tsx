@@ -4,6 +4,7 @@ import { baseCard, brandSelected, selectedCard } from '@/components/SelectedCard
 import TripSummary from '@/components/TripSummary';
 import FloatingCheckout from '@/components/FloatingCheckout';
 import SeatMap from '@/components/SeatMap';
+import { useBooking } from '@/contexts/BookingContext';
 
 interface Flight {
   id: string;
@@ -74,12 +75,15 @@ const FlightSearch = () => {
     }));
   };
 
+  const { updateSelectedSeats, updateSelectedOutboundFlight, updateSelectedReturnFlight } = useBooking();
+
   const handleSeatsSelected = (seats: SelectedSeat[]) => {
     if (currentSeatSelection) {
-      setSelectedSeats(prev => ({
-        ...prev,
+      const updatedSeats = {
+        ...selectedSeats,
         [currentSeatSelection.type]: seats
-      }));
+      };
+      setSelectedSeats(updatedSeats);
       
       // If we just selected outbound seats and have a return flight, select return seats next
       if (currentSeatSelection.type === 'outbound' && selectedFlights.return) {
@@ -88,10 +92,41 @@ const FlightSearch = () => {
         // All seat selection complete, proceed to payment
         setShowSeatSelection(false);
         setCurrentSeatSelection(null);
-        console.log('All seats selected, proceed to payment', {
-          outbound: currentSeatSelection.type === 'outbound' ? seats : selectedSeats.outbound,
-          return: currentSeatSelection.type === 'return' ? seats : selectedSeats.return
-        });
+        
+        const finalSeats = {
+          outbound: currentSeatSelection.type === 'outbound' ? seats : updatedSeats.outbound,
+          return: currentSeatSelection.type === 'return' ? seats : updatedSeats.return
+        };
+        
+        // Store seats in booking context
+        updateSelectedSeats(finalSeats);
+        
+        // Store flights in booking context
+        if (selectedFlights.outbound) {
+          updateSelectedOutboundFlight({
+            id: selectedFlights.outbound.id,
+            airline: selectedFlights.outbound.airline,
+            departure: selectedFlights.outbound.departure_time,
+            arrival: selectedFlights.outbound.arrival_time,
+            duration: selectedFlights.outbound.duration,
+            price: selectedFlights.outbound.price,
+            stops: 0 // Default value, could be enhanced
+          });
+        }
+        
+        if (selectedFlights.return) {
+          updateSelectedReturnFlight({
+            id: selectedFlights.return.id,
+            airline: selectedFlights.return.airline,
+            departure: selectedFlights.return.departure_time,
+            arrival: selectedFlights.return.arrival_time,
+            duration: selectedFlights.return.duration,
+            price: selectedFlights.return.price,
+            stops: 0 // Default value, could be enhanced
+          });
+        }
+        
+        console.log('All seats selected, proceed to payment', finalSeats);
         // TODO: Navigate to checkout/payment page
       }
     }
@@ -100,6 +135,35 @@ const FlightSearch = () => {
   const handleCloseSeatSelection = () => {
     setShowSeatSelection(false);
     setCurrentSeatSelection(null);
+    
+    // Store empty seats in booking context
+    updateSelectedSeats({ outbound: [], return: [] });
+    
+    // Store flights in booking context even if skipping seats
+    if (selectedFlights.outbound) {
+      updateSelectedOutboundFlight({
+        id: selectedFlights.outbound.id,
+        airline: selectedFlights.outbound.airline,
+        departure: selectedFlights.outbound.departure_time,
+        arrival: selectedFlights.outbound.arrival_time,
+        duration: selectedFlights.outbound.duration,
+        price: selectedFlights.outbound.price,
+        stops: 0
+      });
+    }
+    
+    if (selectedFlights.return) {
+      updateSelectedReturnFlight({
+        id: selectedFlights.return.id,
+        airline: selectedFlights.return.airline,
+        departure: selectedFlights.return.departure_time,
+        arrival: selectedFlights.return.arrival_time,
+        duration: selectedFlights.return.duration,
+        price: selectedFlights.return.price,
+        stops: 0
+      });
+    }
+    
     console.log('Seat selection skipped, proceed to payment without seats');
     // TODO: Navigate to checkout/payment page
   };

@@ -154,6 +154,24 @@ export interface FlightBookingParams {
     phone: string;
   };
   paymentDetails?: any;
+  selectedSeats?: {
+    outbound: Array<{
+      serviceId: string;
+      seatId: string;
+      designator: string;
+      passengerId: string;
+      price: number;
+      currency: string;
+    }>;
+    return: Array<{
+      serviceId: string;
+      seatId: string;
+      designator: string;
+      passengerId: string;
+      price: number;
+      currency: string;
+    }>;
+  };
 }
 
 // Fallback mock data for when API is unavailable
@@ -238,6 +256,33 @@ export const searchFlights = async (params: FlightSearchParams) => {
   }
 };
 
+// Transform selected seats to Duffel services format
+const transformSeatsToServices = (selectedSeats?: FlightBookingParams['selectedSeats']) => {
+  if (!selectedSeats) return [];
+  
+  const services: Array<{ id: string; quantity: number; passenger_ids: string[] }> = [];
+  
+  // Process outbound seats
+  selectedSeats.outbound.forEach(seat => {
+    services.push({
+      id: seat.serviceId,
+      quantity: 1,
+      passenger_ids: [seat.passengerId]
+    });
+  });
+  
+  // Process return seats
+  selectedSeats.return.forEach(seat => {
+    services.push({
+      id: seat.serviceId,
+      quantity: 1,
+      passenger_ids: [seat.passengerId]
+    });
+  });
+  
+  return services;
+};
+
 export const bookFlight = async (params: FlightBookingParams) => {
   try {
     // Ensure Supabase is initialized
@@ -251,11 +296,54 @@ export const bookFlight = async (params: FlightBookingParams) => {
     console.log('📝 Booking params:', {
       flightId: params.flightId,
       passenger: params.passengerDetails.firstName + ' ' + params.passengerDetails.lastName,
-      email: params.passengerDetails.email
+      email: params.passengerDetails.email,
+      hasSeats: !!params.selectedSeats && (params.selectedSeats.outbound.length > 0 || params.selectedSeats.return.length > 0)
+    });
+    
+    // Generate passengers array dynamically based on seat selections
+    const generatePassengers = () => {
+      if (params.selectedSeats) {
+        // Extract unique passenger IDs from selected seats
+        const allSeats = [...params.selectedSeats.outbound, ...params.selectedSeats.return];
+        const uniquePassengerIds = Array.from(new Set(allSeats.map(seat => seat.passengerId)));
+        
+        return uniquePassengerIds.map((passengerId, index) => ({
+          id: passengerId,
+          given_name: index === 0 ? params.passengerDetails.firstName : `Passenger ${index + 1}`,
+          family_name: index === 0 ? params.passengerDetails.lastName : 'Guest',
+          email: index === 0 ? params.passengerDetails.email : `passenger${index + 1}@example.com`,
+          phone_number: index === 0 ? params.passengerDetails.phone : ''
+        }));
+      } else {
+        // Default to single passenger if no seats selected
+        return [{
+          id: 'passenger_1',
+          given_name: params.passengerDetails.firstName,
+          family_name: params.passengerDetails.lastName,
+          email: params.passengerDetails.email,
+          phone_number: params.passengerDetails.phone
+        }];
+      }
+    };
+
+    // Transform booking params to include Duffel order format
+    const duffelOrderPayload = {
+      selected_offers: [params.flightId],
+      services: transformSeatsToServices(params.selectedSeats),
+      passengers: generatePassengers()
+    };
+    
+    console.log('🎫 Duffel order payload with seats:', {
+      offers: duffelOrderPayload.selected_offers,
+      serviceCount: duffelOrderPayload.services.length,
+      services: duffelOrderPayload.services
     });
     
     const { data, error } = await supabase.functions.invoke('flights-book', {
-      body: params,
+      body: {
+        ...params,
+        duffelOrderPayload
+      },
       headers: {
         'Content-Type': 'application/json'
       }

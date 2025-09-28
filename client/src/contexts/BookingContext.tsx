@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
+import type { SelectedSeat } from '@/types/flights';
 
 interface Hotel {
   id: string;
@@ -34,6 +35,10 @@ interface BookingState {
   selectedHotel?: Hotel;
   selectedOutboundFlight?: Flight;
   selectedReturnFlight?: Flight;
+  selectedSeats?: {
+    outbound: SelectedSeat[];
+    return: SelectedSeat[];
+  };
   totalPrice: number;
 }
 
@@ -43,6 +48,7 @@ interface BookingContextType {
   updateSelectedHotel: (hotel: Hotel) => void;
   updateSelectedOutboundFlight: (flight: Flight) => void;
   updateSelectedReturnFlight: (flight: Flight) => void;
+  updateSelectedSeats: (seats: { outbound: SelectedSeat[]; return: SelectedSeat[] }) => void;
   clearBooking: () => void;
   calculateTotal: () => number;
 }
@@ -70,12 +76,20 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     setBooking(prev => ({ ...prev, selectedReturnFlight: flight }));
   };
 
+  const updateSelectedSeats = (seats: { outbound: SelectedSeat[]; return: SelectedSeat[] }) => {
+    setBooking(prev => ({ ...prev, selectedSeats: seats }));
+  };
+
   const calculateTotal = () => {
     const eventPrice = booking.selectedEvent?.price || 0;
     const hotelPrice = booking.selectedHotel?.price || 0;
     const outboundPrice = booking.selectedOutboundFlight?.price || 0;
     const returnPrice = booking.selectedReturnFlight?.price || 0;
-    return eventPrice + hotelPrice + outboundPrice + returnPrice;
+    const seatPrice = (
+      (booking.selectedSeats?.outbound.reduce((sum, seat) => sum + seat.price, 0) || 0) +
+      (booking.selectedSeats?.return.reduce((sum, seat) => sum + seat.price, 0) || 0)
+    );
+    return eventPrice + hotelPrice + outboundPrice + returnPrice + seatPrice;
   };
 
   const clearBooking = () => {
@@ -89,6 +103,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       updateSelectedHotel,
       updateSelectedOutboundFlight,
       updateSelectedReturnFlight,
+      updateSelectedSeats,
       clearBooking,
       calculateTotal,
     }}>
