@@ -78,6 +78,13 @@ const FlightSearchForm = () => {
     setSearchParams(prev => ({ ...prev, multiCitySlices: updatedSlices }));
   };
 
+  // Validate airport codes (IATA format)
+  const validateAirportCode = (code: string): boolean => {
+    // Basic IATA code validation: 3 letters
+    const iataRegex = /^[A-Z]{3}$/;
+    return iataRegex.test(code.trim().toUpperCase());
+  };
+
   // Validate dates (each date must be after previous)
   const validateDates = () => {
     if (searchParams.tripType === 'multi-city') {
@@ -94,6 +101,42 @@ const FlightSearchForm = () => {
 
   // Handle search submission
   const handleSearch = () => {
+    // Airport code validation
+    if (searchParams.tripType !== 'multi-city') {
+      // Validate origin and destination airport codes
+      if (!validateAirportCode(searchParams.from)) {
+        alert(`Invalid departure airport code: ${searchParams.from}. Use 3-letter IATA codes like LAX.`);
+        return;
+      }
+      
+      if (!validateAirportCode(searchParams.to)) {
+        alert(`Invalid destination airport code: ${searchParams.to}. Use 3-letter IATA codes like JFK.`);
+        return;
+      }
+      
+      if (searchParams.from.toUpperCase() === searchParams.to.toUpperCase()) {
+        alert('Departure and destination airports must be different.');
+        return;
+      }
+    } else {
+      // Multi-city airport code validation
+      for (let i = 0; i < multiCitySlices.length; i++) {
+        const slice = multiCitySlices[i];
+        if (slice.origin && !validateAirportCode(slice.origin)) {
+          alert(`Invalid origin airport code in flight ${i + 1}: ${slice.origin}. Use 3-letter IATA codes like LAX.`);
+          return;
+        }
+        if (slice.destination && !validateAirportCode(slice.destination)) {
+          alert(`Invalid destination airport code in flight ${i + 1}: ${slice.destination}. Use 3-letter IATA codes like JFK.`);
+          return;
+        }
+        if (slice.origin && slice.destination && slice.origin.toUpperCase() === slice.destination.toUpperCase()) {
+          alert(`Flight ${i + 1}: Departure and destination airports must be different.`);
+          return;
+        }
+      }
+    }
+
     // Basic validation
     if (searchParams.tripType !== 'multi-city') {
       if (!searchParams.from || !searchParams.to || !searchParams.departDate) {

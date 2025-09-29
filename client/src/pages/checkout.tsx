@@ -70,8 +70,16 @@ const getBookingDisplayData = ({ booking, calculateTotal }: { booking: any, calc
 };
 
 const CheckoutForm = ({ bookingData }: { bookingData: ReturnType<typeof getBookingDisplayData> }) => {
-  const stripe = useStripe();
-  const elements = useElements();
+  // Conditionally use Stripe hooks only when Elements provider is available
+  let stripe, elements;
+  try {
+    stripe = useStripe();
+    elements = useElements();
+  } catch (error) {
+    // Stripe hooks not available (no Elements provider)
+    stripe = null;
+    elements = null;
+  }
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -91,6 +99,11 @@ const CheckoutForm = ({ bookingData }: { bookingData: ReturnType<typeof getBooki
 
   const handleSubmit = async (data: GuestInfo) => {
     if (!stripe || !elements) {
+      toast({
+        title: "Payment Unavailable",
+        description: "Payment processing is temporarily unavailable. Your trip details have been saved.",
+        variant: "destructive",
+      });
       return;
     }
 
