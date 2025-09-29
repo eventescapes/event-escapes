@@ -5,7 +5,7 @@ import { searchFlights as duffelSearchFlights, createOneWaySearch, createReturnS
 import { useBooking } from '@/contexts/BookingContext';
 import TripSummary from '@/components/TripSummary';
 import FloatingCheckout from '@/components/FloatingCheckout';
-import SeatSelectionModal from '@/components/SeatSelectionModal';
+import { SeatSelection } from '@/components/SeatSelectionModal';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Plane, Clock, MapPin } from 'lucide-react';
 
@@ -694,24 +694,73 @@ const FlightResults = () => {
       </div>
 
       {/* Seat Selection Modal */}
-      <SeatSelectionModal
-        isOpen={showSeatSelection && !!currentSeatSelection}
-        onClose={() => setShowSeatSelection(false)}
-        offerId={currentSeatSelection?.offerId || ""}
-        origin={currentSeatSelection?.sliceOrigin || ""}
-        destination={currentSeatSelection?.sliceDestination || ""}
-        passengerIds={Array.from({ length: searchParams.passengers }, (_, i) => `passenger_${i + 1}`)}
-        onContinueWithoutSeats={() => {
-          setShowSeatSelection(false);
-          setCurrentSeatSelection(null);
-          // Navigate to checkout
-          navigate('/checkout');
-        }}
-        onSeatChosen={(serviceId, passengerId) => {
-          console.log('Seat chosen:', { serviceId, passengerId, offerId: currentSeatSelection?.offerId });
-          // TODO: Handle individual seat selection
-        }}
-      />
+      {showSeatSelection && currentSeatSelection && (
+        <SeatSelection
+          offerId={currentSeatSelection.offerId}
+          passengers={Array.from({ length: searchParams.passengers }, (_, i) => ({
+            id: `passenger_${i + 1}`,
+            type: 'adult'
+          }))}
+          onSeatsSelected={(seats: any[]) => {
+            console.log('Seats selected:', seats);
+            
+            // Update the selected seats for this slice
+            setSelectedSeats(prev => ({
+              ...prev,
+              [currentSeatSelection.sliceIndex]: seats
+            }));
+            
+            // Update booking context
+            updateSelectedSeats({
+              outbound: currentSeatSelection.sliceIndex === 0 ? seats : (selectedSeats[0] || []),
+              return: currentSeatSelection.sliceIndex === 1 ? seats : (selectedSeats[1] || [])
+            });
+            
+            // Move to next slice or checkout
+            const nextSliceIndex = currentSeatSelection.sliceIndex + 1;
+            const nextOffer = selectedOffers[nextSliceIndex];
+            
+            if (nextOffer && searchParams.tripType === 'return' && nextSliceIndex === 1) {
+              // Go to return flight seat selection
+              setCurrentSeatSelection({
+                sliceIndex: nextSliceIndex,
+                offerId: nextOffer.offerId,
+                sliceOrigin: nextOffer.flight.departureAirport,
+                sliceDestination: nextOffer.flight.arrivalAirport
+              });
+            } else {
+              // All seat selection completed
+              setShowSeatSelection(false);
+              setCurrentSeatSelection(null);
+              navigate('/checkout');
+            }
+          }}
+          onClose={() => {
+            setShowSeatSelection(false);
+            setCurrentSeatSelection(null);
+          }}
+          onSkip={() => {
+            // Skip seat selection for this slice
+            const nextSliceIndex = currentSeatSelection.sliceIndex + 1;
+            const nextOffer = selectedOffers[nextSliceIndex];
+            
+            if (nextOffer && searchParams.tripType === 'return' && nextSliceIndex === 1) {
+              // Go to return flight seat selection
+              setCurrentSeatSelection({
+                sliceIndex: nextSliceIndex,
+                offerId: nextOffer.offerId,
+                sliceOrigin: nextOffer.flight.departureAirport,
+                sliceDestination: nextOffer.flight.arrivalAirport
+              });
+            } else {
+              // Skip all seat selection and go to checkout
+              setShowSeatSelection(false);
+              setCurrentSeatSelection(null);
+              navigate('/checkout');
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
