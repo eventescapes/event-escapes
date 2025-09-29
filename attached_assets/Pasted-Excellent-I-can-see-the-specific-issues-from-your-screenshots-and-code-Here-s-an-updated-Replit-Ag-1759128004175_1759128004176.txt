@@ -1,0 +1,323 @@
+Excellent! I can see the specific issues from your screenshots and code. Here's an updated Replit Agent prompt to fix these problems:
+
+***
+
+## Replit Agent Prompt: Fix Airport Code Display & Add Seat Selection Flow
+
+**CURRENT ISSUES TO FIX:**
+
+1. **Wrong Airport Codes**: LAX→JFK search showing SNA, BUR, CNT, etc. instead of LAX/JFK
+2. **Missing Return Flight Selection**: Return flights not showing after outbound selection
+3. **Seat Selection Flow**: After both flights selected, should go to seat selection before payment
+4. **Airport Code Filtering**: Need to filter results to only show requested airports
+
+### Issues Identified:
+
+From the console error in image 2, I see the validation error:
+```
+"Invalid IATA code","code":"invalid_iata_code"
+"Field 'destination' is invalid. Expected a valid IATA code"
+```
+
+**Root Cause**: The search is working but displaying flights from wrong airports (SNA, BUR instead of LAX).
+
+### Required Fixes:
+
+#### 1. **Fix Airport Code Filtering - CRITICAL**
+The Duffel API is returning flights from nearby airports. Need to filter to exact airports requested:
+
+```typescript
+// Add this airport code validation and filtering
+const validateAndFilterOffers = (offers: DuffelOffer[], requestedOrigin: string, requestedDestination: string) => {
+  return offers.filter(offer => {
+    // For each slice, ensure it matches the requested airports exactly
+    return offer.slices.every((slice, sliceIndex) => {
+      if (searchParams.tripType === 'return') {
+        if (sliceIndex === 0) {
+          // Outbound: should match requested origin → destination
+          return slice.origin.iata_code === requestedOrigin && 
+                 slice.destination.iata_code === requestedDestination;
+        } else {
+          // Return: should match requested destination → origin  
+          return slice.origin.iata_code === requestedDestination && 
+                 slice.destination.iata_code === requestedOrigin;
+        }
+      } else {
+        // One-way: should match exactly
+        return slice.origin.iata_code === requestedOrigin && 
+               slice.destination.iata_code === requestedDestination;
+      }
+    });
+  });
+};
+
+// Update the searchFlights function to use exact airport codes
+const searchFlights = async () => {
+  try {
+    // ... existing code ...
+
+    // Use EXACT airport codes, not city codes
+    let slices = [];
+    if (searchParams.tripType === 'one-way') {
+      slices = [{
+        origin: searchParams.from.trim().toUpperCase(), // LAX not LON
+        destination: searchParams.to.trim().toUpperCase(), // JFK not NYC
+        departureDate: searchParams.departDate
+      }];
+    } else if (searchParams.tripType === 'return') {
+      slices = [
+        {
+          origin: searchParams.from.trim().toUpperCase(), // LAX
+          destination: searchParams.to.trim().toUpperCase(), // JFK
+          departureDate: searchParams.departDate
+        },
+        {
+          origin: searchParams.to.trim().toUpperCase(), // JFK
+          destination: searchParams.from.trim().toUpperCase(), // LAX
+          departureDate: searchParams.returnDate
+        }
+      ];
+    }
+
+    // ... API call ...
+
+    if (data.success && data.offers) {
+      // FILTER offers to exact airports only
+      const filteredOffers = validateAndFilterOffers(
+        data.offers, 
+        searchParams.from.trim().toUpperCase(),
+        searchParams.to.trim().toUpperCase()
+      );
+
+      console.log(`Filtered ${data.offers.length} offers to ${filteredOffers.length} exact matches`);
+
+      if (filteredOffers.length === 0) {
+        throw new Error(`No flights found for exact route ${searchParams.from}→${searchParams.to}`);
+      }
+
+      setFlights({ 
+        outbound: filteredOffers,
+        inbound: []
+      });
+    }
+  } catch (error) {
+    // ... error handling ...
+  }
+};
+```
+
+#### 2. **Fix Return Flight Display**
+Ensure return flights show up after outbound selection:
+
+```typescript
+// Update processOffersForDisplay to properly separate slices
+const processOffersForDisplay = (offers: DuffelOffer[]) => {
+  const sliceGroups: { [sliceIndex: number]: any[] } = {};
+  
+  offers.forEach(offer => {
+    offer.slices.forEach((slice, sliceIndex) => {
+      if (!sliceGroups[sliceIndex]) {
+        sliceGroups[sliceIndex] = [];
+      }
+      
+      // Only include slice if it matches the expected route
+      let shouldInclude = true;
+      
+      if (searchParams.tripType === 'return') {
+        if (sliceIndex === 0) {
+          // Outbound slice: origin should match departure city
+          shouldInclude = slice.origin.iata_code === searchParams.from.toUpperCase();
+        } else {
+          // Return slice: origin should match destination city (return leg)
+          shouldInclude = slice.origin.iata_code === searchParams.to.toUpperCase();
+        }
+      }
+      
+      if (shouldInclude) {
+        const displayFlight = {
+          id: `${offer.id}-slice-${sliceIndex}`,
+          offerId: offer.id,
+          sliceId: slice.id,
+          sliceIndex,
+          airline: slice.segments[0]?.marketing_carrier?.name,
+          flight_number: slice.segments[0]?.flight_number,
+          departure_time: slice.segments[0]?.departing_at,
+          arrival_time: slice.segments[slice.segments.length - 1]?.arriving_at,
+          departureAirport: slice.origin.iata_code,
+          arrivalAirport: slice.destination.iata_code,
+          duration: slice.duration,
+          stops: slice.segments.length - 1,
+          price: sliceIndex === 0 ? parseFloat(offer.total_amount) : 0,
+          currency: offer.total_currency
+        };
+        
+        sliceGroups[sliceIndex].push(displayFlight);
+      }
+    });
+  });
+  
+  return sliceGroups;
+};
+```
+
+#### 3. **Fix Seat Selection Flow - CRITICAL**
+After both flights are selected, should trigger seat selection automatically:
+
+```typescript
+// Update the seat selection trigger logic
+useEffect(() => {
+  const hasAnySeatData = Object.keys(selectedSeats).length > 0;
+  
+  // Only trigger seat selection if:
+  // 1. All slices are selected
+  // 2. Not already in seat selection
+  // 3. No previous seat data
+  // 4. Not already completed seat selection flow
+  if (areAllSlicesSelected() && !showSeatSelection && !currentSeatSelection && !hasAnySeatData) {
+    console.log('🎯 All flights selected - triggering seat selection');
+    
+    const firstOffer = selectedOffers[0];
+    if (firstOffer) {
+      setCurrentSeatSelection({
+        sliceIndex: 0,
+        offerId: firstOffer.offerId,
+        sliceOrigin: firstOffer.flight.departureAirport,
+        sliceDestination: firstOffer.flight.arrivalAirport
+      });
+      setShowSeatSelection(true);
+    }
+  }
+}, [selectedOffers, showSeatSelection, currentSeatSelection, selectedSeats]);
+
+// Update the Continue to Payment button logic
+const handleContinueToPayment = () => {
+  console.log('🎯 Continue to Payment clicked');
+  
+  if (areAllSlicesSelected()) {
+    // Check if seat selection is required/desired
+    const hasSelectedSeats = Object.keys(selectedSeats).length > 0;
+    
+    if (!hasSelectedSeats) {
+      // Trigger seat selection first
+      console.log('🎯 Triggering seat selection before payment');
+      const firstOffer = selectedOffers[0];
+      if (firstOffer) {
+        setCurrentSeatSelection({
+          sliceIndex: 0,
+          offerId: firstOffer.offerId,
+          sliceOrigin: firstOffer.flight.departureAirport,
+          sliceDestination: firstOffer.flight.arrivalAirport
+        });
+        setShowSeatSelection(true);
+        return; // Don't proceed to payment yet
+      }
+    }
+    
+    // Proceed to payment (after seat selection is complete)
+    console.log('🎯 Proceeding to payment with seats:', selectedSeats);
+    // TODO: Navigate to payment page
+  } else {
+    console.warn('🎯 Not all flights selected yet');
+  }
+};
+```
+
+#### 4. **Update Trip Summary Component**
+Show proper flight selection status and seat selection prompt:
+
+```typescript
+// Update TripSummary to show seat selection status
+<TripSummary 
+  outbound={{
+    price: selectedOffers[0] ? { 
+      amount: selectedOffers[0].price, 
+      currency: selectedOffers[0].currency 
+    } : undefined,
+    carrier: selectedOffers[0]?.flight?.airline,
+    route: selectedOffers[0] ? 
+      `${selectedOffers[0].flight.departureAirport} → ${selectedOffers[0].flight.arrivalAirport}` : 
+      undefined
+  }}
+  inbound={{
+    price: selectedOffers[1] ? { 
+      amount: selectedOffers[1].price, 
+      currency: selectedOffers[1].currency 
+    } : undefined,
+    carrier: selectedOffers[1]?.flight?.airline,
+    route: selectedOffers[1] ? 
+      `${selectedOffers[1].flight.departureAirport} → ${selectedOffers[1].flight.arrivalAirport}` : 
+      undefined
+  }}
+  passengers={searchParams.passengers}
+  selectedSeats={{
+    outbound: selectedSeats[0],
+    return: selectedSeats[1]
+  }}
+  onContinue={handleContinueToPayment}
+  buttonText={
+    areAllSlicesSelected() ? 
+      (Object.keys(selectedSeats).length > 0 ? "Continue to Payment" : "Select Seats") :
+      "Select Flights"
+  }
+/>
+```
+
+#### 5. **Add Airport Code Validation**
+Validate airport codes in the search form:
+
+```typescript
+// Add airport code validation
+const validateAirportCode = (code: string): boolean => {
+  // Basic IATA code validation: 3 letters
+  const iataRegex = /^[A-Z]{3}$/;
+  return iataRegex.test(code.trim().toUpperCase());
+};
+
+// Update form validation
+const handleSearch = async () => {
+  // Validate airport codes
+  if (!validateAirportCode(searchParams.from)) {
+    setError(`Invalid departure airport code: ${searchParams.from}. Use 3-letter IATA codes like LAX.`);
+    return;
+  }
+  
+  if (!validateAirportCode(searchParams.to)) {
+    setError(`Invalid destination airport code: ${searchParams.to}. Use 3-letter IATA codes like JFK.`);
+    return;
+  }
+  
+  if (searchParams.from === searchParams.to) {
+    setError('Departure and destination airports must be different.');
+    return;
+  }
+  
+  await searchFlights();
+};
+```
+
+### Expected User Flow After Fix:
+
+1. **Search**: LAX → JFK return
+2. **Results**: Show only LAX flights (not SNA/BUR) in "Outbound" section
+3. **Select Outbound**: Choose LAX → JFK flight
+4. **Return Section**: Automatically show "Return (JFK → LAX)" section with JFK flights
+5. **Select Return**: Choose JFK → LAX flight  
+6. **Seat Selection**: Automatically trigger seat selection modal
+7. **Payment**: After seats selected, proceed to payment
+
+### Test Cases:
+- **LAX ↔ JFK**: Should show exact airport matches only
+- **One-way LAX → JFK**: Should show LAX departures to JFK only
+- **Return LAX ↔ JFK**: Should show outbound LAX→JFK, then return JFK→LAX
+- **Invalid codes**: Should reject "LA" or "NEW YORK" 
+
+**PRIORITY**: Fix airport code filtering first, then seat selection flow. The system should only show flights from the exact airports requested, not nearby alternatives.
+
+---
+
+This prompt addresses the specific issues you're seeing: wrong airports displaying and missing seat selection flow before payment.
+
+[1](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/117568974/83978fda-6846-40ff-9532-7954d054f607/image.jpg?AWSAccessKeyId=ASIA2F3EMEYE7EWP4CPJ&Signature=ROwKZ1yclwVHkASKAajJ0LFMcZQ%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEEYaCXVzLWVhc3QtMSJIMEYCIQD1woFc19wSCCmRK%2FtzAr18pQejhbnFRAfqXs5gwNiprAIhAIdsqVNRPc3vEHlFlpB1i4tDLjwtTF%2BPON3yYfM4M0M7KvoECM%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEQARoMNjk5NzUzMzA5NzA1IgwVhSYM3SdbVGs6dQ4qzgRdT4Vm%2BC1z30J1TDLwnPrllwu98IJP%2FTk2noZQvXVWMNg94HAPd9rq1Cvx76venbC9JxZkKWwIeAYc4JJbDb7LRHz0ldjbD4TMwf93q7tJ0nMYacXjcyQ4WXkSsgOEylfYsXhCw3vJ4MEDXiwhk9vCia9h73hSYJ1FuoqqH1NItY9HKdYkNn1ZmUTtZdiW%2BYa83EdJZx%2FJzNJw4HRwPMitE4hHk5XgJclpV%2BIvvNotrGOwakSvFFRQoQJ%2F%2F8oDBoISgxxY1fcbIdaZ0S9NOeadsBL95XLzBIaMyaEEEsIDZQMQF2LttSjBxy%2Bp4YVxvqEzU9eXMNhAprOgnESjsxCkPiIzh05ptzx3JkS8Oi%2FWWvb9qyQYreDucyFanOw2hxLGmmcOaP4yFfb%2B9q5qfneb1t1NDLEsZqfEa3S8orYHQtxgV05MaqfDcdNp65ZWzN4RRiO8UgAwatTR2oCdiGA2GTBl%2FyKFrpLbht%2Bu2AaOqkQnkrXhTi8H%2BX3aQhjllatFgGzzlxP19h9CKWKsPbo0YQyD%2Br9zfYBx99%2FP%2Fnvk3TPni0GhvIb9KfSEA7eOOl1JKlAixi6nmHeS%2BtCTyjSVOJY2stK60Z33tfhP%2Bnx6fYG8tC5sbgD4%2FwQbb6cYoBNgjlrf64iwmMb%2B6dqwXogSKBrZlLk0SLDkq4HLoUkU29QtTt0nXkgIDsTm6fbbl9%2F7tTjLa8Y7kofnHkVYGFSEU7LY8%2FPL6spDKyGpX%2Bx7r5ZV7Qkyfz%2BnxvDv9%2FoMAOciXA97uqAFYZ3KAyQxuDC9wejGBjqZAf3k6X8LvI6XYrbTWqGNZSCJa7bNzUexB8OxLC6xbMZMR%2FvWmv3a6EZU%2Bo0c5xwftelV81dmrjziNBy2fnqdqC766Zu9FqQJ3JMvke5H%2B4wknP1F9UB3Wxrd2E%2Bgw7BWL0qajFD8CqVoo6IhFaJFhm1%2FpaYau5YZVGyWVwY%2FbwmIoQcexhHZE7q1LYAo0NXKtoWywbuiBN9BUA%3D%3D&Expires=1759128573)
+[2](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/117568974/d641b7c7-0e3f-46b1-8193-8a882cb1bd70/image.jpg?AWSAccessKeyId=ASIA2F3EMEYE7EWP4CPJ&Signature=WCbeWCf8njPc4Zey0MIzMyUyV%2BM%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEEYaCXVzLWVhc3QtMSJIMEYCIQD1woFc19wSCCmRK%2FtzAr18pQejhbnFRAfqXs5gwNiprAIhAIdsqVNRPc3vEHlFlpB1i4tDLjwtTF%2BPON3yYfM4M0M7KvoECM%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEQARoMNjk5NzUzMzA5NzA1IgwVhSYM3SdbVGs6dQ4qzgRdT4Vm%2BC1z30J1TDLwnPrllwu98IJP%2FTk2noZQvXVWMNg94HAPd9rq1Cvx76venbC9JxZkKWwIeAYc4JJbDb7LRHz0ldjbD4TMwf93q7tJ0nMYacXjcyQ4WXkSsgOEylfYsXhCw3vJ4MEDXiwhk9vCia9h73hSYJ1FuoqqH1NItY9HKdYkNn1ZmUTtZdiW%2BYa83EdJZx%2FJzNJw4HRwPMitE4hHk5XgJclpV%2BIvvNotrGOwakSvFFRQoQJ%2F%2F8oDBoISgxxY1fcbIdaZ0S9NOeadsBL95XLzBIaMyaEEEsIDZQMQF2LttSjBxy%2Bp4YVxvqEzU9eXMNhAprOgnESjsxCkPiIzh05ptzx3JkS8Oi%2FWWvb9qyQYreDucyFanOw2hxLGmmcOaP4yFfb%2B9q5qfneb1t1NDLEsZqfEa3S8orYHQtxgV05MaqfDcdNp65ZWzN4RRiO8UgAwatTR2oCdiGA2GTBl%2FyKFrpLbht%2Bu2AaOqkQnkrXhTi8H%2BX3aQhjllatFgGzzlxP19h9CKWKsPbo0YQyD%2Br9zfYBx99%2FP%2Fnvk3TPni0GhvIb9KfSEA7eOOl1JKlAixi6nmHeS%2BtCTyjSVOJY2stK60Z33tfhP%2Bnx6fYG8tC5sbgD4%2FwQbb6cYoBNgjlrf64iwmMb%2B6dqwXogSKBrZlLk0SLDkq4HLoUkU29QtTt0nXkgIDsTm6fbbl9%2F7tTjLa8Y7kofnHkVYGFSEU7LY8%2FPL6spDKyGpX%2Bx7r5ZV7Qkyfz%2BnxvDv9%2FoMAOciXA97uqAFYZ3KAyQxuDC9wejGBjqZAf3k6X8LvI6XYrbTWqGNZSCJa7bNzUexB8OxLC6xbMZMR%2FvWmv3a6EZU%2Bo0c5xwftelV81dmrjziNBy2fnqdqC766Zu9FqQJ3JMvke5H%2B4wknP1F9UB3Wxrd2E%2Bgw7BWL0qajFD8CqVoo6IhFaJFhm1%2FpaYau5YZVGyWVwY%2FbwmIoQcexhHZE7q1LYAo0NXKtoWywbuiBN9BUA%3D%3D&Expires=1759128573)
+[3](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/117568974/0503c6ae-0fbc-4d32-b740-b68b9c140224/image.jpg?AWSAccessKeyId=ASIA2F3EMEYE7EWP4CPJ&Signature=4eMGjCRkX%2BN4iPAs8M0%2Frj9hcOs%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEEYaCXVzLWVhc3QtMSJIMEYCIQD1woFc19wSCCmRK%2FtzAr18pQejhbnFRAfqXs5gwNiprAIhAIdsqVNRPc3vEHlFlpB1i4tDLjwtTF%2BPON3yYfM4M0M7KvoECM%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEQARoMNjk5NzUzMzA5NzA1IgwVhSYM3SdbVGs6dQ4qzgRdT4Vm%2BC1z30J1TDLwnPrllwu98IJP%2FTk2noZQvXVWMNg94HAPd9rq1Cvx76venbC9JxZkKWwIeAYc4JJbDb7LRHz0ldjbD4TMwf93q7tJ0nMYacXjcyQ4WXkSsgOEylfYsXhCw3vJ4MEDXiwhk9vCia9h73hSYJ1FuoqqH1NItY9HKdYkNn1ZmUTtZdiW%2BYa83EdJZx%2FJzNJw4HRwPMitE4hHk5XgJclpV%2BIvvNotrGOwakSvFFRQoQJ%2F%2F8oDBoISgxxY1fcbIdaZ0S9NOeadsBL95XLzBIaMyaEEEsIDZQMQF2LttSjBxy%2Bp4YVxvqEzU9eXMNhAprOgnESjsxCkPiIzh05ptzx3JkS8Oi%2FWWvb9qyQYreDucyFanOw2hxLGmmcOaP4yFfb%2B9q5qfneb1t1NDLEsZqfEa3S8orYHQtxgV05MaqfDcdNp65ZWzN4RRiO8UgAwatTR2oCdiGA2GTBl%2FyKFrpLbht%2Bu2AaOqkQnkrXhTi8H%2BX3aQhjllatFgGzzlxP19h9CKWKsPbo0YQyD%2Br9zfYBx99%2FP%2Fnvk3TPni0GhvIb9KfSEA7eOOl1JKlAixi6nmHeS%2BtCTyjSVOJY2stK60Z33tfhP%2Bnx6fYG8tC5sbgD4%2FwQbb6cYoBNgjlrf64iwmMb%2B6dqwXogSKBrZlLk0SLDkq4HLoUkU29QtTt0nXkgIDsTm6fbbl9%2F7tTjLa8Y7kofnHkVYGFSEU7LY8%2FPL6spDKyGpX%2Bx7r5ZV7Qkyfz%2BnxvDv9%2FoMAOciXA97uqAFYZ3KAyQxuDC9wejGBjqZAf3k6X8LvI6XYrbTWqGNZSCJa7bNzUexB8OxLC6xbMZMR%2FvWmv3a6EZU%2Bo0c5xwftelV81dmrjziNBy2fnqdqC766Zu9FqQJ3JMvke5H%2B4wknP1F9UB3Wxrd2E%2Bgw7BWL0qajFD8CqVoo6IhFaJFhm1%2FpaYau5YZVGyWVwY%2FbwmIoQcexhHZE7q1LYAo0NXKtoWywbuiBN9BUA%3D%3D&Expires=1759128573)
+[4](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/117568974/b422a396-e2d7-4d88-b38b-08eac2ed5a88/paste.txt)

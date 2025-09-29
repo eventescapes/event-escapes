@@ -256,8 +256,21 @@ const FlightResults = () => {
       if (data.success && data.offers) {
         console.log('=== SUCCESS ===', `${data.offers.length} offers received`);
         
-        // Store REAL offers - NO MOCK DATA
-        setOffers(data.offers); // Real Duffel offers
+        // FILTER offers to exact airports only - FIX for wrong airport codes
+        const filteredOffers = validateAndFilterOffers(
+          data.offers, 
+          searchParams.from.trim().toUpperCase(),
+          searchParams.to.trim().toUpperCase()
+        );
+
+        console.log(`✅ Filtered ${data.offers.length} offers to ${filteredOffers.length} exact matches`);
+
+        if (filteredOffers.length === 0) {
+          throw new Error(`No flights found for exact route ${searchParams.from.toUpperCase()}→${searchParams.to.toUpperCase()}. API returned flights from other airports.`);
+        }
+
+        // Store FILTERED REAL offers - NO MOCK DATA, EXACT AIRPORTS ONLY
+        setOffers(filteredOffers);
       } else {
         throw new Error(data.error || 'No flights found');
       }
@@ -269,6 +282,41 @@ const FlightResults = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Airport code validation and filtering - CRITICAL FIX
+  const validateAndFilterOffers = (offers: EdgeFunctionOffer[], requestedOrigin: string, requestedDestination: string) => {
+    console.log(`🛂 Filtering ${offers.length} offers for exact route ${requestedOrigin}→${requestedDestination}`);
+    
+    return offers.filter(offer => {
+      // For each slice, ensure it matches the requested airports exactly
+      return offer.slices.every((slice, sliceIndex) => {
+        if (searchParams.tripType === 'return') {
+          if (sliceIndex === 0) {
+            // Outbound: should match requested origin → destination
+            const isValidOutbound = slice.origin === requestedOrigin && slice.destination === requestedDestination;
+            if (!isValidOutbound) {
+              console.log(`❌ Outbound slice ${slice.origin}→${slice.destination} doesn't match ${requestedOrigin}→${requestedDestination}`);
+            }
+            return isValidOutbound;
+          } else {
+            // Return: should match requested destination → origin  
+            const isValidReturn = slice.origin === requestedDestination && slice.destination === requestedOrigin;
+            if (!isValidReturn) {
+              console.log(`❌ Return slice ${slice.origin}→${slice.destination} doesn't match ${requestedDestination}→${requestedOrigin}`);
+            }
+            return isValidReturn;
+          }
+        } else {
+          // One-way: should match exactly
+          const isValidOneWay = slice.origin === requestedOrigin && slice.destination === requestedDestination;
+          if (!isValidOneWay) {
+            console.log(`❌ One-way slice ${slice.origin}→${slice.destination} doesn't match ${requestedOrigin}→${requestedDestination}`);
+          }
+          return isValidOneWay;
+        }
+      });
+    });
   };
 
   // Get proper slice title for display
@@ -291,7 +339,7 @@ const FlightResults = () => {
     }
   };
 
-  // Process offers for display - properly separate outbound and return slices
+  // Process offers for display - properly separate outbound and return slices with airport validation
   const processOffersForDisplay = (offers: EdgeFunctionOffer[]) => {
     const sliceGroups: { [sliceIndex: number]: any[] } = {};
     
@@ -301,25 +349,44 @@ const FlightResults = () => {
           sliceGroups[sliceIndex] = [];
         }
         
-        const displayFlight = {
-          id: `${offer.id}-slice-${sliceIndex}`,
-          offerId: offer.id,
-          sliceId: slice.slice_index.toString(),
-          sliceIndex,
-          airline: slice.segments[0]?.airline,
-          flight_number: slice.segments[0]?.flight_number,
-          departure_time: slice.segments[0]?.departing_at || slice.departure_time,
-          arrival_time: slice.segments[slice.segments.length - 1]?.arriving_at || slice.arrival_time,
-          departureAirport: slice.origin,
-          arrivalAirport: slice.destination,
-          duration: slice.duration,
-          stops: slice.segments.length - 1,
-          price: sliceIndex === 0 ? parseFloat(offer.total_amount.toString()) : 0,
-          currency: offer.total_currency,
-          segments: slice.segments
-        };
+        // Only include slice if it matches the expected route
+        let shouldInclude = true;
         
-        sliceGroups[sliceIndex].push(displayFlight);
+        if (searchParams.tripType === 'return') {
+          if (sliceIndex === 0) {
+            // Outbound slice: origin should match departure city
+            shouldInclude = slice.origin === searchParams.from.toUpperCase();
+          } else {
+            // Return slice: origin should match destination city (return leg)
+            shouldInclude = slice.origin === searchParams.to.toUpperCase();
+          }
+        } else if (searchParams.tripType === 'one-way') {
+          // One-way: should match exact route
+          shouldInclude = slice.origin === searchParams.from.toUpperCase() && 
+                         slice.destination === searchParams.to.toUpperCase();
+        }
+        
+        if (shouldInclude) {
+          const displayFlight = {
+            id: `${offer.id}-slice-${sliceIndex}`,
+            offerId: offer.id,
+            sliceId: slice.slice_index.toString(),
+            sliceIndex,
+            airline: slice.segments[0]?.airline,
+            flight_number: slice.segments[0]?.flight_number,
+            departure_time: slice.segments[0]?.departing_at || slice.departure_time,
+            arrival_time: slice.segments[slice.segments.length - 1]?.arriving_at || slice.arrival_time,
+            departureAirport: slice.origin,
+            arrivalAirport: slice.destination,
+            duration: slice.duration,
+            stops: slice.segments.length - 1,
+            price: sliceIndex === 0 ? parseFloat(offer.total_amount.toString()) : 0,
+            currency: offer.total_currency,
+            segments: slice.segments
+          };
+          
+          sliceGroups[sliceIndex].push(displayFlight);
+        }
       });
     });
     
@@ -377,6 +444,31 @@ const FlightResults = () => {
       searchFlights();
     }
   }, []);
+
+  // Automatic seat selection trigger when all flights are selected
+  useEffect(() => {
+    const hasAnySeatData = Object.keys(selectedSeats).length > 0;
+    
+    // Only trigger seat selection if:
+    // 1. All slices are selected
+    // 2. Not already in seat selection
+    // 3. No previous seat data
+    // 4. Not already completed seat selection flow
+    if (areAllSlicesSelected() && !showSeatSelection && !currentSeatSelection && !hasAnySeatData) {
+      console.log('🎯 All flights selected - triggering seat selection');
+      
+      const firstOffer = selectedOffers[0];
+      if (firstOffer) {
+        setCurrentSeatSelection({
+          sliceIndex: 0,
+          offerId: firstOffer.offerId,
+          sliceOrigin: firstOffer.flight.departureAirport,
+          sliceDestination: firstOffer.flight.arrivalAirport
+        });
+        setShowSeatSelection(true);
+      }
+    }
+  }, [selectedOffers, showSeatSelection, currentSeatSelection, selectedSeats]);
 
   // Display data processing
   const getFlightDisplayData = () => {
