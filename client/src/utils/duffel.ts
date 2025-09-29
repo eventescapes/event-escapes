@@ -1,8 +1,6 @@
 // utils/duffel.ts
 import { Env, assertSecretsReady } from "@/config/env";
 
-assertSecretsReady(["DUFFEL_API_KEY"]);
-
 export type SeatMapsResponse = any;
 
 // Duffel API Flight Search Types
@@ -106,215 +104,100 @@ export interface DuffelOfferRequestResponse {
   };
 }
 
-// Legacy API route through backend (keep for now)
-export async function fetchSeatMap(offerId: string) {
-  const response = await fetch(`/api/seat-maps/${offerId}`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json"
-    }
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: "Failed to fetch seat map" }));
-    throw new Error(errorData.message || "Failed to fetch seat map");
+// Get Supabase config from environment
+function getSupabaseConfig() {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase configuration missing. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in environment variables.');
   }
-  return await response.json();
+
+  return { supabaseUrl, supabaseAnonKey };
 }
 
-// New direct Duffel API call with logging - handles mock data
+// Seat Maps - Routes through Supabase Edge Function
 export async function fetchSeatMaps(offerId: string): Promise<SeatMapsResponse> {
-  // Handle mock data - return mock seat maps instead of calling external API
-  if (offerId.includes('mock') || offerId.includes('offer-')) {
-    console.log("[SeatMaps] Using mock seat data for offer:", offerId);
-    
-    // Return mock seat map data
-    const mockSeatMaps: SeatMapsResponse = {
-      data: [
-        {
-          id: 'seat_map_1',
-          slice_id: 'slice_1',
-          cabins: [
-            {
-              aisles: 1,
-              cabin_class: 'economy',
-              rows: [
-                {
-                  sections: [
-                    {
-                      elements: [
-                        {
-                          type: 'seat',
-                          id: 'seat_1A',
-                          designator: '1A',
-                          name: '1A',
-                          available_services: [
-                            {
-                              id: 'service_1A',
-                              total_amount: '25.00',
-                              total_currency: 'USD'
-                            }
-                          ]
-                        },
-                        {
-                          type: 'seat',
-                          id: 'seat_1B',
-                          designator: '1B',
-                          name: '1B',
-                          available_services: [
-                            {
-                              id: 'service_1B',
-                              total_amount: '25.00',
-                              total_currency: 'USD'
-                            }
-                          ]
-                        },
-                        { type: 'empty' },
-                        {
-                          type: 'seat',
-                          id: 'seat_1C',
-                          designator: '1C',
-                          name: '1C',
-                          available_services: [
-                            {
-                              id: 'service_1C',
-                              total_amount: '25.00',
-                              total_currency: 'USD'
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  sections: [
-                    {
-                      elements: [
-                        {
-                          type: 'seat',
-                          id: 'seat_2A',
-                          designator: '2A',
-                          name: '2A',
-                          available_services: [
-                            {
-                              id: 'service_2A',
-                              total_amount: '15.00',
-                              total_currency: 'USD'
-                            }
-                          ]
-                        },
-                        {
-                          type: 'seat',
-                          id: 'seat_2B',
-                          designator: '2B',
-                          name: '2B',
-                          available_services: [
-                            {
-                              id: 'service_2B',
-                              total_amount: '15.00',
-                              total_currency: 'USD'
-                            }
-                          ]
-                        },
-                        { type: 'empty' },
-                        {
-                          type: 'seat',
-                          id: 'seat_2C',
-                          designator: '2C',
-                          name: '2C',
-                          available_services: [
-                            {
-                              id: 'service_2C',
-                              total_amount: '15.00',
-                              total_currency: 'USD'
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    };
-
-    return mockSeatMaps;
-  }
-
-  // For real offer IDs, make the actual API call
-  const url = `https://api.duffel.com/air/seat_maps?offer_id=${encodeURIComponent(offerId)}`;
+  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
+  const url = `${supabaseUrl}/functions/v1/seat-maps`;
   const started = Date.now();
-  console.log("[Duffel] GET", url);
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${Env.DUFFEL_API_KEY}`,
-      "Duffel-Version": "v2",
-      "Content-Type": "application/json",
-    },
-  });
-
-  const dur = Date.now() - started;
-  console.log("[Duffel] Seat maps status:", res.status, res.statusText, `(${dur}ms)`);
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.warn("[Duffel] Seat maps error body:", text.slice(0, 600));
-    throw new Error(`Seat maps failed: ${res.status}`);
-  }
-
-  const json = await res.json();
-  console.log("[Duffel] Seat maps payload keys:", Object.keys(json || {}));
-  return json;
-}
-
-// New Duffel flight search function
-export async function searchFlights(request: DuffelOfferRequest): Promise<DuffelOfferRequestResponse> {
-  const url = "https://api.duffel.com/air/offer_requests";
-  const started = Date.now();
-  console.log("[Duffel] POST", url);
-  console.log("[Duffel] Flight search request:", JSON.stringify(request, null, 2));
+  console.log("[Supabase] POST", url);
+  console.log("[Supabase] Fetching seat maps for offer:", offerId);
 
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${Env.DUFFEL_API_KEY}`,
-      "Duffel-Version": "v2",
+      "Authorization": `Bearer ${supabaseAnonKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(request),
+    body: JSON.stringify({ offerId }),
   });
 
   const dur = Date.now() - started;
-  console.log("[Duffel] Flight search status:", res.status, res.statusText, `(${dur}ms)`);
+  console.log("[Supabase] Seat maps status:", res.status, res.statusText, `(${dur}ms)`);
 
   if (!res.ok) {
     const text = await res.text();
-    console.error("[Duffel] Flight search error body:", text);
+    console.warn("[Supabase] Seat maps error:", text.slice(0, 600));
+    throw new Error(`Seat maps failed: ${res.status}`);
+  }
+
+  const json = await res.json();
+  console.log("[Supabase] Seat maps response keys:", Object.keys(json || {}));
+  return json;
+}
+
+// Flight Search - Routes through Supabase Edge Function
+export async function searchFlights(request: DuffelOfferRequest): Promise<any> {
+  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
+  const url = `${supabaseUrl}/functions/v1/flights-search`;
+  const started = Date.now();
+
+  console.log("[Supabase] POST", url);
+  console.log("[Supabase] Flight search request:", JSON.stringify(request, null, 2));
+
+  // Transform request to match your Supabase function's expected format
+  const payload = {
+    origin: request.slices[0].origin,
+    destination: request.slices[0].destination,
+    departureDate: request.slices[0].departure_date,
+    returnDate: request.slices[1]?.departure_date,
+    passengers: request.passengers.length,
+    cabinClass: request.cabin_class || 'economy',
+    maxConnections: request.max_connections || 2,
+    returnOffers: request.return_offers !== false,
+    departureTimeFrom: request.slices[0].departure_time?.from,
+    departureTimeTo: request.slices[0].departure_time?.to
+  };
+
+  console.log("[Supabase] Transformed payload:", JSON.stringify(payload, null, 2));
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${supabaseAnonKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const dur = Date.now() - started;
+  console.log("[Supabase] Flight search status:", res.status, res.statusText, `(${dur}ms)`);
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error("[Supabase] Flight search error:", text);
     throw new Error(`Flight search failed: ${res.status} - ${text}`);
   }
 
   const json = await res.json();
-  console.log("[Duffel] Flight search response structure:", {
-    hasData: !!json.data,
-    offersCount: json.data?.offers?.length || 0,
-    slicesCount: json.data?.slices?.length || 0,
-    passengerCount: json.data?.passengers?.length || 0
+  console.log("[Supabase] Flight search response:", {
+    outboundCount: json.outbound?.length || 0,
+    returnCount: json.return?.length || 0,
+    totalOffers: json.total_offers || 0
   });
-  
-  if (json.data?.offers?.length > 0) {
-    console.log("[Duffel] Sample offer:", {
-      id: json.data.offers[0].id,
-      total_amount: json.data.offers[0].total_amount,
-      total_currency: json.data.offers[0].total_currency,
-      slices_count: json.data.offers[0].slices?.length || 0
-    });
-  }
-  
+
   return json;
 }
 
