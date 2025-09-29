@@ -6,7 +6,8 @@ import FloatingCheckout from '@/components/FloatingCheckout';
 import SeatMap from '@/components/SeatMap';
 import SeatSelectionModal from '@/components/SeatSelectionModal';
 import { useBooking } from '@/contexts/BookingContext';
-import { searchFlights as duffelSearchFlights, createOneWaySearch, createReturnSearch, createMultiCitySearch, type DuffelOffer, type DuffelOfferRequestResponse } from '@/utils/duffel';
+import { searchFlights as supabaseSearchFlights, type FlightSearchParams as SupabaseFlightSearchParams } from '@/lib/supabase';
+import { createOneWaySearch, createReturnSearch, createMultiCitySearch, type DuffelOffer, type DuffelOfferRequestResponse } from '@/utils/duffel';
 
 interface Flight {
   id: string;
@@ -392,19 +393,58 @@ const FlightSearch = () => {
       
       console.log('[Duffel] Search request created:', searchRequest);
       
-      // Call Duffel API
-      const response: DuffelOfferRequestResponse = await duffelSearchFlights(searchRequest);
+      // Call Supabase Edge Function instead of direct Duffel API
+      console.log('[Flight Search] Using Supabase Edge Function for flight search');
       
-      if (!response.data || !response.data.offers) {
-        throw new Error('No flight data received from Duffel API');
+      const supabaseParams: SupabaseFlightSearchParams = {
+        origin: searchParams.from,
+        destination: searchParams.to,
+        departureDate: searchParams.departDate,
+        returnDate: searchParams.returnDate,
+        passengers: searchParams.passengers,
+        cabin: searchParams.cabinClass
+      };
+      
+      const response = await supabaseSearchFlights(supabaseParams);
+      
+      if (!response.outbound || response.outbound.length === 0) {
+        throw new Error('No flight data received from search');
       }
       
-      console.log(`[Duffel] Received ${response.data.offers.length} offers`);
+      console.log(`[Flight Search] Received ${response.outbound.length} outbound flights, ${response.return?.length || 0} return flights`);
       
-      // Store the raw offers data for new display logic
+      // Convert response to expected format for display
+      const mockOffers = response.outbound.map((flight: any, index: number) => ({
+        id: flight.id || `offer-${index}`,
+        total_amount: flight.price || 0,
+        total_currency: 'USD',
+        slices: [{
+          id: `slice-${index}`,
+          origin: { iata_code: flight.departure?.airport || searchParams.from },
+          destination: { iata_code: flight.arrival?.airport || searchParams.to },
+          departure_datetime: '2025-10-05T' + (flight.departure?.time || '08:00') + ':00',
+          arrival_datetime: '2025-10-05T' + (flight.arrival?.time || '12:00') + ':00',
+          duration: flight.duration || '4h 0m',
+          segments: [{
+            id: `segment-${index}`,
+            marketing_carrier: { name: flight.airline || 'Mock Airline' },
+            marketing_carrier_flight_number: flight.flightNumber || 'MA123',
+            operating_carrier: { name: flight.airline || 'Mock Airline' },
+            aircraft: { name: 'Boeing 737' },
+            origin: { iata_code: flight.departure?.airport || searchParams.from },
+            destination: { iata_code: flight.arrival?.airport || searchParams.to },
+            departing_at: '2025-10-05T' + (flight.departure?.time || '08:00') + ':00',
+            arriving_at: '2025-10-05T' + (flight.arrival?.time || '12:00') + ':00'
+          }]
+        }],
+        passengers: [],
+        services: []
+      }));
+      
+      // Store the converted offers data
       setFlights({ 
-        outbound: response.data.offers, // Store all offers, we'll process them in display
-        inbound: [] // Legacy structure - we'll update display logic next
+        outbound: mockOffers,
+        inbound: [] // Legacy structure
       });
       
     } catch (err) {
