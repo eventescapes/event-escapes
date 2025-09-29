@@ -12,6 +12,10 @@ export interface DuffelSlice {
     from?: string;
     to?: string;
   };
+  arrival_time?: {
+    from?: string;
+    to?: string;
+  };
 }
 
 export interface DuffelPassenger {
@@ -104,6 +108,70 @@ export interface DuffelOfferRequestResponse {
   };
 }
 
+// NEW: Edge Function Request Types
+export interface EdgeFunctionSearchRequest {
+  tripType: 'one-way' | 'return' | 'multi-city';
+  slices: Array<{
+    origin: string;
+    destination: string;
+    departureDate: string;
+    departureTime?: { from?: string; to?: string };
+    arrivalTime?: { from?: string; to?: string };
+  }>;
+  passengers: {
+    adults: number;
+    children?: number;
+    infants?: number;
+  };
+  cabinClass?: 'economy' | 'premium_economy' | 'business' | 'first';
+  maxConnections?: 0 | 1 | 2;
+  directOnly?: boolean;
+}
+
+// NEW: Edge Function Response Types
+export interface EdgeFunctionSearchResponse {
+  success: boolean;
+  trip_type: string;
+  offers: Array<{
+    id: string;
+    slices: Array<{
+      slice_index: number;
+      origin: string;
+      destination: string;
+      departure_time: string;
+      arrival_time: string;
+      duration: string;
+      segments: Array<{
+        airline: string;
+        airline_code: string;
+        flight_number: string;
+        aircraft: string;
+        origin: string;
+        destination: string;
+        departing_at: string;
+        arriving_at: string;
+        duration: string;
+      }>;
+      stops: number;
+    }>;
+    total_amount: number;
+    total_currency: string;
+    expires_at: string;
+    cabin_class: string;
+    available_services: number;
+  }>;
+  total_offers: number;
+  search_params: {
+    cabin_class: string;
+    max_connections: number;
+    passengers: {
+      adults: number;
+      children?: number;
+      infants?: number;
+    };
+  };
+}
+
 // Get Supabase config from environment
 function getSupabaseConfig() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -148,30 +216,54 @@ export async function fetchSeatMaps(offerId: string): Promise<SeatMapsResponse> 
   return json;
 }
 
-// Flight Search - Routes through Supabase Edge Function
-export async function searchFlights(request: DuffelOfferRequest): Promise<any> {
+// UPDATED: Flight Search - Routes through Supabase Edge Function with NEW format
+export async function searchFlights(request: DuffelOfferRequest): Promise<EdgeFunctionSearchResponse> {
   const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
   const url = `${supabaseUrl}/functions/v1/flights-search`;
   const started = Date.now();
 
   console.log("[Supabase] POST", url);
-  console.log("[Supabase] Flight search request:", JSON.stringify(request, null, 2));
+  console.log("[Supabase] Flight search request (old format):", JSON.stringify(request, null, 2));
 
-  // Transform request to match your Supabase function's expected format
-  const payload = {
-    origin: request.slices[0].origin,
-    destination: request.slices[0].destination,
-    departureDate: request.slices[0].departure_date,
-    returnDate: request.slices[1]?.departure_date,
-    passengers: request.passengers.length,
+  // Determine trip type based on number of slices
+  let tripType: 'one-way' | 'return' | 'multi-city';
+  if (request.slices.length === 1) {
+    tripType = 'one-way';
+  } else if (request.slices.length === 2) {
+    // Check if it's a proper return trip (destination matches origin)
+    const isReturn = 
+      request.slices[0].destination === request.slices[1].origin &&
+      request.slices[0].origin === request.slices[1].destination;
+    tripType = isReturn ? 'return' : 'multi-city';
+  } else {
+    tripType = 'multi-city';
+  }
+
+  // Count passenger types
+  const adults = request.passengers.filter(p => p.type === 'adult').length;
+  const children = request.passengers.filter(p => p.type === 'child').length;
+  const infants = request.passengers.filter(p => p.type === 'infant_without_seat').length;
+
+  // Transform to NEW Edge Function format
+  const payload: EdgeFunctionSearchRequest = {
+    tripType,
+    slices: request.slices.map(slice => ({
+      origin: slice.origin,
+      destination: slice.destination,
+      departureDate: slice.departure_date,
+      ...(slice.departure_time && { departureTime: slice.departure_time }),
+      ...(slice.arrival_time && { arrivalTime: slice.arrival_time })
+    })),
+    passengers: {
+      adults,
+      ...(children > 0 && { children }),
+      ...(infants > 0 && { infants })
+    },
     cabinClass: request.cabin_class || 'economy',
-    maxConnections: request.max_connections || 2,
-    returnOffers: request.return_offers !== false,
-    departureTimeFrom: request.slices[0].departure_time?.from,
-    departureTimeTo: request.slices[0].departure_time?.to
+    maxConnections: Math.min(Math.max(request.max_connections ?? 1, 0), 2) as 0 | 1 | 2
   };
 
-  console.log("[Supabase] Transformed payload:", JSON.stringify(payload, null, 2));
+  console.log("[Supabase] Transformed payload (NEW format):", JSON.stringify(payload, null, 2));
 
   const res = await fetch(url, {
     method: "POST",
@@ -191,17 +283,19 @@ export async function searchFlights(request: DuffelOfferRequest): Promise<any> {
     throw new Error(`Flight search failed: ${res.status} - ${text}`);
   }
 
-  const json = await res.json();
-  console.log("[Supabase] Flight search response:", {
-    outboundCount: json.outbound?.length || 0,
-    returnCount: json.return?.length || 0,
-    totalOffers: json.total_offers || 0
+  const json: EdgeFunctionSearchResponse = await res.json();
+
+  console.log("[Supabase] Flight search response (NEW format):", {
+    success: json.success,
+    tripType: json.trip_type,
+    totalOffers: json.total_offers,
+    offersCount: json.offers?.length || 0
   });
 
   return json;
 }
 
-// Helper functions for creating flight search requests
+// Helper functions for creating flight search requests (UNCHANGED - still work)
 export function createOneWaySearch(
   origin: string,
   destination: string,
@@ -220,7 +314,7 @@ export function createOneWaySearch(
     passengers: Array(passengers).fill({ type: 'adult' }),
     cabin_class: cabinClass,
     return_offers: true,
-    max_connections: 2
+    max_connections: 1
   };
 }
 
@@ -248,7 +342,7 @@ export function createReturnSearch(
     passengers: Array(passengers).fill({ type: 'adult' }),
     cabin_class: cabinClass,
     return_offers: true,
-    max_connections: 2
+    max_connections: 1
   };
 }
 
@@ -262,6 +356,6 @@ export function createMultiCitySearch(
     passengers: Array(passengers).fill({ type: 'adult' }),
     cabin_class: cabinClass,
     return_offers: true,
-    max_connections: 2
+    max_connections: 1
   };
 }

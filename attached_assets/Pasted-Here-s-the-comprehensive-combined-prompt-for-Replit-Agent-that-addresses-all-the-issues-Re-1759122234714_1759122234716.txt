@@ -1,0 +1,315 @@
+Here's the comprehensive combined prompt for Replit Agent that addresses all the issues:
+
+***
+
+## Replit Agent Prompt: Complete Flight Search Fix & Multi-City Implementation
+
+**URGENT FIXES NEEDED:**
+I need you to fix the flight search functionality that's currently broken and add multi-city search capability. The system has critical integration issues between frontend and backend, plus return flights aren't displaying.
+
+### Current Critical Issues:
+
+1. **SyntaxError in App.tsx**: Module export/import issues causing app crashes
+2. **Missing environment variables**: Need proper handling of Supabase credentials  
+3. **Backend mismatch**: Frontend sending old format, backend expects new slice structure
+4. **Return flights missing**: Only outbound flights show in round-trip searches
+5. **Mock data problem**: Code creates fake data instead of using real Duffel API responses
+6. **No flight results**: API calls failing due to format mismatch
+
+### Backend Integration Requirements:
+
+The backend Edge Function expects this NEW format:
+```typescript
+const searchRequest = {
+  tripType: 'one-way' | 'return' | 'multi-city',
+  slices: [
+    {
+      origin: 'LAX',
+      destination: 'JFK', 
+      departureDate: '2025-12-15'
+    }
+    // For return: add second slice with reversed origin/destination
+    // For multi-city: add 3+ slices
+  ],
+  passengers: {
+    adults: 1,
+    children: 0,
+    infants: 0
+  },
+  cabinClass: 'economy',
+  maxConnections: 1
+};
+```
+
+Backend returns this structure:
+```typescript
+{
+  success: true,
+  trip_type: 'return',
+  offers: [
+    {
+      id: 'offer_123',
+      slices: [
+        {
+          slice_index: 0,
+          origin: 'LAX',
+          destination: 'JFK',
+          departure_time: '2025-12-15T08:00:00',
+          arrival_time: '2025-12-15T16:30:00',
+          duration: 'PT8H30M',
+          segments: [...],
+          stops: 0
+        }
+      ],
+      total_amount: 450.00,
+      total_currency: 'USD',
+      expires_at: '2025-12-15T12:30:00Z'
+    }
+  ]
+}
+```
+
+### Required Changes:
+
+#### 1. Fix Environment Variable Handling
+```typescript
+// Update environment check to use proper Vite format
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+```
+
+#### 2. **REMOVE ALL Mock Data - Use Real Duffel Response**
+Replace the entire `searchFlights` function with this structure:
+
+```typescript
+const searchFlights = async () => {
+  try {
+    const searchRequest = {
+      tripType: searchParams.tripType,
+      slices: buildSlicesFromParams(), 
+      passengers: { adults: searchParams.passengers },
+      cabinClass: searchParams.cabinClass
+    };
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/flights-search`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(searchRequest)
+    });
+
+    const data = await response.json();
+    
+    if (data.success && data.offers) {
+      // Store REAL offers, not mock data
+      setFlights({ 
+        outbound: data.offers, // Real Duffel offers
+        inbound: [] // Legacy structure
+      });
+    }
+  } catch (error) {
+    console.error('Real API Error:', error);
+  }
+};
+```
+
+#### 3. Fix Return Flight Display Logic
+The `processOffersForDisplay` needs to properly separate outbound and return slices:
+
+```typescript
+const processOffersForDisplay = (offers: DuffelOffer[]) => {
+  const sliceGroups: { [sliceIndex: number]: any[] } = {};
+  
+  offers.forEach(offer => {
+    offer.slices.forEach((slice, sliceIndex) => {
+      if (!sliceGroups[sliceIndex]) {
+        sliceGroups[sliceIndex] = [];
+      }
+      
+      const displayFlight = {
+        id: `${offer.id}-slice-${sliceIndex}`,
+        offerId: offer.id,
+        sliceId: slice.id,
+        sliceIndex,
+        airline: slice.segments[0]?.marketing_carrier?.name,
+        flight_number: slice.segments[0]?.flight_number,
+        departure_time: slice.segments[0]?.departing_at,
+        arrival_time: slice.segments[slice.segments.length - 1]?.arriving_at,
+        departureAirport: slice.origin.iata_code,
+        arrivalAirport: slice.destination.iata_code,
+        duration: slice.duration,
+        stops: slice.segments.length - 1,
+        price: sliceIndex === 0 ? parseFloat(offer.total_amount) : 0,
+        currency: offer.total_currency
+      };
+      
+      sliceGroups[sliceIndex].push(displayFlight);
+    });
+  });
+  
+  return sliceGroups;
+};
+```
+
+#### 4. Build Proper Request Slices Helper
+```typescript
+const buildSlicesFromParams = () => {
+  switch (searchParams.tripType) {
+    case 'one-way':
+      return [{
+        origin: searchParams.from,
+        destination: searchParams.to,
+        departureDate: searchParams.departDate
+      }];
+      
+    case 'return':
+      return [
+        {
+          origin: searchParams.from,
+          destination: searchParams.to,
+          departureDate: searchParams.departDate
+        },
+        {
+          origin: searchParams.to, // CRITICAL: Return origin = outbound destination
+          destination: searchParams.from, // Return destination = outbound origin
+          departureDate: searchParams.returnDate
+        }
+      ];
+      
+    case 'multi-city':
+      return searchParams.multiCitySlices.map(slice => ({
+        origin: slice.origin,
+        destination: slice.destination,
+        departureDate: slice.departureDate
+      }));
+      
+    default:
+      return [];
+  }
+};
+```
+
+#### 5. Add Multi-City Search Interface
+Create a dynamic multi-city search form with:
+
+**Multi-City UI Requirements:**
+- "Add Another City" button  
+- Remove city functionality (× button)
+- Date validation (each date must be after previous)
+- Minimum 2 cities, maximum 6 cities
+- Visual connection indicators between cities
+
+**Multi-City State Management:**
+```typescript
+interface MultiCitySlice {
+  id: string;
+  origin: string;
+  destination: string;
+  departureDate: string;
+}
+
+const [multiCitySlices, setMultiCitySlices] = useState<MultiCitySlice[]>([
+  { id: '1', origin: '', destination: '', departureDate: '' },
+  { id: '2', origin: '', destination: '', departureDate: '' }
+]);
+
+const addCity = () => {
+  if (multiCitySlices.length < 6) {
+    setMultiCitySlices([
+      ...multiCitySlices,
+      { id: Date.now().toString(), origin: '', destination: '', departureDate: '' }
+    ]);
+  }
+};
+
+const removeCity = (id: string) => {
+  if (multiCitySlices.length > 2) {
+    setMultiCitySlices(multiCitySlices.filter(slice => slice.id !== id));
+  }
+};
+```
+
+#### 6. Fix Slice Title Function
+```typescript
+const getSliceTitle = (sliceIndex: number): string => {
+  switch (searchParams.tripType) {
+    case 'return':
+      return sliceIndex === 0 
+        ? `Outbound (${searchParams.from} → ${searchParams.to})`
+        : `Return (${searchParams.to} → ${searchParams.from})`;
+    case 'one-way':
+      return `${searchParams.from} → ${searchParams.to}`;
+    case 'multi-city':
+      if (searchParams.multiCitySlices?.[sliceIndex]) {
+        const slice = searchParams.multiCitySlices[sliceIndex];
+        return `${slice.origin} → ${slice.destination}`;
+      }
+      return `Slice ${sliceIndex + 1}`;
+    default:
+      return `Slice ${sliceIndex + 1}`;
+  }
+};
+```
+
+### Test Cases to Implement:
+1. **One-way**: LAX → JFK (should work with Duffel Airways)
+2. **Return**: LAX ↔ JFK (must show both outbound and return sections)
+3. **Multi-city**: LAX → JFK → LHR → LAX (3+ cities)
+4. **Error handling**: Invalid dates, missing fields, API failures
+
+### Expected Behavior:
+- Search LAX to JFK return trip
+- See "Outbound (LAX → JFK)" section with flights
+- See "Return (JFK → LAX)" section with flights  
+- Select one flight from each section
+- Multi-city shows dynamic city inputs with +/× buttons
+- All data comes from real Duffel API, no mock data
+
+### Debug Requirements:
+Add extensive logging:
+```typescript
+console.log('=== SEARCH REQUEST ===');
+console.log('Trip Type:', searchParams.tripType); 
+console.log('Request Payload:', searchRequest);
+
+console.log('=== API RESPONSE ===');
+console.log('Success:', data.success);
+console.log('Offers Count:', data.offers?.length);
+console.log('First Offer Slices:', data.offers?.[0]?.slices?.length);
+
+console.log('=== PROCESSED DISPLAY DATA ===');
+console.log('Slice Groups:', Object.keys(sliceGroups));
+console.log('Outbound Flights:', sliceGroups[0]?.length);
+console.log('Return Flights:', sliceGroups[1]?.length);
+```
+
+### Files to Update:
+- `src/pages/flights.tsx` - Main flight search page with all fixes
+- `src/components/FlightSearchForm.tsx` - Search form component  
+- `src/components/FlightCard.tsx` - Display flight results
+- `src/lib/supabase.ts` - API integration
+- Environment variables in Replit Secrets
+
+**PRIORITY ORDER:**
+1. Fix syntax errors and environment variables FIRST
+2. Remove ALL mock data, use real API responses  
+3. Fix return flight display logic
+4. Add multi-city functionality
+5. Test with LAX ↔ JFK route
+
+The app should work for basic one-way/return searches before adding multi-city features. All flight data must come from the real Duffel API through your Supabase Edge Function.
+
+***
+
+This comprehensive prompt combines both the original multi-city requirements and the critical return flight fixes needed for your Event Escapes platform.
+
+[1](https://github.com/eg-ui-conf-2018/react-flight-search)
+[2](https://www.sevensquaretech.com/develop-travel-booking-website-reactjs-github-code/)
+[3](https://developers.amadeus.com/blog/flight-booking-application-java-spring-react-1)
+[4](https://blog.apilayer.com/real-time-flight-tracking-app-aviationstack-react/)
+[5](https://dev.to/nadim_ch0wdhury/develop-flight-booking-system-mobile-app-with-react-native-33ee)
+[6](https://gitnation.com/contents/meet-react-flight-and-become-a-rsc-expert)
+[7](https://www.youtube.com/watch?v=IDiIGjDxZ_Y)
+[8](https://plainenglish.io/blog/how-to-make-an-aviation-react-component)
