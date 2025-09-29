@@ -225,13 +225,17 @@ export default function AirportAutocomplete({
           {suggestions.map((airport, index) => (
             <button
               key={`${airport.iata_code}-${index}`}
-              onMouseDown={(e) => {
-                e.preventDefault();
+              onClick={(e) => {
+                e.stopPropagation();
                 const displayText = `${airport.iata_code} - ${airport.name}`;
                 setInputValue(displayText);
                 onChange(airport.iata_code);
                 setIsOpen(false);
                 setSuggestions([]);
+                setTimeout(() => {
+                  setIsOpen(false);
+                  setSuggestions([]);
+                }, 1);
               }}
               className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 focus:bg-gray-50 focus:outline-none transition-colors"
               data-testid={`airport-suggestion-${airport.iata_code}`}
