@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { Plane, Plus, X, Calendar, Users } from 'lucide-react';
 import type { FlightSearchParams, TripType } from '@/types/flights';
+import AirportAutocomplete from '@/components/AirportAutocomplete';
 
 // Multi-city slice interface (matches types/flights.ts)
 interface MultiCitySlice {
@@ -212,32 +213,21 @@ const FlightSearchForm = () => {
           {/* One Way & Return */}
           <TabsContent value="one-way" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="from" className="font-accent font-semibold text-primary mb-2 block">
-                  From
-                </Label>
-                <Input
-                  id="from"
-                  placeholder="Origin airport (e.g., LAX)"
-                  value={searchParams.from}
-                  onChange={(e) => setSearchParams(prev => ({ ...prev, from: e.target.value }))}
-                  className="focus-luxury h-12"
-                  data-testid="input-from"
-                />
-              </div>
-              <div>
-                <Label htmlFor="to" className="font-accent font-semibold text-primary mb-2 block">
-                  To
-                </Label>
-                <Input
-                  id="to"
-                  placeholder="Destination airport (e.g., JFK)"
-                  value={searchParams.to}
-                  onChange={(e) => setSearchParams(prev => ({ ...prev, to: e.target.value }))}
-                  className="focus-luxury h-12"
-                  data-testid="input-to"
-                />
-              </div>
+              <AirportAutocomplete
+                value={searchParams.from}
+                onChange={(code) => setSearchParams(prev => ({ ...prev, from: code }))}
+                placeholder="From (city or airport code)"
+                label="Departure"
+                className=""
+              />
+              
+              <AirportAutocomplete
+                value={searchParams.to}
+                onChange={(code) => setSearchParams(prev => ({ ...prev, to: code }))}
+                placeholder="To (city or airport code)"
+                label="Destination"
+                className=""
+              />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -300,32 +290,21 @@ const FlightSearchForm = () => {
 
           <TabsContent value="return" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="from-return" className="font-accent font-semibold text-primary mb-2 block">
-                  From
-                </Label>
-                <Input
-                  id="from-return"
-                  placeholder="Origin airport (e.g., LAX)"
-                  value={searchParams.from}
-                  onChange={(e) => setSearchParams(prev => ({ ...prev, from: e.target.value }))}
-                  className="focus-luxury h-12"
-                  data-testid="input-from-return"
-                />
-              </div>
-              <div>
-                <Label htmlFor="to-return" className="font-accent font-semibold text-primary mb-2 block">
-                  To
-                </Label>
-                <Input
-                  id="to-return"
-                  placeholder="Destination airport (e.g., JFK)"
-                  value={searchParams.to}
-                  onChange={(e) => setSearchParams(prev => ({ ...prev, to: e.target.value }))}
-                  className="focus-luxury h-12"
-                  data-testid="input-to-return"
-                />
-              </div>
+              <AirportAutocomplete
+                value={searchParams.from}
+                onChange={(code) => setSearchParams(prev => ({ ...prev, from: code }))}
+                placeholder="From (city or airport code)"
+                label="Departure"
+                className=""
+              />
+              
+              <AirportAutocomplete
+                value={searchParams.to}
+                onChange={(code) => setSearchParams(prev => ({ ...prev, to: code }))}
+                placeholder="To (city or airport code)"
+                label="Destination"
+                className=""
+              />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
@@ -433,30 +412,22 @@ const FlightSearchForm = () => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label className="font-accent font-semibold text-primary mb-2 block">
-                        From
-                      </Label>
-                      <Input
-                        placeholder="Origin (e.g., LAX)"
-                        value={slice.origin}
-                        onChange={(e) => updateMultiCitySlice(slice.id, 'origin', e.target.value)}
-                        className="focus-luxury h-12"
-                        data-testid={`input-multi-city-from-${index}`}
-                      />
-                    </div>
-                    <div>
-                      <Label className="font-accent font-semibold text-primary mb-2 block">
-                        To
-                      </Label>
-                      <Input
-                        placeholder="Destination (e.g., JFK)"
-                        value={slice.destination}
-                        onChange={(e) => updateMultiCitySlice(slice.id, 'destination', e.target.value)}
-                        className="focus-luxury h-12"
-                        data-testid={`input-multi-city-to-${index}`}
-                      />
-                    </div>
+                    <AirportAutocomplete
+                      value={slice.origin}
+                      onChange={(code) => updateMultiCitySlice(slice.id, 'origin', code)}
+                      placeholder="From (city or airport code)"
+                      label="From"
+                      className=""
+                    />
+                    
+                    <AirportAutocomplete
+                      value={slice.destination}
+                      onChange={(code) => updateMultiCitySlice(slice.id, 'destination', code)}
+                      placeholder="To (city or airport code)"
+                      label="To"
+                      className=""
+                    />
+                    
                     <div>
                       <Label className="font-accent font-semibold text-primary mb-2 block">
                         <Calendar className="w-4 h-4 inline mr-2" />
