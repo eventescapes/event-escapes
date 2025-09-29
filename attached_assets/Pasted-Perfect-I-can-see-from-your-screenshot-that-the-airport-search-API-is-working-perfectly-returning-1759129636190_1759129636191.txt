@@ -1,0 +1,359 @@
+Perfect! I can see from your screenshot that the airport search API is working perfectly - returning LAX, LAS, LAE etc. when searching for "la" with 200 status. Now let's implement the frontend autocomplete component.
+
+Here's the Replit Agent prompt to implement the airport autocomplete frontend:
+
+***
+
+## Replit Agent Prompt: Implement Airport Autocomplete Frontend
+
+**SUCCESS:** ✅ Airport search API is working perfectly! The API returns airports like LAX, LAS when searching for "la" with 200 status response.
+
+**NOW IMPLEMENT:** Replace the current airport input fields with smart autocomplete that uses the working airport-search API.
+
+### Implementation Requirements:
+
+#### 1. Create AirportAutocomplete Component
+
+**Create new file: `src/components/AirportAutocomplete.tsx`**
+
+```typescript
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, MapPin } from 'lucide-react';
+
+interface Airport {
+  iata_code: string;
+  name: string;
+  city: string;
+  country: string;
+}
+
+interface AirportAutocompleteProps {
+  value: string;
+  onChange: (airportCode: string) => void;
+  placeholder: string;
+  label?: string;
+  className?: string;
+}
+
+export default function AirportAutocomplete({ 
+  value, 
+  onChange, 
+  placeholder, 
+  label,
+  className = '' 
+}: AirportAutocompleteProps) {
+  const [inputValue, setInputValue] = useState('');
+  const [suggestions, setSuggestions] = useState<Airport[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout>();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  // Initialize input value from props
+  useEffect(() => {
+    if (value && !inputValue) {
+      setInputValue(value);
+    }
+  }, [value]);
+
+  // Debounced search function
+  useEffect(() => {
+    if (inputValue.length >= 2) {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      
+      debounceRef.current = setTimeout(() => {
+        searchAirports(inputValue);
+      }, 300); // 300ms delay
+    } else {
+      setSuggestions([]);
+      setIsOpen(false);
+    }
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [inputValue]);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        inputRef.current && 
+        suggestionsRef.current && 
+        !inputRef.current.contains(event.target as Node) &&
+        !suggestionsRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const searchAirports = async (query: string) => {
+    try {
+      setLoading(true);
+      
+      console.log('🔍 Searching airports for:', query);
+      
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        console.error('Missing Supabase environment variables');
+        return;
+      }
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/airport-search`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey
+        },
+        body: JSON.stringify({ query })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Airport search results:', data);
+        
+        if (data.success && data.airports) {
+          setSuggestions(data.airports);
+          setIsOpen(true);
+        } else {
+          console.warn('No airports found or API error:', data);
+          setSuggestions([]);
+        }
+      } else {
+        console.error('Airport search API error:', response.status);
+        setSuggestions([]);
+      }
+    } catch (error) {
+      console.error('Airport search error:', error);
+      setSuggestions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setInputValue(newValue);
+    
+    // If user clears input, clear the selected value
+    if (newValue === '') {
+      onChange('');
+    }
+  };
+
+  const handleAirportSelect = (airport: Airport) => {
+    const displayText = `${airport.iata_code} - ${airport.name}`;
+    setInputValue(displayText);
+    onChange(airport.iata_code);
+    setIsOpen(false);
+    setSuggestions([]);
+    
+    console.log('✈️ Selected airport:', airport);
+  };
+
+  const handleInputFocus = () => {
+    if (inputValue.length >= 2 && suggestions.length > 0) {
+      setIsOpen(true);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
+  return (
+    <div className={`relative ${className}`}>
+      {label && (
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          {label}
+        </label>
+      )}
+      
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+          autoComplete="off"
+        />
+        
+        <Search className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
+        
+        {loading && (
+          <div className="absolute right-3 top-3.5">
+            <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+          </div>
+        )}
+      </div>
+
+      {/* Suggestions Dropdown */}
+      {isOpen && suggestions.length > 0 && (
+        <div 
+          ref={suggestionsRef}
+          className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+        >
+          {suggestions.map((airport, index) => (
+            <button
+              key={`${airport.iata_code}-${index}`}
+              onClick={() => handleAirportSelect(airport)}
+              className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 focus:bg-gray-50 focus:outline-none transition-colors"
+            >
+              <div className="flex items-start gap-3">
+                <MapPin className="h-4 w-4 text-gray-400 mt-1 flex-shrink-0" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-blue-600">{airport.iata_code}</span>
+                    <span className="text-gray-900 font-medium">{airport.name}</span>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {airport.city}
+                    {airport.country && airport.city && ', '}
+                    {airport.country}
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* No results message */}
+      {isOpen && !loading && inputValue.length >= 2 && suggestions.length === 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+          <div className="text-gray-500 text-center">
+            No airports found for "{inputValue}"
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+#### 2. Update Flight Search Form
+
+**Replace the current airport input fields** in your flight search form with the new autocomplete components:
+
+```typescript
+// In your flight search form component - replace existing airport inputs
+
+// FROM input - replace with:
+<AirportAutocomplete
+  value={searchParams.from}
+  onChange={(code) => setSearchParams(prev => ({ ...prev, from: code }))}
+  placeholder="From (e.g., LAX, JFK, LHR)"
+  label="From"
+  className="flex-1"
+/>
+
+// TO input - replace with:
+<AirportAutocomplete
+  value={searchParams.to}
+  onChange={(code) => setSearchParams(prev => ({ ...prev, to: code }))}
+  placeholder="To (e.g., LAX, JFK, LHR)"
+  label="To"
+  className="flex-1"
+/>
+```
+
+#### 3. Update Form Layout
+
+Ensure the form container has proper spacing for the dropdowns:
+
+```typescript
+// Update your form container to accommodate dropdowns
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+  <AirportAutocomplete
+    value={searchParams.from}
+    onChange={(code) => setSearchParams(prev => ({ ...prev, from: code }))}
+    placeholder="From (city or airport code)"
+    label="Departure"
+  />
+  
+  <AirportAutocomplete
+    value={searchParams.to}
+    onChange={(code) => setSearchParams(prev => ({ ...prev, to: code }))}
+    placeholder="To (city or airport code)"
+    label="Destination"
+  />
+</div>
+```
+
+#### 4. Test Cases to Verify
+
+Once implemented, test these autocomplete scenarios:
+
+1. **Type "la"** → Should show LAX, LAS, LAE (as confirmed in your API test)
+2. **Type "jfk"** → Should show JFK airport
+3. **Type "london"** → Should show LHR, LGW, STN
+4. **Type "dxb"** → Should show Dubai International
+5. **Type "new"** → Should show New York airports
+6. **Type "xxx"** → Should show "No airports found" message
+
+#### 5. Enhanced Features (Optional)
+
+Add these enhancements if needed:
+
+```typescript
+// Add popular airports as initial suggestions
+const popularAirports = [
+  { iata_code: 'LAX', name: 'Los Angeles International', city: 'Los Angeles', country: 'USA' },
+  { iata_code: 'JFK', name: 'John F. Kennedy International', city: 'New York', country: 'USA' },
+  { iata_code: 'LHR', name: 'Heathrow Airport', city: 'London', country: 'UK' },
+  { iata_code: 'DXB', name: 'Dubai International', city: 'Dubai', country: 'UAE' }
+];
+
+// Show popular airports when input is focused but empty
+const handleInputFocus = () => {
+  if (inputValue === '' || inputValue.length < 2) {
+    setSuggestions(popularAirports);
+    setIsOpen(true);
+  } else if (suggestions.length > 0) {
+    setIsOpen(true);
+  }
+};
+```
+
+### Expected User Experience:
+
+1. **User clicks** "From" field
+2. **Types "la"** → Loading spinner appears briefly  
+3. **Dropdown opens** showing LAX, LAS, LAE etc. with full names and cities
+4. **User clicks LAX** → Input shows "LAX - Los Angeles International Airport"
+5. **searchParams.from** gets set to "LAX"
+6. **Same process** for destination field
+7. **Search button** works with proper airport codes
+
+**PRIORITY**: 
+1. Create AirportAutocomplete component first
+2. Replace existing airport inputs
+3. Test with "la" and "jfk" searches
+4. Verify searchParams are set correctly
+5. Ensure form submission works with selected airport codes
+
+The autocomplete will provide a professional booking experience just like major travel sites, using your working Duffel Places API!
+
+***
+
+This implementation will give users smart airport search with real-time suggestions powered by your working airport-search API.
+
+[1](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/117568974/caafb430-60d5-4202-a5ef-19fc64da59af/image.jpg?AWSAccessKeyId=ASIA2F3EMEYE7CTEIXJH&Signature=36OPvvZ0lT7k9MADngFFwsEj21k%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEEcaCXVzLWVhc3QtMSJHMEUCIBpmoO1YyaQy3SCobQ%2BPKHsp5mzm641Wpybeuc4nVWrkAiEAx5O2jMbDVv64hZRExVWhKqaudnu0JgCeE1FbuzlU0tsq%2BgQI0P%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDOvK9X7c%2BhFfhoAP9yrOBAJJg8vlUDv3OhXZiOPjzmLlcKey14BNYwcj3n4NEWd01SZVKNNLtqXMCF%2FMfzX3ERYGfPptXEqhufZ1As7wAksDI9a%2FuDkTbsb2abN7auKQT5x7NbyjjWI6liWFEFM0qdPEFdmaHWclx8x1sc84CnJmLuuf7hFExRJX8MolaW%2FqbtSZ4XVf3E5yk3JyV8JNN5euWczbXSyONKZIf1DZ97K6HLLbstWk8uPe3O71QXFvLvLjw2sx1WajPNHWbQrLjNald4D2oN0YXNYQWoeK6E4xA%2B%2FfcQnWRLxmdcwgTbC7cXcqweEl57S7COMKuN7g9Uc0cPslsHhaKJVeI1BmjBwknj6a8POSnGqkk0VHmaJ8U%2B0v3IhmglZjt%2BuA%2BgUyqOy5pU08iCSvYD2a4ePeZS4gw48Jb5bYogO73uM9E8v1lCR5kJkRZJdyQNQWbqTCjs5iR3ETcr93D%2Fq%2Feb41%2BpKVu41XbKmw2bXRg%2F%2BK3%2BHLDrZDHtJazL37X0PAWMdU%2Br0Yuwo2IiPNgkIox9RhzO9D%2BpGNkjYg315E%2BNa0QeLczTQFrO90CJoeFMqMkZmEhB0cspjV4JnA5kp4a7%2FIdb8%2F2Cg4xeNZwCVCElGCOqC3x37jxj8ZiyNhCI%2F58BtmAXQzaayJBkfTdMgJowd5CGipNGs6Agjk0AT7H2tYkTbnzKo3ah5gqDdVIg%2FjsFWV1mW7elXJqvCaoLYvpfAKwI3wEWIJBMQuYdAlxgBGDYbSeS7z1k1LcZERqNPsK6qeE%2FK0K3QnFpjFvIkGhzm0MO7T6MYGOpoBT4qTFsHt1RUJoHlGL9wpUbzPrSaP1mTWTuELC%2FFcBoRAy%2FZUUW5Ceu76avjUC2Xn8%2B4N7O0Jc75BvHWqsmFv0%2Fqt4p1I9B3uNidNOs%2B8%2F0R%2FR7SOBfAD6nRQxM391FsIf3DsbSSUPLqngot64S1izNXyzQrfEd%2BM4x5xdPbM8PFpSXjAwWAfO%2F3t1J4jGaPOFMWVLMb%2FSLvMPA%3D%3D&Expires=1759130224)
