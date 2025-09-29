@@ -1,0 +1,264 @@
+URGENT FIXES NEEDED:
+The flight search is returning Status 422 errors because the request format is wrong. Need to fix the API integration and add multi-city functionality.
+
+Current Critical Issues:
+Status 422 Error: Backend validation failing due to wrong request format
+
+URL Parameters vs POST Body: Sending URL params instead of POST body
+
+Return flights missing: Only outbound flights show in round-trip searches
+
+Mock data problem: Code creates fake data instead of using real Duffel API responses
+
+Request format mismatch: Frontend sending old format, backend expects slice structure
+
+Required Fixes:
+1. Fix Request Format - Critical
+The console shows URL parameters like triptype=one-way&passengers=1 - this is WRONG. Backend expects POST body with slice structure.
+
+Replace the current searchFlights function:
+
+typescript
+const searchFlights = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    console.log('=== BUILDING REQUEST ===');
+    
+    // Build slices based on trip type - EXACT format backend expects
+    let slices = [];
+    if (searchParams.tripType === 'one-way') {
+      slices = [{
+        origin: searchParams.from.trim().toUpperCase(),
+        destination: searchParams.to.trim().toUpperCase(), 
+        departureDate: searchParams.departDate
+      }];
+    } else if (searchParams.tripType === 'return') {
+      if (!searchParams.returnDate) {
+        throw new Error('Return date is required');
+      }
+      slices = [
+        {
+          origin: searchParams.from.trim().toUpperCase(),
+          destination: searchParams.to.trim().toUpperCase(),
+          departureDate: searchParams.departDate
+        },
+        {
+          origin: searchParams.to.trim().toUpperCase(), // CRITICAL: Reverse for return
+          destination: searchParams.from.trim().toUpperCase(),
+          departureDate: searchParams.returnDate
+        }
+      ];
+    } else if (searchParams.tripType === 'multi-city') {
+      slices = searchParams.multiCitySlices.map(slice => ({
+        origin: slice.origin.trim().toUpperCase(),
+        destination: slice.destination.trim().toUpperCase(),
+        departureDate: slice.departureDate
+      }));
+    }
+
+    const requestPayload = {
+      tripType: searchParams.tripType,
+      slices: slices,
+      passengers: {
+        adults: parseInt(searchParams.passengers) || 1,
+        children: 0,
+        infants: 0
+      },
+      cabinClass: searchParams.cabinClass || 'economy'
+    };
+
+    console.log('=== REQUEST PAYLOAD ===', JSON.stringify(requestPayload, null, 2));
+
+    // Call Supabase Edge Function with correct format
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/flights-search`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey
+      },
+      body: JSON.stringify(requestPayload)
+    });
+
+    console.log('=== RESPONSE STATUS ===', response.status);
+
+    const responseText = await response.text();
+    console.log('=== RAW RESPONSE ===', responseText);
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      throw new Error('Invalid response from server');
+    }
+
+    if (!response.ok) {
+      console.error('=== API ERROR ===', data);
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+
+    if (data.success && data.offers) {
+      console.log('=== SUCCESS ===', `${data.offers.length} offers received`);
+      
+      // Store REAL offers - NO MOCK DATA
+      setFlights({ 
+        outbound: data.offers, // Real Duffel offers
+        inbound: [] // Legacy structure
+      });
+    } else {
+      throw new Error(data.error || 'No flights found');
+    }
+
+  } catch (error) {
+    console.error('=== SEARCH ERROR ===', error);
+    setError(`Search failed: ${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
+2. Fix Return Flight Display Logic
+Update processOffersForDisplay to properly separate outbound and return slices:
+
+typescript
+const processOffersForDisplay = (offers: DuffelOffer[]) => {
+  const sliceGroups: { [sliceIndex: number]: any[] } = {};
+  
+  offers.forEach(offer => {
+    offer.slices.forEach((slice, sliceIndex) => {
+      if (!sliceGroups[sliceIndex]) {
+        sliceGroups[sliceIndex] = [];
+      }
+      
+      const displayFlight = {
+        id: `${offer.id}-slice-${sliceIndex}`,
+        offerId: offer.id,
+        sliceId: slice.id,
+        sliceIndex,
+        airline: slice.segments[0]?.marketing_carrier?.name,
+        flight_number: slice.segments[0]?.flight_number,
+        departure_time: slice.segments[0]?.departing_at,
+        arrival_time: slice.segments[slice.segments.length - 1]?.arriving_at,
+        departureAirport: slice.origin.iata_code,
+        arrivalAirport: slice.destination.iata_code,
+        duration: slice.duration,
+        stops: slice.segments.length - 1,
+        price: sliceIndex === 0 ? parseFloat(offer.total_amount) : 0,
+        currency: offer.total_currency
+      };
+      
+      sliceGroups[sliceIndex].push(displayFlight);
+    });
+  });
+  
+  return sliceGroups;
+};
+3. Add Multi-City Search Interface
+Create dynamic multi-city search with:
+
+Multi-City State Management:
+
+typescript
+interface MultiCitySlice {
+  id: string;
+  origin: string;
+  destination: string;
+  departureDate: string;
+}
+
+const [multiCitySlices, setMultiCitySlices] = useState<MultiCitySlice[]>([
+  { id: '1', origin: '', destination: '', departureDate: '' },
+  { id: '2', origin: '', destination: '', departureDate: '' }
+]);
+
+const addCity = () => {
+  if (multiCitySlices.length < 6) {
+    setMultiCitySlices([
+      ...multiCitySlices,
+      { id: Date.now().toString(), origin: '', destination: '', departureDate: '' }
+    ]);
+  }
+};
+
+const removeCity = (id: string) => {
+  if (multiCitySlices.length > 2) {
+    setMultiCitySlices(multiCitySlices.filter(slice => slice.id !== id));
+  }
+};
+Multi-City UI Components:
+
+Trip type selector: One-way | Return | Multi-city
+
+Dynamic city inputs with + and × buttons
+
+Visual airplane icons connecting cities
+
+Date validation (sequential dates)
+
+4. Fix Slice Title Display
+typescript
+const getSliceTitle = (sliceIndex: number): string => {
+  switch (searchParams.tripType) {
+    case 'return':
+      return sliceIndex === 0 
+        ? `Outbound (${searchParams.from} → ${searchParams.to})`
+        : `Return (${searchParams.to} → ${searchParams.from})`;
+    case 'one-way':
+      return `${searchParams.from} → ${searchParams.to}`;
+    case 'multi-city':
+      if (searchParams.multiCitySlices?.[sliceIndex]) {
+        const slice = searchParams.multiCitySlices[sliceIndex];
+        return `${slice.origin} → ${slice.destination}`;
+      }
+      return `Flight ${sliceIndex + 1}`;
+    default:
+      return `Flight ${sliceIndex + 1}`;
+  }
+};
+5. Remove ALL Mock Data
+Ensure no fake data generation - only use real Duffel API responses from your backend.
+
+Test Requirements:
+Test One-way: LAX → JFK (should work with Duffel Airways)
+
+Test Return: LAX ↔ JFK (must show both outbound and return sections)
+
+Test Multi-city: LAX → JFK → LHR (3+ cities)
+
+Debug console: Should show real API responses, not mock data
+
+Expected Behavior:
+Search LAX to JFK return trip
+
+See "Outbound (LAX → JFK)" section with real flights
+
+See "Return (JFK → LAX)" section with real flights
+
+Select one flight from each section
+
+Multi-city shows dynamic city inputs with +/× buttons
+
+All data comes from real Duffel API through Supabase Edge Function
+
+Files to Update:
+src/pages/flights.tsx - Fix API integration and add multi-city UI
+
+src/components/FlightSearchForm.tsx - Update search form
+
+src/components/FlightCard.tsx - Handle real flight data display
+
+PRIORITY:
+
+Fix the 422 error by sending proper POST body format
+
+Remove all mock data, use real API responses
+
+Fix return flight display for round-trips
+
+Add multi-city functionality
+
+The Status 422 error will be resolved once you send the correct slice-based POST body instead of URL parameters.
