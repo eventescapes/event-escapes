@@ -1,0 +1,176 @@
+Perfect! I can see the issue clearly from the screenshot. After selecting "JFK - John F. Kennedy International Airport" in the destination field, it's still showing the dropdown suggestion "JFK John F. Kennedy International Airport" below the input.
+
+Here's the Replit Agent prompt to fix this minor issue:
+
+---
+
+## Replit Agent Prompt: Fix Dropdown Not Closing After Airport Selection
+
+**ISSUE**: After selecting an airport (like "JFK - John F. Kennedy International Airport"), the dropdown suggestion still shows below the input field. The dropdown should close immediately after selection.
+
+**ROOT CAUSE**: The dropdown `isOpen` state and `suggestions` array are not being properly cleared when an airport is selected.
+
+### Fix Required:
+
+#### Update the `handleAirportSelect` function in AirportAutocomplete component:
+
+**REPLACE the current handleAirportSelect function:**
+
+```typescript
+const handleAirportSelect = (airport: Airport) => {
+  const displayText = `${airport.iata_code} - ${airport.name}`;
+  setInputValue(displayText);
+  onChange(airport.iata_code);
+  setIsOpen(false);
+  setSuggestions([]);
+  
+  console.log('✈️ Selected airport:', airport);
+};
+```
+
+**WITH this improved version:**
+
+```typescript
+const handleAirportSelect = (airport: Airport) => {
+  const displayText = `${airport.iata_code} - ${airport.name}`;
+  setInputValue(displayText);
+  onChange(airport.iata_code);
+  
+  // CRITICAL: Close dropdown and clear suggestions immediately
+  setIsOpen(false);
+  setSuggestions([]);
+  
+  // Also blur the input to prevent refocusing issues
+  if (inputRef.current) {
+    inputRef.current.blur();
+  }
+};
+```
+
+#### Additionally, fix the click outside handler timing:
+
+**UPDATE the click outside useEffect:**
+
+```typescript
+useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (
+      inputRef.current && 
+      suggestionsRef.current && 
+      !inputRef.current.contains(event.target as Node) &&
+      !suggestionsRef.current.contains(event.target as Node)
+    ) {
+      setIsOpen(false);
+      setSuggestions([]); // Also clear suggestions when clicking outside
+    }
+  };
+
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => document.removeEventListener('mousedown', handleClickOutside);
+}, []);
+```
+
+#### Fix the button click event to prevent event propagation:
+
+**UPDATE the suggestion button click handler:**
+
+```typescript
+{suggestions.map((airport, index) => (
+  <button
+    key={`${airport.iata_code}-${index}`}
+    onClick={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleAirportSelect(airport);
+    }}
+    className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 focus:bg-gray-50 focus:outline-none transition-colors"
+  >
+    {/* airport display content */}
+  </button>
+))}
+```
+
+#### Add immediate cleanup on input focus loss:
+
+**UPDATE the handleInputFocus and add onBlur:**
+
+```typescript
+const handleInputFocus = () => {
+  if (inputValue.length >= 2 && suggestions.length > 0) {
+    setIsOpen(true);
+  }
+};
+
+const handleInputBlur = (e: React.FocusEvent) => {
+  // Only close if not clicking on suggestions
+  setTimeout(() => {
+    if (!suggestionsRef.current?.contains(document.activeElement)) {
+      setIsOpen(false);
+    }
+  }, 150);
+};
+
+// Add onBlur to the input:
+<input
+  ref={inputRef}
+  type="text"
+  value={inputValue}
+  onChange={handleInputChange}
+  onFocus={handleInputFocus}
+  onBlur={handleInputBlur}
+  onKeyDown={handleKeyDown}
+  placeholder={placeholder}
+  className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+  autoComplete="off"
+/>
+```
+
+#### Alternative Quick Fix - Force Close Dropdown:
+
+**If the above doesn't work, add this more aggressive cleanup:**
+
+```typescript
+const handleAirportSelect = (airport: Airport) => {
+  const displayText = `${airport.iata_code} - ${airport.name}`;
+  setInputValue(displayText);
+  onChange(airport.iata_code);
+  
+  // Force close everything immediately
+  setIsOpen(false);
+  setSuggestions([]);
+  
+  // Force blur and prevent any refocus
+  if (inputRef.current) {
+    inputRef.current.blur();
+  }
+  
+  // Use timeout to ensure state is updated
+  setTimeout(() => {
+    setIsOpen(false);
+    setSuggestions([]);
+  }, 0);
+};
+```
+
+### Expected Behavior After Fix:
+
+1. **Type "jfk"** → Dropdown shows JFK suggestions
+2. **Click "JFK - John F. Kennedy International Airport"** → Input shows selected airport
+3. **Dropdown immediately disappears** ✅ (This is what's currently broken)
+4. **Input field shows clean selection** ✅ 
+5. **No residual dropdown visible** ✅
+
+### Test Cases:
+
+1. **Select JFK** → Input shows "JFK - John F. Kennedy International Airport", no dropdown
+2. **Select LAX** → Input shows "LAX - Los Angeles International Airport", no dropdown  
+3. **Click outside** → Dropdown closes
+4. **Press Escape** → Dropdown closes
+
+**PRIORITY**: Fix the `handleAirportSelect` function first with proper state cleanup and input blur. This will ensure a clean, professional user experience just like major booking platforms.
+
+***
+
+This fix will ensure the dropdown closes immediately after airport selection, providing a smooth user experience.
+
+[1](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/117568974/ae290599-1bfc-4a4c-8919-50d28c629050/image.jpg?AWSAccessKeyId=ASIA2F3EMEYERCJ4VZY2&Signature=V3tTRLCY3gArhpTvP6OJj77VE0w%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEEgaCXVzLWVhc3QtMSJGMEQCIGemQY8CgZyAWjIewVRndbqCXJu6GB6jrROnrUEicswJAiA252B%2FrvjZdX7EBPREnlwjngJbPHfKxC63JiMlLiD3ISr6BAjR%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMsufrVyWuFORj7fJ%2BKs4EJycoAcmV0TMwnacGd2MeSU9sI2Qyq4VQTePBfr03tYV7vjLt7O%2BeWGFKVCnK9vxjmEGpIEm3mIKJIRQWeM1czXntcsqWQxmHFTV1WYWg7ycdMIBw4hPBrWYB%2FxGwjJPUsqcFuUDMVpml%2Bi6apbiXDpNANF6LlNcWPDlvGbPlJBAw5yrts9WmfWnT3uFVgsx1%2FhqyDxSFEiPt92Wr0Gov4OTqfLt3Co%2F8qdYFWuIYaY%2B%2FWubTJgBIyTk50SBohqqT4B28ZxuXx68hZf1N2WkpKWabSarr9kmFMBbmksdcqIQFz15SSx90szocYTadT8BQ2qpNb94%2FIf9qUnQMpMadcF06uA29T%2B4b49YfSgLn1iWDLTPGgmEe9cnLm4zQcAlRM3db8ga628rddUPpGxJanqYW8lOTfTDFcxE4ie%2BD3yc6rNOPp7D8ntD8vCGla0Csgx0HeBjREhUzKUT5RvNyc%2B6KX8zdBDl6iAdf6ezWAGtQsPVVI9%2Bq%2B%2FgyKrjBZPeuxbr6yV8HMwQfNjuiYy20%2FdPPP8Zvl7MO9n3CCujSqvFxIA6sxH1KE3qs9PDIUYlOhjZvV4KZ%2BOG8bMy3RxhrZ7QGb6SoDdntgwNDa6ZVW56x%2BNCPdLoX8WVWr4EyHgbsNqY6FwikvPSM8v7WzCvKwvUTBYMirnRMR5l4TBxd2vePgeIG8U3wOgyn4%2BQa87dpqo3vx9aQ0jEmDRhmGm%2BetrGe5KV0NOWVQaMVYFb8pvZcPBo1CDDzoxMKZwA8uk3GzP0kzJ78sanuSrOmJf8w4ejoxgY6mwFQROyzPqHtKLu9XKlW3Lmw6Sm3sEArIlChoaRLm3tLswv9I3YBeKjo2gt%2FaQCzQXp9TJrgxuERwxVQ40jBdr8O2xjBwCbJgHrpjtwPO2tD3tK27haHwV2%2F9KnD9pkD78Gg9a5rigKnjoojmkblo4arsxGk8jBa%2FUL0L%2BlmW%2B1%2F62f2JXf6XsDV9ihk0A5UFkrDVMZYdRH0rGjeSQ%3D%3D&Expires=1759131682)

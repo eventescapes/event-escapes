@@ -78,6 +78,7 @@ export default function AirportAutocomplete({
         !suggestionsRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
+        setSuggestions([]); // Also clear suggestions when clicking outside
       }
     };
 
@@ -143,17 +144,36 @@ export default function AirportAutocomplete({
     const displayText = `${airport.iata_code} - ${airport.name}`;
     setInputValue(displayText);
     onChange(airport.iata_code);
+    
+    // CRITICAL: Close dropdown and clear suggestions immediately
     setIsOpen(false);
     setSuggestions([]);
+    
+    // Also blur the input to prevent refocusing issues
+    if (inputRef.current) {
+      inputRef.current.blur();
+    }
+    
+    // Use timeout to ensure state is updated
+    setTimeout(() => {
+      setIsOpen(false);
+      setSuggestions([]);
+    }, 0);
   };
 
   const handleInputFocus = () => {
-    if (inputValue === '' || inputValue.length < 2) {
-      setSuggestions(popularAirports);
-      setIsOpen(true);
-    } else if (suggestions.length > 0) {
+    if (inputValue.length >= 2 && suggestions.length > 0) {
       setIsOpen(true);
     }
+  };
+
+  const handleInputBlur = (e: React.FocusEvent) => {
+    // Only close if not clicking on suggestions
+    setTimeout(() => {
+      if (!suggestionsRef.current?.contains(document.activeElement)) {
+        setIsOpen(false);
+      }
+    }, 150);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -177,6 +197,7 @@ export default function AirportAutocomplete({
           value={inputValue}
           onChange={handleInputChange}
           onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
@@ -204,7 +225,11 @@ export default function AirportAutocomplete({
           {suggestions.map((airport, index) => (
             <button
               key={`${airport.iata_code}-${index}`}
-              onClick={() => handleAirportSelect(airport)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleAirportSelect(airport);
+              }}
               className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 focus:bg-gray-50 focus:outline-none transition-colors"
               data-testid={`airport-suggestion-${airport.iata_code}`}
             >
