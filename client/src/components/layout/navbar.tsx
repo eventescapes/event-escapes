@@ -1,9 +1,12 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Brain, User } from "lucide-react";
+import { Brain, User, ShoppingCart } from "lucide-react";
+import { useBooking } from "@/contexts/BookingContext";
 
 export default function Navbar() {
   const [location] = useLocation();
+  const { getCartItemCount } = useBooking();
+  const cartItemCount = getCartItemCount();
 
   const isActiveRoute = (route: string) => {
     return location === route || location.startsWith(route + '/');
@@ -71,6 +74,24 @@ export default function Navbar() {
               <Brain className="w-5 h-5 mr-2" />
               AI Trip Planner
             </Button>
+            <div className="w-px h-6 bg-border"></div>
+            
+            {/* Cart Icon with Badge */}
+            <Link href="/cart">
+              <Button 
+                variant="ghost" 
+                className="relative font-accent font-medium tracking-wide text-secondary hover:text-accent transition-all duration-300 hover:scale-105"
+                data-testid="button-cart"
+              >
+                <ShoppingCart className="w-5 h-5" />
+                {cartItemCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
+                    {cartItemCount > 99 ? '99+' : cartItemCount}
+                  </span>
+                )}
+              </Button>
+            </Link>
+            
             <div className="w-px h-6 bg-border"></div>
             <Button 
               className="btn-luxury px-6 py-2 font-accent font-semibold tracking-wide"

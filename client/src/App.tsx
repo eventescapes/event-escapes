@@ -10,6 +10,7 @@ import Home from "@/pages/home";
 import EventDetail from "@/pages/event-detail";
 import HotelResults from "@/pages/hotel-results";
 import FlightResults from "@/pages/flight-results";
+import CartPage from "@/pages/cart";
 import Checkout from "@/pages/checkout";
 import Confirmation from "@/pages/confirmation";
 import FindBooking from "@/pages/find-booking";
@@ -26,6 +27,7 @@ function Router() {
           <Route path="/events/:id" component={EventDetail} />
           <Route path="/hotels" component={HotelResults} />
           <Route path="/flights" component={FlightResults} />
+          <Route path="/cart" component={CartPage} />
           <Route path="/checkout" component={Checkout} />
           <Route path="/confirmation" component={Confirmation} />
           <Route path="/find-booking" component={FindBooking} />
