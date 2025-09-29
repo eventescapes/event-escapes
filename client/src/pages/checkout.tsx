@@ -552,7 +552,7 @@ export default function Checkout() {
               </div>
               
               {/* Cart Items */}
-              {cartData.items.map((item, index) => (
+              {cartData.items.map((item: any, index: number) => (
                 <div key={item.id} className="mb-8 p-4 glass rounded-xl" data-testid={`cart-item-${index}`}>
                   <div className="flex items-center space-x-3 mb-3">
                     <div className="w-10 h-10 bg-luxury-gradient rounded-full flex items-center justify-center">
@@ -604,10 +604,10 @@ export default function Checkout() {
                     {item.type === 'flight' && item.selectedSeats && (item.selectedSeats.outbound.length > 0 || item.selectedSeats.return.length > 0) && (
                       <div className="text-xs text-muted-foreground">
                         {item.selectedSeats.outbound.length > 0 && (
-                          <p>Outbound seats: {item.selectedSeats.outbound.map(seat => seat.designator).join(', ')}</p>
+                          <p>Outbound seats: {item.selectedSeats.outbound.map((seat: any) => seat.designator).join(', ')}</p>
                         )}
                         {item.selectedSeats.return.length > 0 && (
-                          <p>Return seats: {item.selectedSeats.return.map(seat => seat.designator).join(', ')}</p>
+                          <p>Return seats: {item.selectedSeats.return.map((seat: any) => seat.designator).join(', ')}</p>
                         )}
                       </div>
                     )}
@@ -615,7 +615,7 @@ export default function Checkout() {
                     {/* Selected Baggage */}
                     {item.type === 'flight' && item.selectedBaggage && item.selectedBaggage.length > 0 && (
                       <div className="text-xs text-muted-foreground">
-                        <p>Baggage: {item.selectedBaggage.map(bag => `${bag.type} (${bag.weight})`).join(', ')}</p>
+                        <p>Baggage: {item.selectedBaggage.map((bag: any) => `${bag.type} (${bag.weight})`).join(', ')}</p>
                       </div>
                     )}
                   </div>
