@@ -67,7 +67,7 @@ export default function CartPage() {
               className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3"
               data-testid="button-start-shopping"
             >
-              Start Shopping
+              Start Planning Your Trip
             </Button>
           </div>
         </div>
@@ -122,25 +122,50 @@ export default function CartPage() {
                       </span>
                     </div>
                     
-                    {/* Flight Details */}
+                    {/* Enhanced Flight Details */}
                     {item.type === 'flight' && (
-                      <div className="space-y-3">
+                      <div className="space-y-4">
+                        <h3 className="text-xl font-semibold text-gray-900">
+                          {item.outboundFlight && item.returnFlight ? 'Round-trip' : 'One-way'}: {item.outboundFlight?.departure} → {item.outboundFlight?.arrival}
+                          {item.returnFlight && ` → ${item.returnFlight.departure}`}
+                        </h3>
+                        
                         {item.outboundFlight && (
-                          <div className="border-l-4 border-blue-500 pl-4">
-                            <h4 className="font-semibold text-gray-900 mb-1">Outbound Flight</h4>
-                            <div className="text-sm text-gray-600">
-                              <p>{item.outboundFlight.airline} • {item.outboundFlight.departure} → {item.outboundFlight.arrival}</p>
-                              <p>Duration: {item.outboundFlight.duration} • {item.outboundFlight.stops === 0 ? 'Direct' : `${item.outboundFlight.stops} stop(s)`}</p>
+                          <div className="border-l-4 border-blue-500 pl-4 bg-blue-50 p-3 rounded-r-lg">
+                            <h4 className="font-semibold text-blue-900 mb-2">Outbound Flight</h4>
+                            <div className="space-y-1">
+                              <div className="text-sm text-blue-800">
+                                <span className="font-medium">{item.outboundFlight.airline} {(item.outboundFlight as any).flightNumber || item.outboundFlight.id?.slice(-4)}</span>
+                                <span className="mx-2">|</span>
+                                <span>{(item.outboundFlight as any).departTime || 'TBD'} - {(item.outboundFlight as any).arriveTime || 'TBD'}</span>
+                              </div>
+                              <div className="text-sm text-blue-700">
+                                <span className="font-medium">Cabin:</span> {(item.outboundFlight as any).cabinClass || 'Economy'}
+                                <span className="mx-2">•</span>
+                                <span>Duration: {item.outboundFlight.duration}</span>
+                                <span className="mx-2">•</span>
+                                <span>{item.outboundFlight.stops === 0 ? 'Direct' : `${item.outboundFlight.stops} stop(s)`}</span>
+                              </div>
                             </div>
                           </div>
                         )}
                         
                         {item.returnFlight && (
-                          <div className="border-l-4 border-green-500 pl-4">
-                            <h4 className="font-semibold text-gray-900 mb-1">Return Flight</h4>
-                            <div className="text-sm text-gray-600">
-                              <p>{item.returnFlight.airline} • {item.returnFlight.departure} → {item.returnFlight.arrival}</p>
-                              <p>Duration: {item.returnFlight.duration} • {item.returnFlight.stops === 0 ? 'Direct' : `${item.returnFlight.stops} stop(s)`}</p>
+                          <div className="border-l-4 border-green-500 pl-4 bg-green-50 p-3 rounded-r-lg">
+                            <h4 className="font-semibold text-green-900 mb-2">Return Flight</h4>
+                            <div className="space-y-1">
+                              <div className="text-sm text-green-800">
+                                <span className="font-medium">{item.returnFlight.airline} {(item.returnFlight as any).flightNumber || item.returnFlight.id?.slice(-4)}</span>
+                                <span className="mx-2">|</span>
+                                <span>{(item.returnFlight as any).departTime || 'TBD'} - {(item.returnFlight as any).arriveTime || 'TBD'}</span>
+                              </div>
+                              <div className="text-sm text-green-700">
+                                <span className="font-medium">Cabin:</span> {(item.returnFlight as any).cabinClass || 'Economy'}
+                                <span className="mx-2">•</span>
+                                <span>Duration: {item.returnFlight.duration}</span>
+                                <span className="mx-2">•</span>
+                                <span>{item.returnFlight.stops === 0 ? 'Direct' : `${item.returnFlight.stops} stop(s)`}</span>
+                              </div>
                             </div>
                           </div>
                         )}
@@ -273,9 +298,9 @@ export default function CartPage() {
                   onClick={handleContinueShopping}
                   variant="outline"
                   className="w-full"
-                  data-testid="button-continue-shopping"
+                  data-testid="button-continue-planning"
                 >
-                  Continue Shopping
+                  Continue Planning Your Trip
                 </Button>
               </div>
             </div>
