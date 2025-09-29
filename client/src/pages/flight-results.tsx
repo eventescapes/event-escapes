@@ -160,60 +160,72 @@ const FlightResults = () => {
     }
   };
 
-  // Main search function - REMOVES ALL MOCK DATA
+  // Main search function - FIXES Status 422 errors with correct format
   const searchFlights = async (e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
 
-    console.log('=== SEARCH REQUEST ===');
-    console.log('Trip Type:', searchParams.tripType);
-    
-    setLoading(true);
-    setError(null);
-    setSelectedOffers({});
-    setOffers([]);
-
     try {
-      // Build the NEW request format that matches backend Edge Function
-      const searchRequest = {
+      setLoading(true);
+      setError(null);
+      
+      console.log('=== BUILDING REQUEST ===');
+      
+      // Build slices based on trip type - EXACT format backend expects
+      let slices: Array<{
+        origin: string;
+        destination: string;
+        departureDate: string;
+      }> = [];
+      if (searchParams.tripType === 'one-way') {
+        slices = [{
+          origin: searchParams.from.trim().toUpperCase(),
+          destination: searchParams.to.trim().toUpperCase(), 
+          departureDate: searchParams.departDate
+        }];
+      } else if (searchParams.tripType === 'return') {
+        if (!searchParams.returnDate) {
+          throw new Error('Return date is required');
+        }
+        slices = [
+          {
+            origin: searchParams.from.trim().toUpperCase(),
+            destination: searchParams.to.trim().toUpperCase(),
+            departureDate: searchParams.departDate
+          },
+          {
+            origin: searchParams.to.trim().toUpperCase(), // CRITICAL: Reverse for return
+            destination: searchParams.from.trim().toUpperCase(),
+            departureDate: searchParams.returnDate
+          }
+        ];
+      } else if (searchParams.tripType === 'multi-city') {
+        slices = (searchParams.multiCitySlices || []).map(slice => ({
+          origin: slice.origin.trim().toUpperCase(),
+          destination: slice.destination.trim().toUpperCase(),
+          departureDate: slice.departure_date
+        }));
+      }
+
+      const requestPayload = {
         tripType: searchParams.tripType,
-        slices: buildSlicesFromParams(),
+        slices: slices,
         passengers: {
-          adults: searchParams.passengers,
+          adults: parseInt(searchParams.passengers.toString()) || 1,
           children: 0,
           infants: 0
         },
-        cabinClass: searchParams.cabinClass as 'first' | 'business' | 'premium_economy' | 'economy',
-        maxConnections: 1
+        cabinClass: searchParams.cabinClass || 'economy'
       };
 
-      console.log('Request Payload:', searchRequest);
-
-      // Validate request
-      if (searchRequest.slices.length === 0) {
-        throw new Error('No slices configured for search');
-      }
-
-      if (searchParams.tripType === 'return' && !searchParams.returnDate) {
-        throw new Error('Return date is required for return trips');
-      }
-
-      if (searchParams.tripType === 'multi-city' && searchRequest.slices.length < 2) {
-        throw new Error('Multi-city trips require at least 2 slices');
-      }
+      console.log('=== REQUEST PAYLOAD ===', JSON.stringify(requestPayload, null, 2));
 
       // Call Supabase Edge Function with correct format
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-      if (!supabaseUrl || !supabaseKey) {
-        throw new Error('Missing Supabase environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
-      }
-
-      console.log('[API Call] Calling:', `${supabaseUrl}/functions/v1/flights-search`);
-
+      
       const response = await fetch(`${supabaseUrl}/functions/v1/flights-search`, {
         method: 'POST',
         headers: {
@@ -221,91 +233,45 @@ const FlightResults = () => {
           'Content-Type': 'application/json',
           'apikey': supabaseKey
         },
-        body: JSON.stringify(searchRequest)
+        body: JSON.stringify(requestPayload)
       });
 
-      console.log('[API Response] Status:', response.status, response.statusText);
+      console.log('=== RESPONSE STATUS ===', response.status);
+
+      const responseText = await response.text();
+      console.log('=== RAW RESPONSE ===', responseText);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        throw new Error('Invalid response from server');
+      }
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Network error' }));
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        console.error('=== API ERROR ===', data);
+        throw new Error(data.error || `HTTP ${response.status}`);
       }
 
-      const data: EdgeFunctionSearchResponse = await response.json();
-      
-      console.log('=== API RESPONSE ===');
-      console.log('Success:', data.success);
-      console.log('Trip Type:', data.trip_type);
-      console.log('Total Offers:', data.total_offers);
-      console.log('Offers Count:', data.offers?.length || 0);
-
-      if (!data.success) {
-        throw new Error(data.error || 'Search failed');
+      if (data.success && data.offers) {
+        console.log('=== SUCCESS ===', `${data.offers.length} offers received`);
+        
+        // Store REAL offers - NO MOCK DATA
+        setOffers(data.offers); // Real Duffel offers
+      } else {
+        throw new Error(data.error || 'No flights found');
       }
 
-      if (!data.offers || data.offers.length === 0) {
-        console.log('[Flight Search] No offers returned');
-        setOffers([]);
-        return;
-      }
-
-      // STORE REAL offers, not mock data
-      setOffers(data.offers);
-
-      console.log('=== PROCESSED DISPLAY DATA ===');
-      console.log('Real Offers Stored:', data.offers.length);
-      console.log('First Offer Slices:', data.offers[0]?.slices?.length);
-      
-      const sliceGroups = processOffersForDisplay(data.offers);
-      console.log('Slice Groups:', Object.keys(sliceGroups));
-      console.log('Outbound Flights:', sliceGroups[0]?.length);
-      console.log('Return Flights:', sliceGroups[1]?.length);
-
-    } catch (err) {
-      console.error('=== SEARCH ERROR ===', err);
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(`Flight search failed: ${errorMessage}`);
+    } catch (error) {
+      console.error('=== SEARCH ERROR ===', error);
+      const message = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(`Search failed: ${message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Process offers for display - handles return flight separation
-  const processOffersForDisplay = (offersData: EdgeFunctionOffer[]) => {
-    const sliceGroups: { [sliceIndex: number]: any[] } = {};
-    
-    offersData.forEach(offer => {
-      offer.slices.forEach((slice, sliceIndex) => {
-        if (!sliceGroups[sliceIndex]) {
-          sliceGroups[sliceIndex] = [];
-        }
-        
-        const displayFlight = {
-          id: `${offer.id}-slice-${sliceIndex}`,
-          offerId: offer.id,
-          sliceId: slice.slice_index.toString(),
-          sliceIndex,
-          airline: slice.segments[0]?.airline || 'Unknown Airline',
-          flight_number: slice.segments[0]?.flight_number || 'XX000',
-          departure_time: slice.departure_time,
-          arrival_time: slice.arrival_time,
-          departureAirport: slice.origin,
-          arrivalAirport: slice.destination,
-          duration: slice.duration,
-          stops: slice.stops || slice.segments.length - 1,
-          price: sliceIndex === 0 ? offer.total_amount : 0,
-          currency: offer.total_currency,
-          segments: slice.segments
-        };
-        
-        sliceGroups[sliceIndex].push(displayFlight);
-      });
-    });
-    
-    return sliceGroups;
-  };
-
-  // Get slice title helper
+  // Get proper slice title for display
   const getSliceTitle = (sliceIndex: number): string => {
     switch (searchParams.tripType) {
       case 'return':
@@ -319,11 +285,47 @@ const FlightResults = () => {
           const slice = searchParams.multiCitySlices[sliceIndex];
           return `${slice.origin} → ${slice.destination}`;
         }
-        return `Slice ${sliceIndex + 1}`;
+        return `Flight ${sliceIndex + 1}`;
       default:
-        return `Slice ${sliceIndex + 1}`;
+        return `Flight ${sliceIndex + 1}`;
     }
   };
+
+  // Process offers for display - properly separate outbound and return slices
+  const processOffersForDisplay = (offers: EdgeFunctionOffer[]) => {
+    const sliceGroups: { [sliceIndex: number]: any[] } = {};
+    
+    offers.forEach(offer => {
+      offer.slices.forEach((slice, sliceIndex) => {
+        if (!sliceGroups[sliceIndex]) {
+          sliceGroups[sliceIndex] = [];
+        }
+        
+        const displayFlight = {
+          id: `${offer.id}-slice-${sliceIndex}`,
+          offerId: offer.id,
+          sliceId: slice.slice_index.toString(),
+          sliceIndex,
+          airline: slice.segments[0]?.airline,
+          flight_number: slice.segments[0]?.flight_number,
+          departure_time: slice.segments[0]?.departing_at || slice.departure_time,
+          arrival_time: slice.segments[slice.segments.length - 1]?.arriving_at || slice.arrival_time,
+          departureAirport: slice.origin,
+          arrivalAirport: slice.destination,
+          duration: slice.duration,
+          stops: slice.segments.length - 1,
+          price: sliceIndex === 0 ? parseFloat(offer.total_amount.toString()) : 0,
+          currency: offer.total_currency,
+          segments: slice.segments
+        };
+        
+        sliceGroups[sliceIndex].push(displayFlight);
+      });
+    });
+    
+    return sliceGroups;
+  };
+
 
   // Multi-city helpers
   const addCity = () => {
