@@ -1,5 +1,6 @@
 import React from "react";
 import type { SelectedSeat } from "@/types/flights";
+import { ShoppingCart } from "lucide-react";
 
 type Money = { amount: number; currency: string };
 
@@ -15,22 +16,28 @@ export default function TripSummary({
   inbound,
   passengers = 1,
   selectedSeats,
-  onContinue,
+  selectedBaggage,
+  onAddToCart,
+  isCartMode = true,
 }: {
   outbound?: { price?: Money; carrier?: string; dep?: string; arr?: string };
   inbound?: { price?: Money; carrier?: string; dep?: string; arr?: string };
   passengers?: number;
   selectedSeats?: { outbound: SelectedSeat[]; return: SelectedSeat[] };
-  onContinue?: () => void;
+  selectedBaggage?: any[];
+  onAddToCart?: () => void;
+  isCartMode?: boolean;
 }) {
   const seatTotalOutbound = selectedSeats?.outbound.reduce((sum, seat) => sum + seat.price, 0) || 0;
   const seatTotalReturn = selectedSeats?.return.reduce((sum, seat) => sum + seat.price, 0) || 0;
+  const baggageTotal = selectedBaggage?.reduce((sum, bag) => sum + (bag.price || 0), 0) || 0;
   
   const total =
     (outbound?.price?.amount || 0) +
     (inbound?.price?.amount || 0) +
     seatTotalOutbound +
-    seatTotalReturn;
+    seatTotalReturn +
+    baggageTotal;
 
   const currency =
     inbound?.price?.currency ||
@@ -87,6 +94,19 @@ export default function TripSummary({
               )}
             </div>
           )}
+          
+          {/* Baggage Information */}
+          {selectedBaggage && selectedBaggage.length > 0 && (
+            <div className="border-t pt-3">
+              <div className="text-xs uppercase text-gray-500 mb-2">Selected Baggage</div>
+              {selectedBaggage.map((bag, index) => (
+                <div key={index} className="flex items-center justify-between mb-1">
+                  <div className="text-sm">{bag.type}: {bag.weight}</div>
+                  <div className="text-sm font-medium">{currency} ${bag.price?.toFixed(0)}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="border-t pt-3">
             <div className="flex items-center justify-between">
@@ -100,18 +120,35 @@ export default function TripSummary({
             </div>
           </div>
 
-          <button
-            disabled={!bothSelected}
-            onClick={onContinue}
-            className={
-              "w-full mt-2 rounded-xl py-3 text-white font-medium " +
-              (bothSelected
-                ? "bg-green-600 hover:bg-green-700"
-                : "bg-gray-300 cursor-not-allowed")
-            }
-          >
-            {bothSelected ? "Continue to Payment" : "Select both flights to continue"}
-          </button>
+          {isCartMode ? (
+            <button
+              disabled={!bothSelected}
+              onClick={onAddToCart}
+              className={
+                "w-full mt-2 rounded-xl py-3 text-white font-medium flex items-center justify-center gap-2 " +
+                (bothSelected
+                  ? "bg-blue-600 hover:bg-blue-700"
+                  : "bg-gray-300 cursor-not-allowed")
+              }
+              data-testid="button-add-to-cart"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              {bothSelected ? "Add to Cart" : "Select both flights to continue"}
+            </button>
+          ) : (
+            <button
+              disabled={!bothSelected}
+              onClick={onAddToCart}
+              className={
+                "w-full mt-2 rounded-xl py-3 text-white font-medium " +
+                (bothSelected
+                  ? "bg-green-600 hover:bg-green-700"
+                  : "bg-gray-300 cursor-not-allowed")
+              }
+            >
+              {bothSelected ? "Continue to Payment" : "Select both flights to continue"}
+            </button>
+          )}
         </div>
       </div>
     </aside>
