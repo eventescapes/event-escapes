@@ -27,6 +27,7 @@ export default function AirportAutocomplete({
   const [suggestions, setSuggestions] = useState<Airport[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isSelecting, setIsSelecting] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout>();
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -48,7 +49,7 @@ export default function AirportAutocomplete({
 
   // Debounced search function
   useEffect(() => {
-    if (inputValue.length >= 2) {
+    if (inputValue.length >= 2 && !isSelecting) {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
@@ -66,7 +67,7 @@ export default function AirportAutocomplete({
         clearTimeout(debounceRef.current);
       }
     };
-  }, [inputValue]);
+  }, [inputValue, isSelecting]);
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -227,15 +228,15 @@ export default function AirportAutocomplete({
               key={`${airport.iata_code}-${index}`}
               onClick={(e) => {
                 e.stopPropagation();
+                setIsSelecting(true);
                 const displayText = `${airport.iata_code} - ${airport.name}`;
                 setInputValue(displayText);
                 onChange(airport.iata_code);
                 setIsOpen(false);
                 setSuggestions([]);
                 setTimeout(() => {
-                  setIsOpen(false);
-                  setSuggestions([]);
-                }, 1);
+                  setIsSelecting(false);
+                }, 100);
               }}
               className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 focus:bg-gray-50 focus:outline-none transition-colors"
               data-testid={`airport-suggestion-${airport.iata_code}`}
