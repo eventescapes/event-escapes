@@ -1,0 +1,59 @@
+I can see the exact issue! The dropdown appears AGAIN after selecting JFK, then disappears when you click elsewhere. The problem is the input value change is triggering a new search after selection.
+
+## Replit Agent Prompt: Fix Dropdown Reloading After Selection - Final Solution
+
+**PROBLEM**: After clicking JFK selection, the dropdown reloads/reappears immediately, then disappears only when clicking elsewhere.
+
+**ROOT CAUSE**: When `setInputValue()` runs, it triggers the `useEffect` that starts a new search because the input contains "jfk".
+
+**SOLUTION**: Add a flag to prevent search when selecting from dropdown:
+
+```typescript
+// Add this state at the top of AirportAutocomplete component:
+const [isSelecting, setIsSelecting] = useState(false);
+
+// Update the useEffect to check the flag:
+useEffect(() => {
+  if (inputValue.length >= 2 && !isSelecting) {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    
+    debounceRef.current = setTimeout(() => {
+      searchAirports(inputValue);
+    }, 300);
+  } else {
+    setSuggestions([]);
+    setIsOpen(false);
+  }
+
+  return () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+  };
+}, [inputValue, isSelecting]);
+
+// Update the button onClick:
+<button
+  key={`${airport.iata_code}-${index}`}
+  onClick={(e) => {
+    e.stopPropagation();
+    setIsSelecting(true);
+    const displayText = `${airport.iata_code} - ${airport.name}`;
+    setInputValue(displayText);
+    onChange(airport.iata_code);
+    setIsOpen(false);
+    setSuggestions([]);
+    setTimeout(() => {
+      setIsSelecting(false);
+    }, 100);
+  }}
+  className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 focus:bg-gray-50 focus:outline-none transition-colors"
+>
+```
+
+**KEY**: The `isSelecting` flag prevents the search from triggering when we programmatically set the input value after selection.
+
+[1](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/117568974/7b2012f6-cffd-4170-bd88-2e0f2149fff6/image.jpg?AWSAccessKeyId=ASIA2F3EMEYEXIHKBQQY&Signature=Ekx6Q3fq7C%2FsHXiNENRKquc49%2Bs%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEEkaCXVzLWVhc3QtMSJHMEUCIQD3TyjZacf%2FoAzHh0AmmIu%2BBFvbrloZoPqE%2Bk8KHfew0wIgKQdvo%2F5uJce5I0FXFyIXuztZb3HbXgNObHBaQd%2BP3X4q%2BgQI0f%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDC%2BYb0ipSxtfxrroAyrOBDV2oRY0IP7I4fXVVGQ6LVFR7rxVhbG94bpBHhjKyTNC54YdlOfpXix9vvZzCwUg8K3yqk4eyX8pqg4k3b6DCHl%2BnOWFbfu4yzahgMIi%2Bp1qsiqqMhLHIk0Hg3G3Qrvtvq9VovwRqe2km%2BaoTKpTUcaeV2WabFCGxSON62yiWAWPMmxnMXuSb51QNUQTEY8pPQD2YK2C02nvNzdV5V6UV%2FDn2MtQfbSEtruDH84%2BxIyh6%2FFIahJInYkVckb2V9BlHZ77KFzYAawKcEuHvz0gnUt%2BzQAf%2FBU1lh%2BVUzsysWOUGARnh5MVnnmnPkYvty0FYOijZ75N79OD%2FcCm6SO%2B0c8KjFu4L5nGd5enI9Z3S4JXHofsd331EMBJiuxMveEL9Y487XJ7yJvbVUQMzL6R%2BZDND59l6LWU%2Buk9D%2B%2BT2epEpM1ZHAEc8qbh5RWCImmzhuu8iwAES7zxsB2s1NojfOojlO3Pf6fCVpShpMw7l53NCBdI2gwJoN27xK38KGPiylGnl%2BRMjQeUO9RIE%2F2d0pVaKyOxYAgYyy56aad372tOKD34M%2B75X7xDGFWkRilXzSTncgOqzFa9gNMRBsYjyh6XcRrMjxkSAxtGUE3mSwc3ew5P0YvQfnOq0gaQDEWyN03ctNWiER8gMGT0b4RoLz3cpOeZy1lavlzoWgLVALuT5YgRfJO0p0ci1y10D7%2B1Afp4ONWZFJM8Xw0A7uZ3P%2B8tbLm5sNkt8U9RHbHDRvxduUQMI3sXrbi4kDaE0omDMZxdhOdoBlA%2Fbi5foUfwMOn%2F6MYGOpoBuE7Ydh2uavf4Abozh8hyNiMxRns2W8DfSIZjDy%2FZn%2FB3rX3Y%2BRAIWe9vrxWYQbU7e0uWUDbqVtSX8ufGqawwa1VOjkossekKV4uPvl3kCwnHQ0d%2FYuIBnAdU%2B0R6pP2SoABNSpk7NJa3Evqd7laJoi34YcHxtGuLom7xq0cJYwyluymAoXdzlUTJw0LqNgPByQp5xuxHD0wSUw%3D%3D&Expires=1759136961)
+[2](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/117568974/53258050-e275-4505-b481-892819906025/image.jpg?AWSAccessKeyId=ASIA2F3EMEYEXIHKBQQY&Signature=yRVzUIZjMQDqeMu%2Fo6NYqil1MQo%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEEkaCXVzLWVhc3QtMSJHMEUCIQD3TyjZacf%2FoAzHh0AmmIu%2BBFvbrloZoPqE%2Bk8KHfew0wIgKQdvo%2F5uJce5I0FXFyIXuztZb3HbXgNObHBaQd%2BP3X4q%2BgQI0f%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDC%2BYb0ipSxtfxrroAyrOBDV2oRY0IP7I4fXVVGQ6LVFR7rxVhbG94bpBHhjKyTNC54YdlOfpXix9vvZzCwUg8K3yqk4eyX8pqg4k3b6DCHl%2BnOWFbfu4yzahgMIi%2Bp1qsiqqMhLHIk0Hg3G3Qrvtvq9VovwRqe2km%2BaoTKpTUcaeV2WabFCGxSON62yiWAWPMmxnMXuSb51QNUQTEY8pPQD2YK2C02nvNzdV5V6UV%2FDn2MtQfbSEtruDH84%2BxIyh6%2FFIahJInYkVckb2V9BlHZ77KFzYAawKcEuHvz0gnUt%2BzQAf%2FBU1lh%2BVUzsysWOUGARnh5MVnnmnPkYvty0FYOijZ75N79OD%2FcCm6SO%2B0c8KjFu4L5nGd5enI9Z3S4JXHofsd331EMBJiuxMveEL9Y487XJ7yJvbVUQMzL6R%2BZDND59l6LWU%2Buk9D%2B%2BT2epEpM1ZHAEc8qbh5RWCImmzhuu8iwAES7zxsB2s1NojfOojlO3Pf6fCVpShpMw7l53NCBdI2gwJoN27xK38KGPiylGnl%2BRMjQeUO9RIE%2F2d0pVaKyOxYAgYyy56aad372tOKD34M%2B75X7xDGFWkRilXzSTncgOqzFa9gNMRBsYjyh6XcRrMjxkSAxtGUE3mSwc3ew5P0YvQfnOq0gaQDEWyN03ctNWiER8gMGT0b4RoLz3cpOeZy1lavlzoWgLVALuT5YgRfJO0p0ci1y10D7%2B1Afp4ONWZFJM8Xw0A7uZ3P%2B8tbLm5sNkt8U9RHbHDRvxduUQMI3sXrbi4kDaE0omDMZxdhOdoBlA%2Fbi5foUfwMOn%2F6MYGOpoBuE7Ydh2uavf4Abozh8hyNiMxRns2W8DfSIZjDy%2FZn%2FB3rX3Y%2BRAIWe9vrxWYQbU7e0uWUDbqVtSX8ufGqawwa1VOjkossekKV4uPvl3kCwnHQ0d%2FYuIBnAdU%2B0R6pP2SoABNSpk7NJa3Evqd7laJoi34YcHxtGuLom7xq0cJYwyluymAoXdzlUTJw0LqNgPByQp5xuxHD0wSUw%3D%3D&Expires=1759136961)
