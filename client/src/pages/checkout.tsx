@@ -15,14 +15,13 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatCurrency } from "@/lib/utils";
 import { Calendar, Bed, Plane, Music, CreditCard, Bitcoin, Shield, Star, CheckCircle, User, Mail, Phone, Lock, Gift } from "lucide-react";
 import { z } from "zod";
-import { Env, assertSecretsReady } from "@/config/env";
-
 // Make sure to call `loadStripe` outside of a component's render to avoid
 // recreating the `Stripe` object on every render.
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
-assertSecretsReady(["STRIPE_PUBLISHABLE_KEY"]);
-if (Env.STRIPE_PUBLISHABLE_KEY) {
-  stripePromise = loadStripe(Env.STRIPE_PUBLISHABLE_KEY);
+
+const stripePublicKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
+if (stripePublicKey) {
+  stripePromise = loadStripe(stripePublicKey);
   console.log("✓ Stripe payment integration enabled");
 } else {
   console.log("⚠ Stripe payment integration disabled - payment processing unavailable");
@@ -39,37 +38,21 @@ const guestInfoSchema = z.object({
 
 type GuestInfo = z.infer<typeof guestInfoSchema>;
 
-// Helper function to format booking data for display
-const getBookingDisplayData = ({ booking, calculateTotal }: { booking: any, calculateTotal: () => number }) => {
-  const subtotal = calculateTotal();
+// Helper function to format cart data for display
+const getCartDisplayData = (cart: any, cartTotal: number) => {
+  const subtotal = cartTotal;
   const taxes = Math.round(subtotal * 0.1); // 10% tax
   const total = subtotal + taxes;
 
   return {
-    event: {
-      name: booking.selectedEvent?.title || "No Event Selected",
-      dates: booking.selectedEvent?.date || "TBD",
-      tickets: "General Admission × 1",
-      price: booking.selectedEvent?.price || 0,
-    },
-    hotel: {
-      name: booking.selectedHotel?.name || "No Hotel Selected",
-      dates: "TBD",
-      room: "Standard Room × 1",
-      price: booking.selectedHotel?.price || 0,
-    },
-    flights: {
-      route: "TBD",
-      details: "Economy × 1 passenger",
-      price: (booking.selectedOutboundFlight?.price || 0) + (booking.selectedReturnFlight?.price || 0),
-    },
+    items: cart.items,
     subtotal,
     taxes,
     total,
   };
 };
 
-const CheckoutForm = ({ bookingData }: { bookingData: ReturnType<typeof getBookingDisplayData> }) => {
+const CheckoutForm = ({ cartData }: { cartData: ReturnType<typeof getCartDisplayData> }) => {
   // Conditionally use Stripe hooks only when Elements provider is available
   let stripe, elements;
   try {
@@ -173,7 +156,7 @@ const CheckoutForm = ({ bookingData }: { bookingData: ReturnType<typeof getBooki
             guestEmail: data.email,
             guestName: `${data.firstName} ${data.lastName}`,
             guestPhone: data.phone,
-            totalAmount: bookingData.total,
+            totalAmount: cartData.total,
             status: "confirmed",
             flightData,
             selectedSeats: booking.selectedSeats || {}
@@ -403,7 +386,7 @@ const CheckoutForm = ({ bookingData }: { bookingData: ReturnType<typeof getBooki
           ) : (
             <div className="flex items-center justify-center">
               <Gift className="w-5 h-5 mr-3" />
-              Complete Booking - {formatCurrency(bookingData.total)}
+              Complete Booking - {formatCurrency(cartData.total)}
             </div>
           )}
         </Button>
@@ -433,17 +416,32 @@ const CheckoutForm = ({ bookingData }: { bookingData: ReturnType<typeof getBooki
 };
 
 export default function Checkout() {
-  const { booking, calculateTotal } = useBooking();
-  const bookingData = getBookingDisplayData({ booking, calculateTotal });
-  const [clientSecret, setClientSecret] = useState("");
-  const [stripeAvailable, setStripeAvailable] = useState(!!stripePromise);
+  const [, navigate] = useLocation();
+  const { cart, getCartTotal, getCartItemCount } = useBooking();
   const { toast } = useToast();
 
+  // Redirect to cart if no items
   useEffect(() => {
-    // Only create PaymentIntent if Stripe is available
-    if (stripePromise) {
+    if (getCartItemCount() === 0) {
+      toast({
+        title: "No items in cart",
+        description: "Please add items to your cart before proceeding to checkout.",
+        variant: "destructive",
+      });
+      navigate('/cart');
+      return;
+    }
+  }, [getCartItemCount, navigate, toast]);
+
+  const cartData = getCartDisplayData(cart, getCartTotal());
+  const [clientSecret, setClientSecret] = useState("");
+  const [stripeAvailable, setStripeAvailable] = useState(!!stripePromise);
+
+  useEffect(() => {
+    // Only create PaymentIntent if Stripe is available and cart has items
+    if (stripePromise && getCartItemCount() > 0) {
       apiRequest("POST", "/api/create-payment-intent", { 
-        amount: bookingData.total,
+        amount: cartData.total,
         bookingId: "temp-booking-id" 
       })
         .then((res) => res.json())
@@ -460,7 +458,7 @@ export default function Checkout() {
           });
         });
     }
-  }, [bookingData.total, toast]);
+  }, [cartData.total, getCartItemCount, toast]);
 
   // If Stripe is not available, show the form without payment processing
   if (!stripeAvailable || !stripePromise) {
@@ -492,7 +490,7 @@ export default function Checkout() {
               </div>
             </div>
           </div>
-          <CheckoutForm bookingData={bookingData} />
+          <CheckoutForm cartData={cartData} />
         </div>
       </div>
     );
@@ -535,10 +533,10 @@ export default function Checkout() {
           <div className="lg:col-span-2">
             {stripePromise !== null && clientSecret ? (
               <Elements stripe={stripePromise} options={{ clientSecret }}>
-                <CheckoutForm bookingData={bookingData} />
+                <CheckoutForm cartData={cartData} />
               </Elements>
             ) : (
-              <CheckoutForm bookingData={bookingData} />
+              <CheckoutForm cartData={cartData} />
             )}
           </div>
 
@@ -553,91 +551,97 @@ export default function Checkout() {
                 </div>
               </div>
               
-              {/* Premium Event */}
-              <div className="mb-8 p-4 glass rounded-xl">
-                <div className="flex items-center space-x-3 mb-3">
-                  <div className="w-10 h-10 bg-luxury-gradient rounded-full flex items-center justify-center">
-                    <Calendar className="w-5 h-5 text-white" />
+              {/* Cart Items */}
+              {cartData.items.map((item, index) => (
+                <div key={item.id} className="mb-8 p-4 glass rounded-xl" data-testid={`cart-item-${index}`}>
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="w-10 h-10 bg-luxury-gradient rounded-full flex items-center justify-center">
+                      {item.type === 'flight' && <Plane className="w-5 h-5 text-white" />}
+                      {item.type === 'hotel' && <Bed className="w-5 h-5 text-white" />}
+                      {item.type === 'event' && <Calendar className="w-5 h-5 text-white" />}
+                    </div>
+                    <div className="flex-1">
+                      {item.type === 'flight' && (
+                        <>
+                          <h3 className="font-accent font-semibold text-primary" data-testid={`text-flight-name-${index}`}>
+                            {item.outboundFlight && item.returnFlight ? 'Round-trip Flights' : 'One-way Flight'}
+                          </h3>
+                          <p className="text-sm text-muted-foreground font-accent" data-testid={`text-flight-route-${index}`}>
+                            {item.outboundFlight?.departure} → {item.outboundFlight?.arrival}
+                            {item.returnFlight && ` → ${item.returnFlight.departure}`}
+                          </p>
+                        </>
+                      )}
+                      {item.type === 'hotel' && item.hotel && (
+                        <>
+                          <h3 className="font-accent font-semibold text-primary" data-testid={`text-hotel-name-${index}`}>
+                            {item.hotel.name}
+                          </h3>
+                          <p className="text-sm text-muted-foreground font-accent" data-testid={`text-hotel-location-${index}`}>
+                            {item.hotel.location}
+                          </p>
+                        </>
+                      )}
+                      {item.type === 'event' && item.event && (
+                        <>
+                          <h3 className="font-accent font-semibold text-primary" data-testid={`text-event-name-${index}`}>
+                            {item.event.title}
+                          </h3>
+                          <p className="text-sm text-muted-foreground font-accent" data-testid={`text-event-date-${index}`}>
+                            {item.event.date}
+                          </p>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <h3 className="font-accent font-semibold text-primary" data-testid="text-event-name">
-                      {bookingData.event.name}
-                    </h3>
-                    <p className="text-sm text-muted-foreground font-accent" data-testid="text-event-dates">
-                      {bookingData.event.dates}
+                  
+                  <div className="space-y-2 mb-3">
+                    <p className="text-sm text-muted-foreground font-accent" data-testid={`text-item-passengers-${index}`}>
+                      {item.passengers} passenger{item.passengers !== 1 ? 's' : ''}
                     </p>
+                    
+                    {/* Selected Seats */}
+                    {item.type === 'flight' && item.selectedSeats && (item.selectedSeats.outbound.length > 0 || item.selectedSeats.return.length > 0) && (
+                      <div className="text-xs text-muted-foreground">
+                        {item.selectedSeats.outbound.length > 0 && (
+                          <p>Outbound seats: {item.selectedSeats.outbound.map(seat => seat.designator).join(', ')}</p>
+                        )}
+                        {item.selectedSeats.return.length > 0 && (
+                          <p>Return seats: {item.selectedSeats.return.map(seat => seat.designator).join(', ')}</p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Selected Baggage */}
+                    {item.type === 'flight' && item.selectedBaggage && item.selectedBaggage.length > 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        <p>Baggage: {item.selectedBaggage.map(bag => `${bag.type} (${bag.weight})`).join(', ')}</p>
+                      </div>
+                    )}
                   </div>
+                  
+                  <p className="text-right font-accent font-bold text-primary text-lg" data-testid={`text-item-price-${index}`}>
+                    {formatCurrency(item.subtotal)}
+                  </p>
                 </div>
-                <p className="text-sm text-muted-foreground mb-3 font-accent" data-testid="text-event-tickets">
-                  {bookingData.event.tickets}
-                </p>
-                <p className="text-right font-accent font-bold text-primary text-lg" data-testid="text-event-price">
-                  {formatCurrency(bookingData.event.price)}
-                </p>
-              </div>
+              ))}
 
-              {/* Premium Hotel */}
-              <div className="mb-8 p-4 glass rounded-xl">
-                <div className="flex items-center space-x-3 mb-3">
-                  <div className="w-10 h-10 bg-luxury-gradient rounded-full flex items-center justify-center">
-                    <Bed className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-accent font-semibold text-primary" data-testid="text-hotel-name">
-                      {bookingData.hotel.name}
-                    </h3>
-                    <p className="text-sm text-muted-foreground font-accent" data-testid="text-hotel-dates">
-                      {bookingData.hotel.dates}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground mb-3 font-accent" data-testid="text-hotel-room">
-                  {bookingData.hotel.room}
-                </p>
-                <p className="text-right font-accent font-bold text-primary text-lg" data-testid="text-hotel-price">
-                  {formatCurrency(bookingData.hotel.price)}
-                </p>
-              </div>
-
-              {/* Premium Flights */}
-              <div className="mb-8 p-4 glass rounded-xl">
-                <div className="flex items-center space-x-3 mb-3">
-                  <div className="w-10 h-10 bg-luxury-gradient rounded-full flex items-center justify-center">
-                    <Plane className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-accent font-semibold text-primary" data-testid="text-flights-name">
-                      Round-trip Flights
-                    </h3>
-                    <p className="text-sm text-muted-foreground font-accent" data-testid="text-flights-route">
-                      {bookingData.flights.route}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground mb-3 font-accent" data-testid="text-flights-details">
-                  {bookingData.flights.details}
-                </p>
-                <p className="text-right font-accent font-bold text-primary text-lg" data-testid="text-flights-price">
-                  {formatCurrency(bookingData.flights.price)}
-                </p>
-              </div>
-
-              {/* Premium Total */}
+              {/* Cart Total */}
               <div className="glass p-6 rounded-xl">
                 <div className="space-y-3 mb-4">
                   <div className="flex justify-between items-center font-accent">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="font-medium text-primary" data-testid="text-subtotal">{formatCurrency(bookingData.subtotal)}</span>
+                    <span className="font-medium text-primary" data-testid="text-subtotal">{formatCurrency(cartData.subtotal)}</span>
                   </div>
                   <div className="flex justify-between items-center font-accent">
                     <span className="text-muted-foreground">Taxes & Fees</span>
-                    <span className="font-medium text-primary" data-testid="text-taxes">{formatCurrency(bookingData.taxes)}</span>
+                    <span className="font-medium text-primary" data-testid="text-taxes">{formatCurrency(cartData.taxes)}</span>
                   </div>
                 </div>
                 <div className="border-t border-accent/20 pt-4">
                   <div className="flex justify-between items-center">
                     <span className="font-display text-xl font-bold text-primary">Total</span>
-                    <span className="font-display text-2xl font-bold text-luxury" data-testid="text-total">{formatCurrency(bookingData.total)}</span>
+                    <span className="font-display text-2xl font-bold text-luxury" data-testid="text-total">{formatCurrency(cartData.total)}</span>
                   </div>
                 </div>
               </div>
