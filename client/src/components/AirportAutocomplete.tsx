@@ -28,6 +28,7 @@ export default function AirportAutocomplete({
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isSelecting, setIsSelecting] = useState(false);
+  const justSelected = useRef(false); // Add this ref
   const debounceRef = useRef<NodeJS.Timeout>();
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -49,7 +50,7 @@ export default function AirportAutocomplete({
 
   // Debounced search function
   useEffect(() => {
-    if (inputValue.length >= 2 && !isSelecting) {
+    if (inputValue.length >= 2 && !isSelecting && !justSelected.current) {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
@@ -60,6 +61,13 @@ export default function AirportAutocomplete({
     } else {
       setSuggestions([]);
       setIsOpen(false);
+    }
+
+    // Reset the flag after a brief delay
+    if (justSelected.current) {
+      setTimeout(() => {
+        justSelected.current = false;
+      }, 200);
     }
 
     return () => {
@@ -197,7 +205,10 @@ export default function AirportAutocomplete({
           type="text"
           value={inputValue}
           onChange={handleInputChange}
-          onFocus={handleInputFocus}
+          onFocus={() => {
+            justSelected.current = false;
+            handleInputFocus();
+          }}
           onBlur={handleInputBlur}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
@@ -227,6 +238,7 @@ export default function AirportAutocomplete({
             <button
               key={`${airport.iata_code}-${index}`}
               onClick={() => {
+                justSelected.current = true; // Set flag before updating input
                 setInputValue(airport.iata_code + " - " + airport.name);
                 setSuggestions([]); // Clear immediately
                 setIsOpen(false);
