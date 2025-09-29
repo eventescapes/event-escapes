@@ -5,7 +5,7 @@ import { searchFlights as duffelSearchFlights, createOneWaySearch, createReturnS
 import { useBooking } from '@/contexts/BookingContext';
 import TripSummary from '@/components/TripSummary';
 import FloatingCheckout from '@/components/FloatingCheckout';
-import { SeatSelection } from '@/components/SeatSelectionModal';
+import { SeatSelectionModal } from '@/components/SeatSelectionModal';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Plane, Clock, MapPin } from 'lucide-react';
 
@@ -695,7 +695,7 @@ const FlightResults = () => {
 
       {/* Seat Selection Modal */}
       {showSeatSelection && currentSeatSelection && (
-        <SeatSelection
+        <SeatSelectionModal
           offerId={currentSeatSelection.offerId}
           passengers={Array.from({ length: searchParams.passengers }, (_, i) => ({
             id: `passenger_${i + 1}`,
