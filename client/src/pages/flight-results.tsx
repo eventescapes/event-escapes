@@ -94,6 +94,8 @@ const FlightResults = () => {
     sliceOrigin: string;
     sliceDestination: string;
   } | null>(null);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [cartItemId, setCartItemId] = useState<string | null>(null);
 
   // Multi-city state
   const [multiCitySlices, setMultiCitySlices] = useState<MultiCitySlice[]>([
@@ -105,7 +107,9 @@ const FlightResults = () => {
   const { 
     updateSelectedOutboundFlight,
     updateSelectedReturnFlight,
-    updateSelectedSeats
+    updateSelectedSeats,
+    addToCart,
+    booking
   } = useBooking();
 
   // Initialize multi-city slices from URL params if needed
@@ -438,6 +442,47 @@ const FlightResults = () => {
     return true;
   };
 
+  // Handle adding to cart
+  const handleAddToCart = () => {
+    // Update booking context with selected flights
+    if (selectedOffers[0]) {
+      updateSelectedOutboundFlight({
+        id: selectedOffers[0].offerId,
+        airline: selectedOffers[0].flight.airline,
+        departure: selectedOffers[0].flight.departureAirport,
+        arrival: selectedOffers[0].flight.arrivalAirport,
+        duration: selectedOffers[0].flight.duration,
+        price: selectedOffers[0].price,
+        stops: selectedOffers[0].flight.stops
+      });
+    }
+    
+    if (selectedOffers[1]) {
+      updateSelectedReturnFlight({
+        id: selectedOffers[1].offerId,
+        airline: selectedOffers[1].flight.airline,
+        departure: selectedOffers[1].flight.departureAirport,
+        arrival: selectedOffers[1].flight.arrivalAirport,
+        duration: selectedOffers[1].flight.duration,
+        price: selectedOffers[1].price,
+        stops: selectedOffers[1].flight.stops
+      });
+    }
+    
+    // Add to cart
+    const itemId = addToCart(searchParams.passengers);
+    setCartItemId(itemId);
+    
+    // Clear current selection state
+    setSelectedOffers({});
+    setSelectedSeats({});
+    setShowSeatSelection(false);
+    setCurrentSeatSelection(null);
+    
+    // Show success message
+    setShowSuccessMessage(true);
+  };
+
   // Auto search on page load
   useEffect(() => {
     if (searchParams.from && searchParams.to && searchParams.departDate) {
@@ -658,7 +703,7 @@ const FlightResults = () => {
                   outbound: selectedSeats[0] || [], 
                   return: selectedSeats[1] || [] 
                 }}
-                onContinue={() => {
+                onAddToCart={() => {
                   if (areAllSlicesSelected()) {
                     // Start seat selection with first slice
                     const firstOffer = selectedOffers[0];
@@ -673,6 +718,7 @@ const FlightResults = () => {
                     }
                   }
                 }}
+                isCartMode={true}
               />
             </div>
           </div>
@@ -729,10 +775,8 @@ const FlightResults = () => {
                 sliceDestination: nextOffer.flight.arrivalAirport
               });
             } else {
-              // All seat selection completed
-              setShowSeatSelection(false);
-              setCurrentSeatSelection(null);
-              navigate('/checkout');
+              // All seat selection completed - add to cart
+              handleAddToCart();
             }
           }}
           onClose={() => {
@@ -753,13 +797,55 @@ const FlightResults = () => {
                 sliceDestination: nextOffer.flight.arrivalAirport
               });
             } else {
-              // Skip all seat selection and go to checkout
-              setShowSeatSelection(false);
-              setCurrentSeatSelection(null);
-              navigate('/checkout');
+              // Skip all seat selection and add to cart
+              handleAddToCart();
             }
           }}
         />
+      )}
+
+      {/* Success Message Modal */}
+      {showSuccessMessage && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" data-testid="success-modal">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-8">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Flight Added to Cart!</h3>
+              <p className="text-gray-600 mb-6">
+                Your flight selection has been successfully added to your cart. You can continue shopping or review your cart.
+              </p>
+              
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => {
+                    setShowSuccessMessage(false);
+                    navigate('/');
+                  }}
+                  variant="outline"
+                  className="flex-1"
+                  data-testid="button-continue-shopping"
+                >
+                  Continue Shopping
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowSuccessMessage(false);
+                    navigate('/cart');
+                  }}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  data-testid="button-view-cart"
+                >
+                  View Cart
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
