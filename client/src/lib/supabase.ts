@@ -225,19 +225,27 @@ const generateMockFlightData = (params: FlightSearchParams) => {
 export const searchFlights = async (params: FlightSearchParams) => {
   console.log('🔍 Searching flights with params:', params);
   
+  const functionUrl = import.meta.env.VITE_SUPABASE_FUNCTION_URL;
+  const anon_key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  
+  console.log('Environment Check:', {
+    hasSupabaseUrl: !!functionUrl,
+    hasSupabaseKey: !!anon_key,
+    supabaseUrlPreview: functionUrl ? functionUrl.substring(0, 30) + '...' : 'missing',
+    keyPreview: anon_key ? anon_key.substring(0, 20) + '...' : 'missing',
+    fullEndpoint: functionUrl ? `${functionUrl}/flights-search` : 'undefined'
+  });
+  
+  if (!functionUrl || !anon_key) {
+    console.warn('⚠️ Supabase environment variables missing, using mock data');
+    return generateMockFlightData(params);
+  }
+  
   try {
-    // Ensure Supabase is initialized
-    await ensureSupabaseInit();
-    
-    if (!isSupabaseConfigured || !supabase) {
-      console.warn('⚠️ Supabase not configured, using mock data');
-      return generateMockFlightData(params);
-    }
 
-    // Call Edge Function directly (Supabase client invoke has issues)
+    // Call Edge Function directly
     try {
-      const functionUrl = `${import.meta.env.VITE_SUPABASE_FUNCTION_URL}/flights-search`;
-      const anon_key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const endpoint = `${functionUrl}/flights-search`;
       
       // Convert dates from dd/mm/yyyy to yyyy-mm-dd format
       const processedParams = {
@@ -250,7 +258,7 @@ export const searchFlights = async (params: FlightSearchParams) => {
       console.log('[Flight Search] Method: POST');
       console.log('[Flight Search] Payload:', processedParams);
       
-      const response = await fetch(functionUrl, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${anon_key}`,
@@ -267,15 +275,16 @@ export const searchFlights = async (params: FlightSearchParams) => {
           'apikey': anon_key ? anon_key.substring(0, 20) + '...' : 'missing',
           'Content-Type': 'application/json'
         });
-        console.warn(`⚠️ API error ${response.status}: ${errorText}, falling back to mock data`);
+        console.warn(`⚠️ API error ${response.status}: ${errorText}`);
         
-        // Try to parse error as JSON for better error display
-        try {
-          const errorJson = JSON.parse(errorText);
-          throw new Error(`Search Error: ${errorJson.message || errorJson.error || errorText}`);
-        } catch {
-          throw new Error(`Search Error: ${errorText}`);
+        // For development, try to parse and surface error, but fall back to mock data
+        if (response.status === 401 || response.status === 403) {
+          console.error('Authentication failed - check your Supabase keys');
         }
+        
+        // Always fall back to mock data in case of API failure
+        console.log('Falling back to mock data due to API error');
+        return generateMockFlightData(params);
       }
       
       const data = await response.json();

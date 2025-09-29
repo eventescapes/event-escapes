@@ -121,8 +121,130 @@ export async function fetchSeatMap(offerId: string) {
   return await response.json();
 }
 
-// New direct Duffel API call with logging
+// New direct Duffel API call with logging - handles mock data
 export async function fetchSeatMaps(offerId: string): Promise<SeatMapsResponse> {
+  // Handle mock data - return mock seat maps instead of calling external API
+  if (offerId.includes('mock') || offerId.includes('offer-')) {
+    console.log("[SeatMaps] Using mock seat data for offer:", offerId);
+    
+    // Return mock seat map data
+    const mockSeatMaps: SeatMapsResponse = {
+      data: [
+        {
+          id: 'seat_map_1',
+          slice_id: 'slice_1',
+          cabins: [
+            {
+              aisles: 1,
+              cabin_class: 'economy',
+              rows: [
+                {
+                  sections: [
+                    {
+                      elements: [
+                        {
+                          type: 'seat',
+                          id: 'seat_1A',
+                          designator: '1A',
+                          name: '1A',
+                          available_services: [
+                            {
+                              id: 'service_1A',
+                              total_amount: '25.00',
+                              total_currency: 'USD'
+                            }
+                          ]
+                        },
+                        {
+                          type: 'seat',
+                          id: 'seat_1B',
+                          designator: '1B',
+                          name: '1B',
+                          available_services: [
+                            {
+                              id: 'service_1B',
+                              total_amount: '25.00',
+                              total_currency: 'USD'
+                            }
+                          ]
+                        },
+                        { type: 'empty' },
+                        {
+                          type: 'seat',
+                          id: 'seat_1C',
+                          designator: '1C',
+                          name: '1C',
+                          available_services: [
+                            {
+                              id: 'service_1C',
+                              total_amount: '25.00',
+                              total_currency: 'USD'
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  sections: [
+                    {
+                      elements: [
+                        {
+                          type: 'seat',
+                          id: 'seat_2A',
+                          designator: '2A',
+                          name: '2A',
+                          available_services: [
+                            {
+                              id: 'service_2A',
+                              total_amount: '15.00',
+                              total_currency: 'USD'
+                            }
+                          ]
+                        },
+                        {
+                          type: 'seat',
+                          id: 'seat_2B',
+                          designator: '2B',
+                          name: '2B',
+                          available_services: [
+                            {
+                              id: 'service_2B',
+                              total_amount: '15.00',
+                              total_currency: 'USD'
+                            }
+                          ]
+                        },
+                        { type: 'empty' },
+                        {
+                          type: 'seat',
+                          id: 'seat_2C',
+                          designator: '2C',
+                          name: '2C',
+                          available_services: [
+                            {
+                              id: 'service_2C',
+                              total_amount: '15.00',
+                              total_currency: 'USD'
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    };
+
+    return mockSeatMaps;
+  }
+
+  // For real offer IDs, make the actual API call
   const url = `https://api.duffel.com/air/seat_maps?offer_id=${encodeURIComponent(offerId)}`;
   const started = Date.now();
   console.log("[Duffel] GET", url);
