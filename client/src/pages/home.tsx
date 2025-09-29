@@ -9,6 +9,7 @@ import EventCard from "@/components/event-card";
 import { EventCardSkeleton } from "@/components/loading-skeleton";
 import { Search, MapPin, Calendar, Bed, Plane, CheckCircle, Sparkles } from "lucide-react";
 import type { Event } from "@shared/schema";
+import FlightSearchForm from "@/components/FlightSearchForm";
 
 export default function Home() {
   const [, setLocation] = useLocation();
@@ -160,6 +161,24 @@ export default function Home() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Flight Search Section */}
+      <div className="bg-gradient-to-br from-slate-50/50 to-blue-50/50 py-24">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center bg-luxury-gradient-subtle rounded-full px-6 py-2 mb-6">
+              <Plane className="w-4 h-4 mr-2 text-accent" />
+              <span className="font-accent font-semibold text-accent text-sm tracking-wide uppercase">Complete Travel Solutions</span>
+            </div>
+            <h2 className="font-display text-4xl md:text-6xl font-bold text-primary mb-6 tracking-tight">Book Your Flight</h2>
+            <p className="text-xl md:text-2xl text-muted-foreground font-accent leading-relaxed max-w-3xl mx-auto">
+              Search and book flights with our comprehensive booking system supporting one-way, return, and multi-city itineraries
+            </p>
+          </div>
+          
+          <FlightSearchForm />
         </div>
       </div>
 
