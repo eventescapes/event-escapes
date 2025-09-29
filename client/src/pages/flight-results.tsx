@@ -442,34 +442,51 @@ const FlightResults = () => {
     return true;
   };
 
-  // Handle adding to cart
+  // Handle adding to cart with enhanced data extraction
   const handleAddToCart = () => {
-    // Update booking context with selected flights
-    if (selectedOffers[0]) {
-      updateSelectedOutboundFlight({
-        id: selectedOffers[0].offerId,
-        airline: selectedOffers[0].flight.airline,
-        departure: selectedOffers[0].flight.departureAirport,
-        arrival: selectedOffers[0].flight.arrivalAirport,
-        duration: selectedOffers[0].flight.duration,
-        price: selectedOffers[0].price,
-        stops: selectedOffers[0].flight.stops
-      });
+    // Extract detailed flight information for cart
+    const outboundOffer = selectedOffers[0];
+    const returnOffer = selectedOffers[1];
+    
+    // Build enhanced outbound flight data
+    if (outboundOffer) {
+      const flight = outboundOffer.flight;
+      const enhancedOutbound = {
+        id: outboundOffer.offerId,
+        airline: flight.airline,
+        flightNumber: flight.flightNumber || `${flight.airline} ${outboundOffer.offerId.slice(-4)}`,
+        departure: flight.departureAirport,
+        arrival: flight.arrivalAirport,
+        departTime: flight.departureTime || "TBD",
+        arriveTime: flight.arrivalTime || "TBD",
+        duration: flight.duration,
+        price: outboundOffer.price,
+        stops: flight.stops,
+        cabinClass: flight.cabinClass || "Economy"
+      };
+      updateSelectedOutboundFlight(enhancedOutbound);
     }
     
-    if (selectedOffers[1]) {
-      updateSelectedReturnFlight({
-        id: selectedOffers[1].offerId,
-        airline: selectedOffers[1].flight.airline,
-        departure: selectedOffers[1].flight.departureAirport,
-        arrival: selectedOffers[1].flight.arrivalAirport,
-        duration: selectedOffers[1].flight.duration,
-        price: selectedOffers[1].price,
-        stops: selectedOffers[1].flight.stops
-      });
+    // Build enhanced return flight data if exists
+    if (returnOffer) {
+      const flight = returnOffer.flight;
+      const enhancedReturn = {
+        id: returnOffer.offerId,
+        airline: flight.airline,
+        flightNumber: flight.flightNumber || `${flight.airline} ${returnOffer.offerId.slice(-4)}`,
+        departure: flight.departureAirport,
+        arrival: flight.arrivalAirport,
+        departTime: flight.departureTime || "TBD",
+        arriveTime: flight.arrivalTime || "TBD",
+        duration: flight.duration,
+        price: returnOffer.price,
+        stops: flight.stops,
+        cabinClass: flight.cabinClass || "Economy"
+      };
+      updateSelectedReturnFlight(enhancedReturn);
     }
     
-    // Add to cart
+    // Add to cart with enhanced data
     const itemId = addToCart(searchParams.passengers);
     setCartItemId(itemId);
     
@@ -828,9 +845,9 @@ const FlightResults = () => {
                   }}
                   variant="outline"
                   className="flex-1"
-                  data-testid="button-continue-shopping"
+                  data-testid="button-continue-planning"
                 >
-                  Continue Shopping
+                  Continue Planning Your Trip
                 </Button>
                 <Button
                   onClick={() => {
