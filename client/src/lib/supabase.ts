@@ -135,6 +135,16 @@ const transformDuffelResponseToExpectedFormat = (duffelResponse: any) => {
   };
 };
 
+// Date conversion helper
+const convertDateFormat = (dateStr: string): string => {
+  // Convert dd/mm/yyyy to yyyy-mm-dd
+  if (dateStr && dateStr.includes('/')) {
+    const [day, month, year] = dateStr.split('/');
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  return dateStr; // Return as-is if already in correct format
+};
+
 // Flight search and booking functions using Edge Functions
 export interface FlightSearchParams {
   origin: string;
@@ -226,19 +236,46 @@ export const searchFlights = async (params: FlightSearchParams) => {
 
     // Call Edge Function directly (Supabase client invoke has issues)
     try {
-      const response = await fetch('https://jxrrhsqffnzeljszbecg.supabase.co/functions/v1/flights-search', {
+      const functionUrl = `${import.meta.env.VITE_SUPABASE_FUNCTION_URL}/flights-search`;
+      const anon_key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      // Convert dates from dd/mm/yyyy to yyyy-mm-dd format
+      const processedParams = {
+        ...params,
+        departureDate: convertDateFormat(params.departureDate),
+        returnDate: params.returnDate ? convertDateFormat(params.returnDate) : undefined
+      };
+      
+      console.log('[Flight Search] Endpoint:', functionUrl);
+      console.log('[Flight Search] Method: POST');
+      console.log('[Flight Search] Payload:', processedParams);
+      
+      const response = await fetch(functionUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${supabase.supabaseKey}`,
+          'Authorization': `Bearer ${anon_key}`,
+          'apikey': anon_key,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(params)
+        body: JSON.stringify(processedParams)
       });
       
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('[Flight Search] Headers sent:', {
+          'Authorization': `Bearer ${anon_key ? anon_key.substring(0, 20) + '...' : 'missing'}`,
+          'apikey': anon_key ? anon_key.substring(0, 20) + '...' : 'missing',
+          'Content-Type': 'application/json'
+        });
         console.warn(`⚠️ API error ${response.status}: ${errorText}, falling back to mock data`);
-        return generateMockFlightData(params);
+        
+        // Try to parse error as JSON for better error display
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(`Search Error: ${errorJson.message || errorJson.error || errorText}`);
+        } catch {
+          throw new Error(`Search Error: ${errorText}`);
+        }
       }
       
       const data = await response.json();
