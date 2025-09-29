@@ -1,0 +1,253 @@
+I can see the issue! You have "la" typed in the departure field and "jfk" in the destination field, but the autocomplete dropdown isn't appearing. Let's debug this step by step.
+
+Here's a debugging Replit Agent prompt:
+
+---
+
+## Replit Agent Prompt: Debug Airport Autocomplete Not Working
+
+**ISSUE**: Airport autocomplete component is not showing dropdown suggestions when typing "la" or "jfk" in the search fields.
+
+**IMMEDIATE DEBUG STEPS:**
+
+### 1. Add Debug Console Logging
+
+First, let's add extensive debugging to see what's happening:
+
+```typescript
+// In AirportAutocomplete component, add these debug logs:
+
+const searchAirports = async (query: string) => {
+  try {
+    setLoading(true);
+    
+    console.log('🔍 AIRPORT SEARCH DEBUG - Starting search for:', query);
+    console.log('🔍 Input length:', query.length);
+    
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    console.log('🔍 Environment check:', {
+      hasSupabaseUrl: !!supabaseUrl,
+      hasSupabaseKey: !!supabaseKey,
+      supabaseUrl: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'MISSING'
+    });
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('❌ Missing Supabase environment variables');
+      return;
+    }
+
+    console.log('🔍 Making API call to airport-search...');
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/airport-search`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey
+      },
+      body: JSON.stringify({ query })
+    });
+
+    console.log('🔍 Response status:', response.status);
+    console.log('🔍 Response ok:', response.ok);
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ Airport search API response:', data);
+      
+      if (data.success && data.airports) {
+        console.log('✅ Found airports:', data.airports.length);
+        setSuggestions(data.airports);
+        setIsOpen(true);
+        console.log('✅ Set suggestions and opened dropdown');
+      } else {
+        console.warn('⚠️ API returned no success or no airports:', data);
+        setSuggestions([]);
+        setIsOpen(false);
+      }
+    } else {
+      const errorText = await response.text();
+      console.error('❌ Airport search API error:', response.status, errorText);
+      setSuggestions([]);
+    }
+  } catch (error) {
+    console.error('❌ Airport search fetch error:', error);
+    setSuggestions([]);
+  } finally {
+    setLoading(false);
+    console.log('🔍 Airport search completed');
+  }
+};
+
+// Also add debug to the useEffect that triggers the search:
+useEffect(() => {
+  console.log('🔍 Input value changed:', inputValue, 'Length:', inputValue.length);
+  
+  if (inputValue.length >= 2) {
+    console.log('🔍 Input long enough, setting up debounced search...');
+    
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      console.log('🔍 Cleared previous timeout');
+    }
+    
+    debounceRef.current = setTimeout(() => {
+      console.log('🔍 Debounce timeout triggered, calling searchAirports');
+      searchAirports(inputValue);
+    }, 300);
+  } else {
+    console.log('🔍 Input too short, clearing suggestions');
+    setSuggestions([]);
+    setIsOpen(false);
+  }
+}, [inputValue]);
+```
+
+### 2. Add Visual Debug Indicators
+
+Add these visual indicators to see the component state:
+
+```typescript
+// Add this debug info at the top of the dropdown area:
+{process.env.NODE_ENV === 'development' && (
+  <div className="absolute top-0 right-0 bg-red-100 text-xs p-1 rounded z-60">
+    Debug: loading={loading.toString()}, 
+    isOpen={isOpen.toString()}, 
+    suggestions={suggestions.length},
+    inputLength={inputValue.length}
+  </div>
+)}
+```
+
+### 3. Test the Component Isolation
+
+Create a simple test to verify the component works in isolation:
+
+```typescript
+// Add this test button temporarily to your form:
+<div className="mb-4 p-4 bg-gray-100 rounded">
+  <h3>Airport Autocomplete Test</h3>
+  <button 
+    onClick={() => {
+      console.log('🧪 Testing airport search directly...');
+      // Test the search function directly
+      searchAirports('la');
+    }}
+    className="bg-blue-500 text-white px-4 py-2 rounded mr-2"
+  >
+    Test Search "la"
+  </button>
+  
+  <button 
+    onClick={() => {
+      console.log('🧪 Testing environment variables...');
+      console.log('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL ? 'SET' : 'MISSING');
+      console.log('VITE_SUPABASE_ANON_KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'SET' : 'MISSING');
+    }}
+    className="bg-green-500 text-white px-4 py-2 rounded"
+  >
+    Test Environment
+  </button>
+</div>
+```
+
+### 4. Check Component Integration
+
+Verify the component is properly imported and used:
+
+```typescript
+// Make sure you have this import at the top of your flight search form:
+import AirportAutocomplete from '@/components/AirportAutocomplete';
+
+// And that you're using it correctly:
+<AirportAutocomplete
+  value={searchParams.from}
+  onChange={(code) => {
+    console.log('🔄 FROM airport changed to:', code);
+    setSearchParams(prev => ({ ...prev, from: code }));
+  }}
+  placeholder="From (e.g., LAX, JFK, LHR)"
+  label="Departure"
+  className="flex-1"
+/>
+```
+
+### 5. Common Issues to Check
+
+**Issue A: Environment Variables Not Loading**
+```typescript
+// Add this check at the component mount:
+useEffect(() => {
+  console.log('🔧 AirportAutocomplete mounted');
+  console.log('🔧 Environment check:', {
+    NODE_ENV: process.env.NODE_ENV,
+    VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL ? 'EXISTS' : 'MISSING',
+    VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'EXISTS' : 'MISSING'
+  });
+}, []);
+```
+
+**Issue B: CSS Z-Index Problems**
+```typescript
+// Update the dropdown z-index to be higher:
+<div 
+  ref={suggestionsRef}
+  className="absolute z-[9999] w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto"
+  style={{ zIndex: 9999 }}
+>
+```
+
+**Issue C: Input Not Triggering Changes**
+```typescript
+// Make sure the input change handler is working:
+const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const newValue = e.target.value;
+  console.log('📝 Input changed from', inputValue, 'to', newValue);
+  setInputValue(newValue);
+  
+  if (newValue === '') {
+    console.log('📝 Input cleared, clearing selection');
+    onChange('');
+  }
+};
+```
+
+### 6. Quick Test Steps
+
+After adding the debug code:
+
+1. **Open browser console** (F12)
+2. **Type "la"** in the departure field
+3. **Check console logs** - should see:
+   - "Input value changed: la, Length: 2"
+   - "Input long enough, setting up debounced search..."
+   - "Debounce timeout triggered, calling searchAirports"
+   - "Making API call to airport-search..."
+   - Either success with airports or error messages
+
+4. **Click the test buttons** to verify environment and direct API calls
+
+### Expected Console Output:
+```
+🔍 Input value changed: l Length: 1
+🔍 Input too short, clearing suggestions
+🔍 Input value changed: la Length: 2  
+🔍 Input long enough, setting up debounced search...
+🔍 Debounce timeout triggered, calling searchAirports
+🔍 AIRPORT SEARCH DEBUG - Starting search for: la
+🔍 Making API call to airport-search...
+🔍 Response status: 200
+✅ Airport search API response: {success: true, airports: [...]}
+✅ Found airports: 8
+✅ Set suggestions and opened dropdown
+```
+
+**PRIORITY**: Add all the debug logging first, then type "la" in the field and share what the console shows. This will tell us exactly where the issue is.
+
+***
+
+This comprehensive debugging will help us identify exactly where the autocomplete is failing.
+
+[1](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/117568974/f0087bf7-bcfe-48e9-91ad-cbe5f91a4429/image.jpg?AWSAccessKeyId=ASIA2F3EMEYEU5HJXWF7&Signature=B%2BfMtoPt3igkNa6sUGdI9voeurc%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEEcaCXVzLWVhc3QtMSJGMEQCIDPM1j8sdOkrGRLajTkEpNeJeHCIMVK9r1c0xpwmjVuwAiAxz5aYT3IXs%2FdRE9fIQdrsRQh2s%2BAuZp6ru22Fy9Evkyr6BAjQ%2F%2F%2F%2F%2F%2F%2F%2F%2F%2F8BEAEaDDY5OTc1MzMwOTcwNSIMzmWwrRqhNV4M52EcKs4E%2BISERqggTbu1RNLhX55mvyDJLRa2Vytld2DTM3rw5LiJa1IBK5JBJkPMf3MzFIpjB7VpXTVHgfw4kwRqvjlVTMdiFpaUy76KbmsooU%2FbQ2eCqNLBJCQuMtdsLWSeh2vFLpHfj7LLrC7qvqNVUkrLCZTuRotK%2BadK4S%2FcCsxJJV9FjqSBjnTEwMfs0z3A1gd76v750V%2Fgb1t6vZSRgwc5PMLRx2SIpz3VmT63c1Xeh3TNmhW8OH0nSK3UfmW397H4ZgeFb16xOgRAIj0GqVKNOmfcOoLqsZwohZ4moNC9d4e1iFkbB14sb97IJ41FygLPZCoj7bawhJ1g2B5HlDTTNrK9Vo2VMbmDVGpOpK7WSfixC15MDlcJsCOP4JNa1a7ymYMpF9ZxE8wZj5DmfIWwNgpiaMKT4J30qmQfeueXJ6Mcy3OyO%2BcgbRZLEHazJcHX2BosSFcbJ2DwPGrsruCuLNqbUL8zxjg8ONvm6Y0RK8X3eI%2FTXC%2BLUnI90HVKbqH66fHBU1A2WaKCxr9wSn99pFQNUAW8yzkODJ9YB6TwHYstgo%2BOqYLQbL8qLqyB5W%2Fk%2FZuFtMhm2CdBy%2BJeRYVWQp8SYxBFzEyAb0hsf5CUox18uOv0kRk3IFAm26ebTbqGwbYZVTH3RW1El5LYcyzNYsoLgtdYicsvs1UzHT9RAxdYcahCIW4WzE94tdFNisu4frAm84HWfk4oGbLPFp29RfmXvurxDs59C1KB%2Fha%2FRN%2BA50VVOtbab8J07WY%2Fp%2FDue%2F9aGVyeDC6xQfXfcIkwjdnoxgY6mwEGLI15HpT1xRraAxpguByZDkTdBXlNg%2BrTZPiJctw5lBv3NknhLhtO1vNArb6E9f4qKqrt6VZ002t1JYqXvUyu4tfU8CtYUDZqmLTcVxcufN93sVaBAsWEfMIQMuS3easpNveQBrHSCIoZN9mqilkIrifcYGZzS1NBKrpb92B9TpuTGVpI4c4%2FM0ZTGCdb9OegG7u132xEEXGYvg%3D%3D&Expires=1759130758)
