@@ -48,22 +48,15 @@ export default function AirportAutocomplete({
 
   // Debounced search function
   useEffect(() => {
-    console.log('🔍 Input value changed:', inputValue, 'Length:', inputValue.length);
-    
     if (inputValue.length >= 2) {
-      console.log('🔍 Input long enough, setting up debounced search...');
-      
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
-        console.log('🔍 Cleared previous timeout');
       }
       
       debounceRef.current = setTimeout(() => {
-        console.log('🔍 Debounce timeout triggered, calling searchAirports');
         searchAirports(inputValue);
       }, 300); // 300ms delay
     } else {
-      console.log('🔍 Input too short, clearing suggestions');
       setSuggestions([]);
       setIsOpen(false);
     }
@@ -96,24 +89,13 @@ export default function AirportAutocomplete({
     try {
       setLoading(true);
       
-      console.log('🔍 AIRPORT SEARCH DEBUG - Starting search for:', query);
-      console.log('🔍 Input length:', query.length);
-      
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       
-      console.log('🔍 Environment check:', {
-        hasSupabaseUrl: !!supabaseUrl,
-        hasSupabaseKey: !!supabaseKey,
-        supabaseUrl: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'MISSING'
-      });
-      
       if (!supabaseUrl || !supabaseKey) {
-        console.error('❌ Missing Supabase environment variables');
+        console.error('Missing Supabase configuration');
         return;
       }
-
-      console.log('🔍 Making API call to airport-search...');
 
       const response = await fetch(`${supabaseUrl}/functions/v1/airport-search`, {
         method: 'POST',
@@ -125,55 +107,34 @@ export default function AirportAutocomplete({
         body: JSON.stringify({ query })
       });
 
-      console.log('🔍 Response status:', response.status);
-      console.log('🔍 Response ok:', response.ok);
-
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Airport search API response:', data);
         
         if (data.airports && data.airports.length > 0) {
-          console.log('✅ Found airports:', data.airports.length);
           setSuggestions(data.airports);
           setIsOpen(true);
-          console.log('✅ Set suggestions and opened dropdown');
         } else {
-          console.warn('⚠️ API returned empty airports array:', data);
           setSuggestions([]);
           setIsOpen(false);
         }
       } else {
-        const errorText = await response.text();
-        console.error('❌ Airport search API error:', response.status, errorText);
+        console.error('Airport search failed:', response.status);
         setSuggestions([]);
       }
     } catch (error) {
-      console.error('❌ Airport search fetch error:', error);
+      console.error('Airport search error:', error);
       setSuggestions([]);
     } finally {
       setLoading(false);
-      console.log('🔍 Airport search completed');
     }
   };
 
-  // Component mount debug
-  useEffect(() => {
-    console.log('🔧 AirportAutocomplete mounted');
-    console.log('🔧 Environment check:', {
-      NODE_ENV: import.meta.env.MODE,
-      VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL ? 'EXISTS' : 'MISSING',
-      VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'EXISTS' : 'MISSING'
-    });
-  }, []);
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    console.log('📝 Input changed from', inputValue, 'to', newValue);
     setInputValue(newValue);
     
     // If user clears input, clear the selected value
     if (newValue === '') {
-      console.log('📝 Input cleared, clearing selection');
       onChange('');
     }
   };
@@ -184,8 +145,6 @@ export default function AirportAutocomplete({
     onChange(airport.iata_code);
     setIsOpen(false);
     setSuggestions([]);
-    
-    console.log('✈️ Selected airport:', airport);
   };
 
   const handleInputFocus = () => {
@@ -205,38 +164,6 @@ export default function AirportAutocomplete({
 
   return (
     <div className={`relative ${className}`}>
-      {/* Debug Test Buttons - Development Only */}
-      {import.meta.env.MODE === 'development' && (
-        <div className="mb-4 p-4 bg-gray-100 rounded">
-          <h3 className="text-sm font-bold mb-2">Airport Autocomplete Debug</h3>
-          <div className="flex gap-2 mb-2">
-            <button 
-              onClick={() => {
-                console.log('🧪 Testing airport search directly...');
-                searchAirports('la');
-              }}
-              className="bg-blue-500 text-white px-3 py-1 rounded text-sm"
-            >
-              Test Search "la"
-            </button>
-            
-            <button 
-              onClick={() => {
-                console.log('🧪 Testing environment variables...');
-                console.log('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL ? 'SET' : 'MISSING');
-                console.log('VITE_SUPABASE_ANON_KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'SET' : 'MISSING');
-              }}
-              className="bg-green-500 text-white px-3 py-1 rounded text-sm"
-            >
-              Test Environment
-            </button>
-          </div>
-          <div className="text-xs text-gray-600">
-            Debug: loading={loading.toString()}, isOpen={isOpen.toString()}, suggestions={suggestions.length}, inputLength={inputValue.length}
-          </div>
-        </div>
-      )}
-      
       {label && (
         <label className="block text-sm font-medium text-gray-700 mb-1">
           {label}
@@ -270,7 +197,7 @@ export default function AirportAutocomplete({
       {isOpen && suggestions.length > 0 && (
         <div 
           ref={suggestionsRef}
-          className="absolute z-[9999] w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+          className="absolute z-[9999] w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto transition-all duration-200 ease-in-out"
           style={{ zIndex: 9999 }}
           data-testid="airport-suggestions-dropdown"
         >

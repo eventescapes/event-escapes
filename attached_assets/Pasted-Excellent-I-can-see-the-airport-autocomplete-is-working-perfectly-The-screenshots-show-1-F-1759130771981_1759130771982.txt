@@ -1,0 +1,210 @@
+Excellent! 🎉 I can see the airport autocomplete is working perfectly! The screenshots show:
+
+1. **First screen**: Typing "jfk" shows JFK, JFR, and JFN airports
+2. **Second screen**: Typing "la" shows LAX, LAS, LAE, and LAW airports  
+3. **Third screen**: Multi-city flights with "me" and "bri" showing Brisbane and other "bri" airports
+
+Perfect implementation! Now let's clean up the debug elements.
+
+Here's the Replit Agent prompt to remove debug elements:
+
+---
+
+## Replit Agent Prompt: Clean Up Airport Autocomplete - Remove Debug Elements
+
+**SUCCESS!** ✅ Airport autocomplete is working perfectly across all search fields. Users can now type "la" and see LAX, LAS, etc., and type "jfk" to find JFK airport, and it works for multi-city searches too.
+
+**NOW CLEAN UP:** Remove all debug elements and console logs to make it production-ready.
+
+### Cleanup Tasks:
+
+#### 1. Remove Debug Visual Elements
+
+**Remove these debug boxes from AirportAutocomplete component:**
+
+```typescript
+// REMOVE this entire debug section:
+<div className="mb-4 p-4 bg-gray-100 rounded">
+  <h3>Airport Autocomplete Debug</h3>
+  <button 
+    onClick={() => {
+      console.log('🧪 Testing airport search directly...');
+      searchAirports('la');
+    }}
+    className="bg-blue-500 text-white px-4 py-2 rounded mr-2"
+  >
+    Test Search "la"
+  </button>
+  
+  <button 
+    onClick={() => {
+      console.log('🧪 Testing environment variables...');
+      console.log('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL ? 'SET' : 'MISSING');
+      console.log('VITE_SUPABASE_ANON_KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'SET' : 'MISSING');
+    }}
+    className="bg-green-500 text-white px-4 py-2 rounded"
+  >
+    Test Environment
+  </button>
+</div>
+
+// REMOVE this debug info display:
+{process.env.NODE_ENV === 'development' && (
+  <div className="absolute top-0 right-0 bg-red-100 text-xs p-1 rounded z-60">
+    Debug: loading={loading.toString()}, 
+    isOpen={isOpen.toString()}, 
+    suggestions={suggestions.length},
+    inputLength={inputValue.length}
+  </div>
+)}
+
+// REMOVE any "Airport Autocomplete Debug" headers and debug status text
+```
+
+#### 2. Clean Up Console Logging
+
+**Replace verbose debug logs with minimal production logging:**
+
+```typescript
+// REPLACE all these detailed debug logs:
+// console.log('🔍 AIRPORT SEARCH DEBUG - Starting search for:', query);
+// console.log('🔍 Input length:', query.length);
+// console.log('🔍 Environment check:', {...});
+// console.log('🔍 Making API call to airport-search...');
+// console.log('🔍 Response status:', response.status);
+// console.log('✅ Airport search API response:', data);
+// console.log('✅ Found airports:', data.airports.length);
+// console.log('✅ Set suggestions and opened dropdown');
+
+// WITH simple production logs:
+const searchAirports = async (query: string) => {
+  try {
+    setLoading(true);
+    
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase configuration');
+      return;
+    }
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/airport-search`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey
+      },
+      body: JSON.stringify({ query })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      
+      if (data.success && data.airports) {
+        setSuggestions(data.airports);
+        setIsOpen(true);
+      } else {
+        setSuggestions([]);
+      }
+    } else {
+      console.error('Airport search failed:', response.status);
+      setSuggestions([]);
+    }
+  } catch (error) {
+    console.error('Airport search error:', error);
+    setSuggestions([]);
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+#### 3. Clean Up useEffect Logging
+
+```typescript
+// REPLACE verbose useEffect logging:
+useEffect(() => {
+  if (inputValue.length >= 2) {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    
+    debounceRef.current = setTimeout(() => {
+      searchAirports(inputValue);
+    }, 300);
+  } else {
+    setSuggestions([]);
+    setIsOpen(false);
+  }
+
+  return () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+  };
+}, [inputValue]);
+```
+
+#### 4. Remove Test Buttons and Debug Text
+
+**Remove any remaining test elements:**
+
+```typescript
+// REMOVE any buttons like:
+// "Test Search 'la'"
+// "Test Environment"
+// Any debug status text showing loading states, etc.
+```
+
+#### 5. Final Clean Component Structure
+
+**The final AirportAutocomplete should be clean with:**
+
+- ✅ Search input with magnifying glass icon
+- ✅ Loading spinner when searching
+- ✅ Dropdown with airport suggestions
+- ✅ "No airports found" message when needed
+- ✅ Clean selection handling
+- ❌ No debug buttons
+- ❌ No debug console logs (except essential error logs)
+- ❌ No debug status displays
+
+#### 6. Test After Cleanup
+
+**Verify functionality still works after cleanup:**
+
+1. **Type "la"** → Should show LAX, LAS, etc. (no debug info)
+2. **Type "jfk"** → Should show JFK airport
+3. **Select airport** → Should populate field correctly
+4. **Multi-city** → Should work for all city inputs
+5. **Console** → Should only show essential errors, no debug spam
+
+#### 7. Optional: Add Smooth Animation
+
+**If desired, add subtle animations for professional feel:**
+
+```typescript
+// Add smooth transitions to dropdown
+<div 
+  className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto transition-all duration-200 ease-in-out"
+>
+```
+
+### Expected Final Result:
+
+- **Clean, professional airport search** with no debug elements
+- **Fast, responsive autocomplete** that works like major booking sites
+- **Minimal console logging** - only errors when needed
+- **Smooth user experience** without debug distractions
+
+The airport autocomplete now works beautifully - users can type partial airport names or codes and get instant suggestions powered by the real Duffel Places API! 🛫
+
+***
+
+This will give you a production-ready airport autocomplete component that's clean and professional.
+
+[1](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/117568974/71c1b963-5d67-4f13-ae17-9f3c06b48171/image.jpg?AWSAccessKeyId=ASIA2F3EMEYEQZQVKXUI&Signature=5wgipILUFv%2BCbJM40J9JT%2BgyxNQ%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEEcaCXVzLWVhc3QtMSJHMEUCIQDcPY%2BuvufO8iWK2AuoeJeBg%2F2p2mzNApWKOt87B8421AIgPCP6iysxS5nTTHKhHxiDXFPvzAvKbKm1l5xNXv%2Bt4WQq%2BgQI0P%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDFbYO9K925Vx80BYnCrOBDNagLgJo%2F3HVLjuhqWz3WlDxOWKjuI7%2FWmnCTJIrVo20SJbvAoN8%2BbGoES7BHe%2B9B7B23mzhxcXDq0qSnCZi5McotWnJVzx8MV1xZg8h0RlF3egz%2FeIG69K5AX4Y4sRYgq%2Fs%2FFdpPFZ4zRoBCUKzdjN5kp4IW33FtgP3I5jbjlavmF%2FmfwhFuZ%2BnMU8PkoXYcy%2B6jBQ2WjwKjh6VOrL7peadaHSRAPlEcVsqzUdj1yw7CF44g24C5YFgBmPOMYviFIBHtRmw4d%2FM1Y2MCvRTt%2F1KipXQ3jXjPIyrOJQ%2B2%2FNH4Yjbq2njty2GE0OOpgPlIGIbvOJAbZMbKTNouTHDZw14faS5l0aGID5YBpJ8AoXcGMag%2B2ecxj0RhD9wj5dDAn0Wct7RDieB7%2BXfdqMCIiyQdhbLkuVMxWjb0zshnCr08%2B6EF5JITN2%2FkzVA3TPDtJ6VZAusN0Ls%2FkSrp8KVx%2B35ZKX3m17QuYLWhkFBzN1SteCDt08WhYcSrEDhRL2fbJDGWJqik7LlR405Q0kFlJGfON%2FU5snQFErU0all1iovrfA7%2Fyo02hh4%2BtEuPJHiRuY0OBC%2BP04Zy1KAxQjDHbyaCaJunojbMYFAUZr54T04mVaWsNi%2BVLpqlLEDEHLWPWHBOi5cd%2B45nUU21ThSt7umepfUgfOHGdsSIr3R29Si1Hfk7olY98xgl%2B%2Bu5LM2h5Ag%2F8JRUueYOvpLxYKjaZMXc%2Bxx%2FBJ5exaEr6AOP%2F1l5IizPeUFYB8Bl9E2LtQ3DBtNs8O1KWlJhXaRy5MMO%2FW6MYGOpoBdWQ6DRepaNbDU6whLMrjE9U7rHGT7VrMr4e9P0I0LbZuj%2B0TrlcExxo9qq3vC1P%2BU4NL%2FPyXrPqYwcg6Xzx1V6S3SpWSGlNacMbrIxXbBfzY0fwiWIhWz4nqY0ZpD4GL%2FepADPXZSgMkh%2Fdblxnhqt2Drv6a0G%2FB8yh9yESpUwy0KrdK7PjPMSSjI1pzWDCxJzt8JJJCUKGBVA%3D%3D&Expires=1759131360)
+[2](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/117568974/65fcc513-7eaf-4d5f-a648-0f678e7b62a2/image.jpg?AWSAccessKeyId=ASIA2F3EMEYEQZQVKXUI&Signature=PEDoHYv3wUiGmEzq9kTLvYgIpwk%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEEcaCXVzLWVhc3QtMSJHMEUCIQDcPY%2BuvufO8iWK2AuoeJeBg%2F2p2mzNApWKOt87B8421AIgPCP6iysxS5nTTHKhHxiDXFPvzAvKbKm1l5xNXv%2Bt4WQq%2BgQI0P%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDFbYO9K925Vx80BYnCrOBDNagLgJo%2F3HVLjuhqWz3WlDxOWKjuI7%2FWmnCTJIrVo20SJbvAoN8%2BbGoES7BHe%2B9B7B23mzhxcXDq0qSnCZi5McotWnJVzx8MV1xZg8h0RlF3egz%2FeIG69K5AX4Y4sRYgq%2Fs%2FFdpPFZ4zRoBCUKzdjN5kp4IW33FtgP3I5jbjlavmF%2FmfwhFuZ%2BnMU8PkoXYcy%2B6jBQ2WjwKjh6VOrL7peadaHSRAPlEcVsqzUdj1yw7CF44g24C5YFgBmPOMYviFIBHtRmw4d%2FM1Y2MCvRTt%2F1KipXQ3jXjPIyrOJQ%2B2%2FNH4Yjbq2njty2GE0OOpgPlIGIbvOJAbZMbKTNouTHDZw14faS5l0aGID5YBpJ8AoXcGMag%2B2ecxj0RhD9wj5dDAn0Wct7RDieB7%2BXfdqMCIiyQdhbLkuVMxWjb0zshnCr08%2B6EF5JITN2%2FkzVA3TPDtJ6VZAusN0Ls%2FkSrp8KVx%2B35ZKX3m17QuYLWhkFBzN1SteCDt08WhYcSrEDhRL2fbJDGWJqik7LlR405Q0kFlJGfON%2FU5snQFErU0all1iovrfA7%2Fyo02hh4%2BtEuPJHiRuY0OBC%2BP04Zy1KAxQjDHbyaCaJunojbMYFAUZr54T04mVaWsNi%2BVLpqlLEDEHLWPWHBOi5cd%2B45nUU21ThSt7umepfUgfOHGdsSIr3R29Si1Hfk7olY98xgl%2B%2Bu5LM2h5Ag%2F8JRUueYOvpLxYKjaZMXc%2Bxx%2FBJ5exaEr6AOP%2F1l5IizPeUFYB8Bl9E2LtQ3DBtNs8O1KWlJhXaRy5MMO%2FW6MYGOpoBdWQ6DRepaNbDU6whLMrjE9U7rHGT7VrMr4e9P0I0LbZuj%2B0TrlcExxo9qq3vC1P%2BU4NL%2FPyXrPqYwcg6Xzx1V6S3SpWSGlNacMbrIxXbBfzY0fwiWIhWz4nqY0ZpD4GL%2FepADPXZSgMkh%2Fdblxnhqt2Drv6a0G%2FB8yh9yESpUwy0KrdK7PjPMSSjI1pzWDCxJzt8JJJCUKGBVA%3D%3D&Expires=1759131360)
+[3](https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/117568974/61776fb5-a5a4-4c67-bfd0-68e5f3d4bb42/image.jpg?AWSAccessKeyId=ASIA2F3EMEYEQZQVKXUI&Signature=4t9%2FzyF555UiMWOhCzfpWYybBJw%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEEcaCXVzLWVhc3QtMSJHMEUCIQDcPY%2BuvufO8iWK2AuoeJeBg%2F2p2mzNApWKOt87B8421AIgPCP6iysxS5nTTHKhHxiDXFPvzAvKbKm1l5xNXv%2Bt4WQq%2BgQI0P%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDFbYO9K925Vx80BYnCrOBDNagLgJo%2F3HVLjuhqWz3WlDxOWKjuI7%2FWmnCTJIrVo20SJbvAoN8%2BbGoES7BHe%2B9B7B23mzhxcXDq0qSnCZi5McotWnJVzx8MV1xZg8h0RlF3egz%2FeIG69K5AX4Y4sRYgq%2Fs%2FFdpPFZ4zRoBCUKzdjN5kp4IW33FtgP3I5jbjlavmF%2FmfwhFuZ%2BnMU8PkoXYcy%2B6jBQ2WjwKjh6VOrL7peadaHSRAPlEcVsqzUdj1yw7CF44g24C5YFgBmPOMYviFIBHtRmw4d%2FM1Y2MCvRTt%2F1KipXQ3jXjPIyrOJQ%2B2%2FNH4Yjbq2njty2GE0OOpgPlIGIbvOJAbZMbKTNouTHDZw14faS5l0aGID5YBpJ8AoXcGMag%2B2ecxj0RhD9wj5dDAn0Wct7RDieB7%2BXfdqMCIiyQdhbLkuVMxWjb0zshnCr08%2B6EF5JITN2%2FkzVA3TPDtJ6VZAusN0Ls%2FkSrp8KVx%2B35ZKX3m17QuYLWhkFBzN1SteCDt08WhYcSrEDhRL2fbJDGWJqik7LlR405Q0kFlJGfON%2FU5snQFErU0all1iovrfA7%2Fyo02hh4%2BtEuPJHiRuY0OBC%2BP04Zy1KAxQjDHbyaCaJunojbMYFAUZr54T04mVaWsNi%2BVLpqlLEDEHLWPWHBOi5cd%2B45nUU21ThSt7umepfUgfOHGdsSIr3R29Si1Hfk7olY98xgl%2B%2Bu5LM2h5Ag%2F8JRUueYOvpLxYKjaZMXc%2Bxx%2FBJ5exaEr6AOP%2F1l5IizPeUFYB8Bl9E2LtQ3DBtNs8O1KWlJhXaRy5MMO%2FW6MYGOpoBdWQ6DRepaNbDU6whLMrjE9U7rHGT7VrMr4e9P0I0LbZuj%2B0TrlcExxo9qq3vC1P%2BU4NL%2FPyXrPqYwcg6Xzx1V6S3SpWSGlNacMbrIxXbBfzY0fwiWIhWz4nqY0ZpD4GL%2FepADPXZSgMkh%2Fdblxnhqt2Drv6a0G%2FB8yh9yESpUwy0KrdK7PjPMSSjI1pzWDCxJzt8JJJCUKGBVA%3D%3D&Expires=1759131360)
