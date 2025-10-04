@@ -152,7 +152,10 @@ export function PassengerDetailsPage() {
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
 
     setSubmitting(true);
 
@@ -199,36 +202,37 @@ export function PassengerDetailsPage() {
         })),
       ];
 
-      const bookingData = {
-        offerId: checkoutItem.offer.id,
-        passengers,
-        services,
-        totalAmount: checkoutItem.offer.total_amount,
-        currency: checkoutItem.offer.total_currency,
-      };
+      console.log('💳 Creating Stripe checkout session...');
 
-      console.log('📋 Booking data:', bookingData);
-
-      const response = await fetch('https://jxrrlhsffnxzlszhccg.supabase.co/functions/v1/flights-book', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bookingData),
-      });
+      const response = await fetch(
+        'https://jxrrlhsffnxzlszhccg.supabase.co/functions/v1/create-checkout-session',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            offerId: checkoutItem.offer.id,
+            passengers,
+            services,
+            totalAmount: checkoutItem.offer.total_amount,
+            currency: checkoutItem.offer.total_currency,
+            offerData: checkoutItem.offer,
+          }),
+        }
+      );
 
       const result = await response.json();
-      console.log('✅ Booking response:', result);
 
-      if (result.success) {
-        sessionStorage.setItem('order_confirmation', JSON.stringify(result));
-        sessionStorage.removeItem('checkout_item');
-        navigate('/booking-confirmation');
-      } else {
-        alert(`Booking failed: ${result.error || 'Unknown error'}`);
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create checkout session');
       }
-    } catch (error) {
-      console.error('❌ Booking error:', error);
-      alert('An error occurred while booking. Please try again.');
-    } finally {
+
+      console.log('✅ Checkout session created, redirecting to Stripe...');
+      
+      window.location.href = result.url;
+
+    } catch (error: any) {
+      console.error('❌ Checkout error:', error);
+      alert(`Payment initialization failed: ${error.message}`);
       setSubmitting(false);
     }
   };
@@ -810,10 +814,10 @@ export function PassengerDetailsPage() {
             {submitting ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Booking...
+                Processing...
               </>
             ) : (
-              'Complete Booking'
+              'Proceed to Payment'
             )}
           </Button>
         </div>
