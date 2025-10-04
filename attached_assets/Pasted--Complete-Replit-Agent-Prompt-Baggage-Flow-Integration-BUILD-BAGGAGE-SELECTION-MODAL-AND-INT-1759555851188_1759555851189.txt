@@ -1,0 +1,250 @@
+# Complete Replit Agent Prompt - Baggage Flow Integration
+
+```
+BUILD BAGGAGE SELECTION MODAL AND INTEGRATE WITH CHECKOUT FLOW
+
+OVERVIEW:
+Add baggage selection to the existing flight booking flow. Backend is already deployed at /functions/v1/available-services. Modal must handle both empty baggage (current state) and real baggage data (when airlines provide it).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE 1: client/src/components/ui/BaggageSelectionModal.tsx
+
+Create new component with these exact interfaces:
+
+```typescript
+interface BaggageSelectionModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  offerId: string;
+  passengers: any[];
+  onComplete: (selectedBaggage: SelectedBaggage[]) => void;
+}
+
+interface SelectedBaggage {
+  serviceId: string;
+  quantity: number;
+  passengerId: string;
+  segmentId: string;
+  amount: string;
+}
+```
+
+Fetch baggage data on mount:
+```typescript
+const fetchBaggageOptions = async () => {
+  const { data, error } = await supabase.functions.invoke('available-services', {
+    body: { offer_id: offerId },
+  });
+  
+  if (data.success) {
+    setBaggageServices(data.availableServices.baggage || []);
+  }
+};
+```
+
+Display logic:
+- If loading: Show spinner
+- If baggage array empty: Show "No Additional Baggage Available" with skip button
+- If baggage available: Show list grouped by passenger with quantity selectors
+
+Each baggage option displays:
+- Type: "Checked Bag" or "Carry-on Bag" (from metadata.type)
+- Weight: "Up to {maximum_weight_kg}kg"
+- Price: "{totalCurrency} ${totalAmount}" per bag
+- Quantity selector: - [number] + buttons (0 to maximumQuantity)
+
+Bottom section:
+- Total baggage cost calculation
+- "Skip Baggage" button (gray border)
+- "Continue" button (blue, shows +$XX.XX if bags selected)
+
+On complete:
+```typescript
+const handleComplete = () => {
+  const selected = Object.entries(selections)
+    .filter(([_, qty]) => qty > 0)
+    .map(([serviceId, quantity]) => {
+      const service = baggageServices.find(s => s.id === serviceId);
+      return {
+        serviceId,
+        quantity,
+        passengerId: service.passengerIds[0],
+        segmentId: service.segmentIds[0],
+        amount: service.totalAmount,
+      };
+    });
+  
+  onComplete(selected);
+};
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE 2: client/src/pages/flight-results.tsx
+
+Update existing file to add baggage modal:
+
+Add state:
+```typescript
+const [showBaggageModal, setShowBaggageModal] = useState(false);
+```
+
+Update handleSeatsComplete to open baggage modal:
+```typescript
+const handleSeatsComplete = (seats) => {
+  console.log('Seats selected:', seats);
+  setCurrentSelection(prev => ({ ...prev, seats }));
+  setShowSeatModal(false);
+  setShowBaggageModal(true); // ADD THIS LINE
+};
+```
+
+Add baggage handler:
+```typescript
+const handleBaggageComplete = (baggage) => {
+  console.log('Baggage selected:', baggage);
+  setCurrentSelection(prev => ({ ...prev, baggage }));
+  setShowBaggageModal(false);
+  // User can now click Book Now or Add to Cart
+};
+```
+
+Add import:
+```typescript
+import { BaggageSelectionModal } from '@/components/ui/BaggageSelectionModal';
+```
+
+Add to JSX (after SeatSelectionModal):
+```typescript
+{showBaggageModal && selectedOffer && (
+  <BaggageSelectionModal
+    isOpen={showBaggageModal}
+    onClose={() => setShowBaggageModal(false)}
+    offerId={selectedOffer.id}
+    passengers={selectedOffer.passengers}
+    onComplete={handleBaggageComplete}
+  />
+)}
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE 3: client/src/components/TripSummary.tsx (UPDATE)
+
+Ensure baggage is included in price breakdown:
+
+```typescript
+const baggageAmount = baggage.reduce((sum, b) => 
+  sum + (parseFloat(b.amount || '0') * b.quantity), 0
+);
+```
+
+Display baggage line item if present:
+```typescript
+{baggage.length > 0 && (
+  <div className="flex justify-between">
+    <span className="text-gray-600">
+      Baggage ({baggage.reduce((sum, b) => sum + b.quantity, 0)} bags)
+    </span>
+    <span>{currency} ${baggageAmount.toFixed(2)}</span>
+  </div>
+)}
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE 4: Verify buildCartItem function includes baggage
+
+In flight-results.tsx, ensure buildCartItem saves baggage:
+
+```typescript
+function buildCartItem(selection) {
+  const baggageCost = selection.baggage.reduce((sum, b) => 
+    sum + (parseFloat(b.amount || '0') * b.quantity), 0
+  );
+
+  return {
+    // ... existing fields
+    selectedBaggage: selection.baggage,
+    pricing: {
+      flightBase,
+      seats: seatsCost,
+      baggage: baggageCost, // ENSURE THIS IS INCLUDED
+      total: flightBase + seatsCost + baggageCost,
+      currency: selection.offer.totalCurrency,
+    }
+  };
+}
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+COMPLETE FLOW AFTER CHANGES:
+
+1. User searches flights
+2. Selects flight → Order Summary shows flight amount
+3. Seat modal opens → Selects seat → Order Summary updates with seat
+4. Baggage modal opens automatically
+   - If no baggage: Shows skip message
+   - If baggage available: Shows options with prices
+5. User selects bags or skips → Order Summary updates with baggage
+6. User clicks "Book Now" or "Add to Cart"
+7. Cart page shows complete breakdown: flight + seats + baggage
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STYLING REQUIREMENTS:
+
+- Use existing Tailwind classes
+- Modal: max-w-4xl, rounded-lg, white background
+- Buttons: Blue primary (bg-blue-600), gray secondary (border-gray-300)
+- Quantity controls: Gray background (bg-gray-100), white buttons inside
+- Skip button always available (bottom left)
+- Continue button bottom right
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TESTING CHECKLIST:
+
+After implementation, test these scenarios:
+
+Scenario A - No Baggage (Current):
+- Search flights
+- Select any flight
+- Select seat
+- Baggage modal opens showing "No Additional Baggage Available"
+- Click skip
+- Order Summary shows flight + seats only
+
+Scenario B - With Baggage (Use offer: off_0000Ayr6sl0Sq3FuIiAtxq):
+- Search flights
+- Find offer with ID off_0000Ayr6sl0Sq3FuIiAtxq
+- Select seat
+- Baggage modal shows 1 checked bag at AUD $40.83
+- Add 1 bag
+- Order Summary shows flight + seats + baggage
+- Total = flight + seats + baggage amounts
+
+Scenario C - Add to Cart:
+- Complete flow with baggage
+- Click "Add to Cart"
+- Navigate to /cart
+- Verify baggage line item shows in price breakdown
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CRITICAL REQUIREMENTS:
+
+1. Handle empty baggage array gracefully (show skip message)
+2. Console.log all baggage data fetched for debugging
+3. Console.log selected baggage when user clicks continue
+4. Pass complete baggage objects with all required fields
+5. Update Order Summary in real-time as bags added
+6. Include baggage in cart item pricing object
+7. Allow skip at any point (never force baggage selection)
+
+Build all four file updates now. The baggage modal must work whether airlines provide baggage data or not.
+```
+
+This single prompt gives Replit Agent everything needed to build the complete baggage integration. It covers the modal, flow integration, order summary updates, and cart storage.
