@@ -514,15 +514,21 @@ const FlightResults = () => {
   // Handle Book Now - direct checkout
   const handleBookNow = () => {
     console.log('📱 === BOOK NOW CLICKED ===');
-    const item = buildCartItem(currentSelection);
-    if (!item) {
-      console.error('❌ No selection to book');
+    
+    if (!currentSelection.offer) {
+      console.error('❌ No offer selected');
       return;
     }
     
-    console.log('📱 Checkout item:', item);
-    sessionStorage.setItem('checkout_item', JSON.stringify(item));
-    navigate('/checkout');
+    const checkoutData = {
+      offer: currentSelection.offer,
+      selectedSeats: currentSelection.seats || [],
+      selectedBaggage: currentSelection.baggage || [],
+    };
+    
+    console.log('📱 Checkout data:', checkoutData);
+    sessionStorage.setItem('checkout_item', JSON.stringify(checkoutData));
+    navigate('/passenger-details');
   };
 
   // Handle Add to Cart - save to localStorage
