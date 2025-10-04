@@ -1,0 +1,261 @@
+# Complete Fix - Single Prompt for Replit Agent
+
+```
+COMPREHENSIVE FIX: ORDER SUMMARY + CART FLOW + DATA ISSUES
+
+THREE PROBLEMS TO SOLVE:
+
+1. Trip Summary not updating when flights/seats selected
+2. Hardcoded $100 test data showing instead of real amounts
+3. Need to separate "Order Summary" (quick checkout) from "Cart" (bundling)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FIX 1: UPDATE flight-results.tsx
+
+Add state management for current selection:
+
+```typescript
+const [currentSelection, setCurrentSelection] = useState({
+  offer: null,
+  seats: [],
+  baggage: []
+});
+
+const handleFlightSelect = (offer) => {
+  console.log('Flight selected:', offer);
+  setCurrentSelection({ offer, seats: [], baggage: [] });
+  setSelectedOffer(offer);
+  setShowSeatModal(true);
+};
+
+const handleSeatsComplete = (seats) => {
+  console.log('Seats selected:', seats);
+  setCurrentSelection(prev => ({ ...prev, seats }));
+  setShowSeatModal(false);
+  setShowBaggageModal(true);
+};
+
+const handleBaggageComplete = (baggage) => {
+  console.log('Baggage selected:', baggage);
+  setCurrentSelection(prev => ({ ...prev, baggage }));
+  setShowBaggageModal(false);
+  // Don't auto-add to cart - let user choose
+};
+
+const handleBookNow = () => {
+  const item = buildCartItem(currentSelection);
+  sessionStorage.setItem('checkout_item', JSON.stringify(item));
+  navigate('/checkout');
+};
+
+const handleAddToCart = () => {
+  const item = buildCartItem(currentSelection);
+  const cart = JSON.parse(localStorage.getItem('eventescapes_cart') || '[]');
+  cart.push(item);
+  localStorage.setItem('eventescapes_cart', JSON.stringify(cart));
+  console.log('Added to cart:', item);
+  alert('Added to cart!');
+};
+
+function buildCartItem(selection) {
+  const flightBase = parseFloat(selection.offer.totalAmount);
+  const seatsCost = selection.seats.reduce((sum, s) => sum + parseFloat(s.amount || '0'), 0);
+  const baggageCost = selection.baggage.reduce((sum, b) => sum + (parseFloat(b.amount || '0') * b.quantity), 0);
+
+  return {
+    type: 'flight',
+    offerId: selection.offer.id,
+    addedAt: new Date().toISOString(),
+    flight: {
+      origin: selection.offer.slices[0].origin?.iata_code || selection.offer.slices[0].origin,
+      destination: selection.offer.slices[0].destination?.iata_code || selection.offer.slices[0].destination,
+      departureDate: selection.offer.slices[0].departureDateTime,
+      returnDate: selection.offer.slices[1]?.departureDateTime || null,
+      airline: selection.offer.owner?.name || 'Unknown',
+      totalAmount: selection.offer.totalAmount,
+      totalCurrency: selection.offer.totalCurrency,
+    },
+    selectedSeats: selection.seats,
+    selectedBaggage: selection.baggage,
+    passengers: selection.offer.passengers,
+    pricing: {
+      flightBase,
+      seats: seatsCost,
+      baggage: baggageCost,
+      total: flightBase + seatsCost + baggageCost,
+      currency: selection.offer.totalCurrency,
+    }
+  };
+}
+```
+
+Pass to TripSummary:
+```typescript
+<TripSummary
+  currentSelection={currentSelection}
+  onBookNow={handleBookNow}
+  onAddToCart={handleAddToCart}
+/>
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FIX 2: REBUILD TripSummary.tsx
+
+```typescript
+interface TripSummaryProps {
+  currentSelection: {
+    offer: any | null;
+    seats: Array<{designator: string; amount: string}>;
+    baggage: Array<{quantity: number; amount: string}>;
+  };
+  onBookNow: () => void;
+  onAddToCart: () => void;
+}
+
+export const TripSummary: React.FC<TripSummaryProps> = ({
+  currentSelection,
+  onBookNow,
+  onAddToCart
+}) => {
+  const { offer, seats, baggage } = currentSelection;
+  
+  const flightAmount = offer ? parseFloat(offer.totalAmount) : 0;
+  const seatsAmount = seats.reduce((sum, s) => sum + parseFloat(s.amount || '0'), 0);
+  const baggageAmount = baggage.reduce((sum, b) => sum + (parseFloat(b.amount || '0') * b.quantity), 0);
+  const total = flightAmount + seatsAmount + baggageAmount;
+  const currency = offer?.totalCurrency || 'AUD';
+
+  return (
+    <div className="bg-white rounded-lg shadow-lg p-6 sticky top-4">
+      <h3 className="text-xl font-bold mb-4">Order Summary</h3>
+
+      {/* Flight Status */}
+      <div className="mb-4">
+        <div className="text-sm font-semibold text-gray-500 uppercase mb-1">Outbound</div>
+        {offer ? (
+          <div className="text-sm">
+            {offer.owner?.name || 'Selected'}
+          </div>
+        ) : (
+          <div className="text-sm text-gray-400">Not selected</div>
+        )}
+      </div>
+
+      <div className="mb-6">
+        <div className="text-sm font-semibold text-gray-500 uppercase mb-1">Return</div>
+        <div className="text-sm text-gray-400">Not selected</div>
+      </div>
+
+      {/* Total */}
+      <div className="border-t pt-4 mb-6">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-lg font-semibold">Total</span>
+          <span className="text-sm text-gray-500">For 1 passenger</span>
+        </div>
+        <div className="text-3xl font-bold text-blue-600">
+          {currency} ${total.toFixed(2)}
+        </div>
+      </div>
+
+      {/* Price Breakdown */}
+      {offer && (
+        <div className="border-t pt-4 mb-6 text-sm space-y-2">
+          <div className="flex justify-between">
+            <span className="text-gray-600">Flight</span>
+            <span>{currency} ${flightAmount.toFixed(2)}</span>
+          </div>
+          
+          {seats.length > 0 && (
+            <div className="flex justify-between">
+              <span className="text-gray-600">
+                Seats ({seats.map(s => s.designator).join(', ')})
+              </span>
+              <span>{currency} ${seatsAmount.toFixed(2)}</span>
+            </div>
+          )}
+          
+          {baggage.length > 0 && (
+            <div className="flex justify-between">
+              <span className="text-gray-600">
+                Baggage ({baggage.reduce((sum, b) => sum + b.quantity, 0)} bags)
+              </span>
+              <span>{currency} ${baggageAmount.toFixed(2)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      {offer ? (
+        <div className="space-y-3">
+          <button
+            onClick={onBookNow}
+            className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+          >
+            Book Now
+          </button>
+          <button
+            onClick={onAddToCart}
+            className="w-full py-3 border-2 border-blue-600 text-blue-600 rounded-lg font-semibold hover:bg-blue-50"
+          >
+            Add to Cart
+          </button>
+        </div>
+      ) : (
+        <button
+          disabled
+          className="w-full py-3 bg-gray-300 text-gray-500 rounded-lg font-semibold cursor-not-allowed"
+        >
+          Select a flight to continue
+        </button>
+      )}
+    </div>
+  );
+};
+```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FIX 3: CART PAGE (cart.tsx) - NO CHANGES NEEDED
+
+Cart page is already working correctly. It reads from localStorage and displays properly.
+The issue was stale test data which will be cleared by user.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TESTING STEPS AFTER IMPLEMENTATION:
+
+1. Clear localStorage in browser console:
+   localStorage.clear();
+   location.reload();
+
+2. Search for flights LAX → JFK
+
+3. Select a flight
+   - Trip Summary should update showing flight amount
+   - Console should log: "Flight selected: {offer}"
+
+4. Select a seat
+   - Trip Summary should add seat amount to total
+   - Console should log: "Seats selected: [{seat data}]"
+
+5. Select baggage or skip
+   - Trip Summary should add baggage to total
+   - Console should log: "Baggage selected: [{baggage data}]"
+
+6. Click "Book Now"
+   - Should navigate to /checkout
+   - sessionStorage should have checkout_item
+
+7. OR click "Add to Cart"
+   - Should show alert
+   - localStorage should have cart item with correct amounts
+   - Navigate to /cart manually to verify display
+
+CRITICAL: All amounts must come from the actual offer/seat/baggage data.
+NO hardcoded values like $100.
+```
+
+This single prompt gives Replit Agent everything needed to fix all three issues at once.
