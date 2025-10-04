@@ -6,6 +6,7 @@ import { useBooking } from '@/contexts/BookingContext';
 import TripSummary from '@/components/TripSummary';
 import FloatingCheckout from '@/components/FloatingCheckout';
 import { SeatSelectionModal } from '@/components/SeatSelectionModal';
+import { BaggageSelectionModal } from '@/components/ui/BaggageSelectionModal';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Plane, Clock, MapPin } from 'lucide-react';
 
@@ -94,6 +95,7 @@ const FlightResults = () => {
     sliceOrigin: string;
     sliceDestination: string;
   } | null>(null);
+  const [showBaggageModal, setShowBaggageModal] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [cartItemId, setCartItemId] = useState<string | null>(null);
 
@@ -552,6 +554,22 @@ const FlightResults = () => {
     }
   };
 
+  // Handle Baggage Selection Complete
+  const handleBaggageComplete = (baggage: any[]) => {
+    console.log('🧳 === BAGGAGE SELECTION COMPLETE ===');
+    console.log('🧳 Baggage selected:', baggage);
+    
+    // Update currentSelection for Order Summary
+    setCurrentSelection(prev => {
+      const newSelection = { ...prev, baggage };
+      console.log('🧳 Updated currentSelection:', newSelection);
+      return newSelection;
+    });
+    
+    // Close baggage modal - user can now Book Now or Add to Cart
+    setShowBaggageModal(false);
+  };
+
   // Handle adding to cart with direct localStorage save (legacy - keeping for compatibility)
   const handleAddToCart = () => {
     console.log('🛒 === ADD TO CART CALLED ===');
@@ -938,10 +956,11 @@ const FlightResults = () => {
                 sliceDestination: nextOffer.flight.arrivalAirport
               });
             } else {
-              // Close seat selection modal - user can now Book Now or Add to Cart
-              console.log('💺 Seats selected - closing modal');
+              // All seats selected - open baggage modal
+              console.log('💺 All seats selected - opening baggage modal');
               setShowSeatSelection(false);
               setCurrentSeatSelection(null);
+              setShowBaggageModal(true);
             }
           }}
           onClose={() => {
@@ -966,6 +985,20 @@ const FlightResults = () => {
               handleAddToCart();
             }
           }}
+        />
+      )}
+
+      {/* Baggage Selection Modal */}
+      {showBaggageModal && currentSelection.offer && (
+        <BaggageSelectionModal
+          isOpen={showBaggageModal}
+          onClose={() => setShowBaggageModal(false)}
+          offerId={currentSelection.offer.id}
+          passengers={Array.from({ length: searchParams.passengers }, (_, i) => ({
+            id: `passenger_${i + 1}`,
+            type: 'adult'
+          }))}
+          onComplete={handleBaggageComplete}
         />
       )}
 
