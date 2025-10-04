@@ -464,6 +464,9 @@ export function PassengerDetailsPage() {
                   <option value="m">Male</option>
                   <option value="f">Female</option>
                 </select>
+                <p className="text-xs text-gray-500 mt-1 italic">
+                  Based on travel document. Airlines currently accept M/F only.
+                </p>
                 {errors[`${index}-gender`] && (
                   <p className="text-red-500 text-sm mt-1">{errors[`${index}-gender`]}</p>
                 )}
