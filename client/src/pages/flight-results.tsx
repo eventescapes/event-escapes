@@ -97,6 +97,17 @@ const FlightResults = () => {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [cartItemId, setCartItemId] = useState<string | null>(null);
 
+  // Current selection state for Order Summary
+  const [currentSelection, setCurrentSelection] = useState<{
+    offer: EdgeFunctionOffer | null;
+    seats: any[];
+    baggage: any[];
+  }>({
+    offer: null,
+    seats: [],
+    baggage: []
+  });
+
   // Multi-city state
   const [multiCitySlices, setMultiCitySlices] = useState<MultiCitySlice[]>([
     { id: '1', origin: '', destination: '', departure_date: '' },
@@ -416,6 +427,8 @@ const FlightResults = () => {
 
   // Flight selection handler
   const handleFlightSelect = (sliceIndex: number, flight: any) => {
+    console.log('✈️ Flight selected:', flight);
+    
     setSelectedOffers(prev => ({
       ...prev,
       [sliceIndex]: {
@@ -426,6 +439,17 @@ const FlightResults = () => {
         currency: flight.currency
       }
     }));
+    
+    // Update current selection for Order Summary
+    const fullOffer = offers.find(o => o.id === flight.offerId);
+    if (fullOffer && sliceIndex === 0) {
+      console.log('✈️ Setting current selection offer:', fullOffer);
+      setCurrentSelection({
+        offer: fullOffer,
+        seats: [],
+        baggage: []
+      });
+    }
   };
 
   // Check if all required slices are selected
@@ -442,7 +466,93 @@ const FlightResults = () => {
     return true;
   };
 
-  // Handle adding to cart with direct localStorage save
+  // Build cart item from current selection
+  const buildCartItem = (selection: typeof currentSelection) => {
+    if (!selection.offer) return null;
+    
+    const flightBase = parseFloat(selection.offer.total_amount?.toString() || '0');
+    const seatsCost = selection.seats.reduce((sum, s) => sum + parseFloat(s.amount || '0'), 0);
+    const baggageCost = selection.baggage.reduce((sum, b) => sum + (parseFloat(b.amount || '0') * (b.quantity || 1)), 0);
+
+    return {
+      type: 'flight',
+      offerId: selection.offer.id,
+      addedAt: new Date().toISOString(),
+      flight: {
+        origin: selection.offer.slices[0]?.origin || searchParams.from,
+        destination: selection.offer.slices[0]?.destination || searchParams.to,
+        departureDate: selection.offer.slices[0]?.departure_time || searchParams.departDate,
+        returnDate: selection.offer.slices[1]?.departure_time || null,
+        airline: selection.offer.slices[0]?.segments[0]?.airline || 'Unknown',
+        totalAmount: selection.offer.total_amount?.toString() || '0',
+        totalCurrency: selection.offer.total_currency || 'AUD',
+      },
+      selectedSeats: selection.seats.map(s => ({
+        serviceId: s.serviceId || s.id || '',
+        designator: s.designator || '',
+        passengerId: s.passengerId || '',
+        segmentId: s.segmentId || '',
+        amount: s.amount || '0'
+      })),
+      selectedBaggage: selection.baggage,
+      passengers: Array.from({ length: searchParams.passengers }, (_, i) => ({
+        id: `passenger_${i + 1}`,
+        type: 'adult'
+      })),
+      pricing: {
+        flightBase,
+        seats: seatsCost,
+        baggage: baggageCost,
+        total: flightBase + seatsCost + baggageCost,
+        currency: selection.offer.total_currency || 'AUD',
+      }
+    };
+  };
+
+  // Handle Book Now - direct checkout
+  const handleBookNow = () => {
+    console.log('📱 === BOOK NOW CLICKED ===');
+    const item = buildCartItem(currentSelection);
+    if (!item) {
+      console.error('❌ No selection to book');
+      return;
+    }
+    
+    console.log('📱 Checkout item:', item);
+    sessionStorage.setItem('checkout_item', JSON.stringify(item));
+    navigate('/checkout');
+  };
+
+  // Handle Add to Cart - save to localStorage
+  const handleAddToCartFromSummary = () => {
+    console.log('🛒 === ADD TO CART FROM SUMMARY ===');
+    const item = buildCartItem(currentSelection);
+    if (!item) {
+      console.error('❌ No selection to add to cart');
+      return;
+    }
+    
+    console.log('🛒 Cart item:', item);
+    
+    try {
+      const cart = JSON.parse(localStorage.getItem('eventescapes_cart') || '[]');
+      cart.push(item);
+      localStorage.setItem('eventescapes_cart', JSON.stringify(cart));
+      console.log('✅ Added to cart:', item);
+      
+      // Show success message
+      setShowSuccessMessage(true);
+      
+      // Clear selection
+      setCurrentSelection({ offer: null, seats: [], baggage: [] });
+      setSelectedOffers({});
+      setSelectedSeats({});
+    } catch (error) {
+      console.error('❌ Error adding to cart:', error);
+    }
+  };
+
+  // Handle adding to cart with direct localStorage save (legacy - keeping for compatibility)
   const handleAddToCart = () => {
     console.log('🛒 === ADD TO CART CALLED ===');
     console.log('Selected Offers:', selectedOffers);
@@ -745,44 +855,12 @@ const FlightResults = () => {
               })}
             </div>
 
-            {/* Trip Summary */}
+            {/* Order Summary */}
             <div className="lg:col-span-1">
               <TripSummary
-                outbound={{
-                  price: selectedOffers[0] ? { 
-                    amount: selectedOffers[0].price, 
-                    currency: selectedOffers[0].currency 
-                  } : undefined,
-                  carrier: selectedOffers[0]?.flight?.airline,
-                }}
-                inbound={{
-                  price: selectedOffers[1] ? { 
-                    amount: selectedOffers[1].price, 
-                    currency: selectedOffers[1].currency 
-                  } : undefined,
-                  carrier: selectedOffers[1]?.flight?.airline,
-                }}
-                passengers={searchParams.passengers}
-                selectedSeats={{ 
-                  outbound: selectedSeats[0] || [], 
-                  return: selectedSeats[1] || [] 
-                }}
-                onAddToCart={() => {
-                  if (areAllSlicesSelected()) {
-                    // Start seat selection with first slice
-                    const firstOffer = selectedOffers[0];
-                    if (firstOffer) {
-                      setCurrentSeatSelection({ 
-                        sliceIndex: 0, 
-                        offerId: firstOffer.offerId,
-                        sliceOrigin: firstOffer.flight.departureAirport,
-                        sliceDestination: firstOffer.flight.arrivalAirport
-                      });
-                      setShowSeatSelection(true);
-                    }
-                  }
-                }}
-                isCartMode={true}
+                currentSelection={currentSelection}
+                onBookNow={handleBookNow}
+                onAddToCart={handleAddToCartFromSummary}
               />
             </div>
           </div>
@@ -816,6 +894,13 @@ const FlightResults = () => {
             console.log('💺 Seats received:', seats);
             console.log('💺 Current slice index:', currentSeatSelection.sliceIndex);
             
+            // Update currentSelection for Order Summary
+            setCurrentSelection(prev => {
+              const newSelection = { ...prev, seats };
+              console.log('💺 Updated currentSelection:', newSelection);
+              return newSelection;
+            });
+            
             // Update the selected seats for this slice
             setSelectedSeats(prev => {
               const newSeats = {
@@ -826,13 +911,7 @@ const FlightResults = () => {
               return newSeats;
             });
             
-            // Update booking context
-            updateSelectedSeats({
-              outbound: currentSeatSelection.sliceIndex === 0 ? seats : (selectedSeats[0] || []),
-              return: currentSeatSelection.sliceIndex === 1 ? seats : (selectedSeats[1] || [])
-            });
-            
-            // Move to next slice or checkout
+            // Move to next slice or close
             const nextSliceIndex = currentSeatSelection.sliceIndex + 1;
             const nextOffer = selectedOffers[nextSliceIndex];
             
@@ -850,9 +929,10 @@ const FlightResults = () => {
                 sliceDestination: nextOffer.flight.arrivalAirport
               });
             } else {
-              // All seat selection completed - add to cart
-              console.log('💺 All seats selected - calling handleAddToCart');
-              handleAddToCart();
+              // Close seat selection modal - user can now Book Now or Add to Cart
+              console.log('💺 Seats selected - closing modal');
+              setShowSeatSelection(false);
+              setCurrentSeatSelection(null);
             }
           }}
           onClose={() => {

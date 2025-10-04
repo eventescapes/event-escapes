@@ -1,140 +1,121 @@
-import { ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface TripSummaryProps {
-  currentOffer?: {
-    totalAmount: string;
-    totalCurrency: string;
+  currentSelection: {
+    offer: any | null;
+    seats: Array<{ designator: string; amount: string }>;
+    baggage: Array<{ quantity: number; amount: string }>;
   };
-  selectedSeats?: Array<{
-    designator: string;
-    amount: string;
-  }>;
-  selectedBaggage?: Array<{
-    quantity: number;
-    amount: string;
-  }>;
-  onAddToCart?: () => void;
+  onBookNow: () => void;
+  onAddToCart: () => void;
 }
 
 export default function TripSummary({
-  currentOffer,
-  selectedSeats,
-  selectedBaggage,
+  currentSelection,
+  onBookNow,
   onAddToCart
 }: TripSummaryProps) {
+  const { offer, seats, baggage } = currentSelection;
   
-  const safeSeats = Array.isArray(selectedSeats) ? selectedSeats : [];
-  const safeBaggage = Array.isArray(selectedBaggage) ? selectedBaggage : [];
-  
-  const calculateTotal = () => {
-    const offerAmount = parseFloat(currentOffer?.totalAmount || '0');
-    const seatsTotal = safeSeats.reduce((sum, seat) => sum + parseFloat(seat.amount || '0'), 0);
-    const baggageTotal = safeBaggage.reduce((sum, bag) => {
-      return sum + (parseFloat(bag.amount || '0') * (bag.quantity || 1));
-    }, 0);
-    
-    return offerAmount + seatsTotal + baggageTotal;
-  };
-
-  const currency = currentOffer?.totalCurrency || 'AUD';
-  const total = calculateTotal();
-  const hasOffer = !!currentOffer;
-
-  const formatPrice = (amount: number) => {
-    return `${currency.toUpperCase()} $${amount.toFixed(2)}`;
-  };
-
-  const getSeatDesignators = () => {
-    return safeSeats.map(s => s.designator).join(', ');
-  };
-
-  const getBaggageCount = () => {
-    return safeBaggage.reduce((sum, b) => sum + (b.quantity || 1), 0);
-  };
+  const flightAmount = offer ? parseFloat(offer.total_amount?.toString() || '0') : 0;
+  const seatsAmount = seats.reduce((sum, s) => sum + parseFloat(s.amount || '0'), 0);
+  const baggageAmount = baggage.reduce((sum, b) => sum + (parseFloat(b.amount || '0') * (b.quantity || 1)), 0);
+  const total = flightAmount + seatsAmount + baggageAmount;
+  const currency = offer?.total_currency || 'AUD';
 
   return (
-    <aside className="sticky top-4 w-full" data-testid="trip-summary">
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-        <h3 className="text-xl font-bold text-gray-900 mb-6">Trip Summary</h3>
+    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 sticky top-4" data-testid="order-summary">
+      <h3 className="text-xl font-bold text-gray-900 mb-6">Order Summary</h3>
 
-        {/* Selection Status */}
-        <div className="space-y-4 mb-6">
-          <div className="flex items-center justify-between pb-3 border-b">
-            <div>
-              <p className="text-sm text-gray-500">Outbound</p>
-              <p className="font-medium text-gray-900">
-                {hasOffer ? 'Selected' : 'Not selected'}
-              </p>
+      {/* Flight Status */}
+      <div className="space-y-4 mb-6">
+        <div>
+          <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Outbound</div>
+          {offer ? (
+            <div className="text-sm text-gray-900">
+              {offer.slices?.[0]?.segments?.[0]?.airline || 'Selected'}
             </div>
-          </div>
-
-          <div className="flex items-center justify-between pb-3 border-b">
-            <div>
-              <p className="text-sm text-gray-500">Return</p>
-              <p className="font-medium text-gray-900">Not selected</p>
-            </div>
-          </div>
+          ) : (
+            <div className="text-sm text-gray-400">Not selected</div>
+          )}
         </div>
 
-        {/* Price Breakdown */}
-        {hasOffer && (
-          <div className="space-y-3 mb-6">
-            <h4 className="font-semibold text-gray-900 text-sm">Price Breakdown</h4>
-            
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Flight</span>
-              <span className="font-medium">
-                {formatPrice(parseFloat(currentOffer.totalAmount))}
-              </span>
-            </div>
-
-            {safeSeats.length > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">
-                  Seats ({getSeatDesignators()})
-                </span>
-                <span className="font-medium">
-                  {formatPrice(safeSeats.reduce((sum, s) => sum + parseFloat(s.amount || '0'), 0))}
-                </span>
-              </div>
-            )}
-
-            {safeBaggage.length > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">
-                  Baggage ({getBaggageCount()} {getBaggageCount() === 1 ? 'bag' : 'bags'})
-                </span>
-                <span className="font-medium">
-                  {formatPrice(safeBaggage.reduce((sum, b) => sum + (parseFloat(b.amount || '0') * (b.quantity || 1)), 0))}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Total */}
-        <div className="mb-6 pt-4 border-t">
-          <div className="flex items-baseline justify-between mb-2">
-            <span className="text-lg font-semibold text-gray-900">Total</span>
-            <span className="text-3xl font-bold text-blue-600">
-              {formatPrice(total)}
-            </span>
-          </div>
-          <p className="text-sm text-gray-500">For 1 passenger</p>
+        <div>
+          <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Return</div>
+          <div className="text-sm text-gray-400">Not selected</div>
         </div>
-
-        {/* Add to Cart Button */}
-        <Button
-          onClick={onAddToCart}
-          disabled={!hasOffer}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white flex items-center justify-center gap-2"
-          data-testid="button-add-to-cart"
-        >
-          <ShoppingCart className="w-5 h-5" />
-          {hasOffer ? 'Add to Cart' : 'Select a flight to continue'}
-        </Button>
       </div>
-    </aside>
+
+      {/* Total */}
+      <div className="border-t pt-4 mb-6">
+        <div className="flex justify-between items-baseline mb-2">
+          <span className="text-lg font-semibold text-gray-900">Total</span>
+          <span className="text-sm text-gray-500">For 1 passenger</span>
+        </div>
+        <div className="text-3xl font-bold text-blue-600" data-testid="total-amount">
+          {currency.toUpperCase()} ${total.toFixed(2)}
+        </div>
+      </div>
+
+      {/* Price Breakdown */}
+      {offer && (
+        <div className="border-t pt-4 mb-6">
+          <h4 className="text-sm font-semibold text-gray-900 mb-3">Price Breakdown</h4>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Flight</span>
+              <span className="font-medium">{currency.toUpperCase()} ${flightAmount.toFixed(2)}</span>
+            </div>
+            
+            {seats.length > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">
+                  Seats ({seats.map(s => s.designator).join(', ')})
+                </span>
+                <span className="font-medium">{currency.toUpperCase()} ${seatsAmount.toFixed(2)}</span>
+              </div>
+            )}
+            
+            {baggage.length > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">
+                  Baggage ({baggage.reduce((sum, b) => sum + (b.quantity || 1), 0)} {baggage.reduce((sum, b) => sum + (b.quantity || 1), 0) === 1 ? 'bag' : 'bags'})
+                </span>
+                <span className="font-medium">{currency.toUpperCase()} ${baggageAmount.toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      {offer ? (
+        <div className="space-y-3">
+          <Button
+            onClick={onBookNow}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+            data-testid="button-book-now"
+          >
+            Book Now
+          </Button>
+          <Button
+            onClick={onAddToCart}
+            variant="outline"
+            className="w-full border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-semibold"
+            data-testid="button-add-to-cart"
+          >
+            Add to Cart
+          </Button>
+        </div>
+      ) : (
+        <Button
+          disabled
+          className="w-full bg-gray-300 text-gray-500 cursor-not-allowed font-semibold"
+          data-testid="button-select-flight"
+        >
+          Select a flight to continue
+        </Button>
+      )}
+    </div>
   );
 }
