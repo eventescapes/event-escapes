@@ -894,6 +894,15 @@ const FlightResults = () => {
             console.log('💺 Seats received:', seats);
             console.log('💺 Current slice index:', currentSeatSelection.sliceIndex);
             
+            // Verify each seat has amount
+            seats.forEach(seat => {
+              if (!seat.amount || seat.amount === '0' || seat.amount === '0.00') {
+                console.error('❌ SEAT MISSING AMOUNT:', seat);
+              } else {
+                console.log(`✅ Seat ${seat.designator}: amount = ${seat.amount}`);
+              }
+            });
+            
             // Update currentSelection for Order Summary
             setCurrentSelection(prev => {
               const newSelection = { ...prev, seats };
