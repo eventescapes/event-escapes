@@ -601,7 +601,7 @@ export function PassengerDetailsPage() {
         {/* Bottom Action Bar */}
         <div className="sticky bottom-0 bg-white border-t shadow-lg p-4 -mx-4 px-8 flex gap-3 items-center justify-between">
           <Button
-            onClick={() => navigate(-1)}
+            onClick={() => window.history.back()}
             variant="outline"
             className="border-2 border-gray-300"
             data-testid="button-back"
