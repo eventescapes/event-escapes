@@ -1,0 +1,396 @@
+// client/src/pages/passenger-details.tsx
+// Complete passenger form with domestic + international fields
+
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+interface PassengerForm {
+  // Required fields
+  title: 'mr' | 'ms' | 'mrs' | 'miss' | 'dr' | '';
+  givenName: string;
+  familyName: string;
+  gender: 'm' | 'f' | '';
+  bornOn: string; // YYYY-MM-DD
+  email: string;
+  phoneNumber: string;
+  
+  // Optional - International flights
+  passportNumber: string;
+  passportExpiryDate: string; // YYYY-MM-DD
+  passportIssuingCountry: string; // ISO 2-letter code
+  
+  // Optional - Loyalty programs
+  frequentFlyerNumber: string;
+  frequentFlyerAirline: string;
+  
+  // Optional - TSA
+  knownTravelerNumber: string; // TSA PreCheck
+  redressNumber: string; // TSA redress
+}
+
+export const PassengerDetailsPage = () => {
+  const navigate = useNavigate();
+  
+  // Get cart item from session storage (set when "Book Now" clicked)
+  const cartItem = JSON.parse(sessionStorage.getItem('checkout_item') || '{}');
+  const passengerCount = cartItem.passengers?.length || 1;
+  
+  const [passengers, setPassengers] = useState<PassengerForm[]>(
+    Array(passengerCount).fill({
+      title: '',
+      givenName: '',
+      familyName: '',
+      gender: '',
+      bornOn: '',
+      email: '',
+      phoneNumber: '',
+      passportNumber: '',
+      passportExpiryDate: '',
+      passportIssuingCountry: '',
+      frequentFlyerNumber: '',
+      frequentFlyerAirline: '',
+      knownTravelerNumber: '',
+      redressNumber: '',
+    })
+  );
+
+  const [showInternationalFields, setShowInternationalFields] = useState(false);
+  const [showLoyaltyFields, setShowLoyaltyFields] = useState(false);
+  
+  const updatePassenger = (index: number, field: string, value: string) => {
+    setPassengers(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const validateForm = () => {
+    for (let i = 0; i < passengers.length; i++) {
+      const p = passengers[i];
+      
+      // Required fields
+      if (!p.title || !p.givenName || !p.familyName || !p.gender || 
+          !p.bornOn || !p.email || !p.phoneNumber) {
+        alert(`Please fill all required fields for Passenger ${i + 1}`);
+        return false;
+      }
+      
+      // Email validation
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email)) {
+        alert(`Invalid email for Passenger ${i + 1}`);
+        return false;
+      }
+      
+      // Phone validation (basic)
+      if (!/^\+?[\d\s-()]+$/.test(p.phoneNumber)) {
+        alert(`Invalid phone number for Passenger ${i + 1}`);
+        return false;
+      }
+      
+      // If passport entered, all passport fields required
+      if (p.passportNumber && (!p.passportExpiryDate || !p.passportIssuingCountry)) {
+        alert(`Complete all passport fields for Passenger ${i + 1}`);
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+    
+    // Store passenger details
+    sessionStorage.setItem('passenger_details', JSON.stringify(passengers));
+    
+    // Navigate to order creation/payment
+    navigate('/checkout/review');
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        <h1 className="text-3xl font-bold mb-2">Passenger Details</h1>
+        <p className="text-gray-600 mb-8">
+          Enter details exactly as shown on government-issued ID
+        </p>
+
+        {passengers.map((passenger, index) => (
+          <div key={index} className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">
+              Passenger {index + 1} {index === 0 && '(Primary Contact)'}
+            </h2>
+
+            {/* Required Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Title <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={passenger.title}
+                  onChange={(e) => updatePassenger(index, 'title', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select</option>
+                  <option value="mr">Mr</option>
+                  <option value="ms">Ms</option>
+                  <option value="mrs">Mrs</option>
+                  <option value="miss">Miss</option>
+                  <option value="dr">Dr</option>
+                </select>
+              </div>
+
+              {/* Gender */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Gender <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={passenger.gender}
+                  onChange={(e) => updatePassenger(index, 'gender', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select</option>
+                  <option value="m">Male</option>
+                  <option value="f">Female</option>
+                </select>
+              </div>
+
+              {/* First Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  First Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={passenger.givenName}
+                  onChange={(e) => updatePassenger(index, 'givenName', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="John"
+                  required
+                />
+              </div>
+
+              {/* Last Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Last Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={passenger.familyName}
+                  onChange={(e) => updatePassenger(index, 'familyName', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Doe"
+                  required
+                />
+              </div>
+
+              {/* Date of Birth */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date of Birth <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={passenger.bornOn}
+                  onChange={(e) => updatePassenger(index, 'bornOn', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required
+                  max={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={passenger.email}
+                  onChange={(e) => updatePassenger(index, 'email', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="john@example.com"
+                  required
+                />
+              </div>
+
+              {/* Phone */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  value={passenger.phoneNumber}
+                  onChange={(e) => updatePassenger(index, 'phoneNumber', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="+1 (555) 123-4567"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* International Fields Toggle */}
+            <button
+              type="button"
+              onClick={() => setShowInternationalFields(!showInternationalFields)}
+              className="text-blue-600 hover:text-blue-700 font-medium mb-4 flex items-center gap-2"
+            >
+              {showInternationalFields ? '▼' : '▶'} Add Passport Details (for international flights)
+            </button>
+
+            {showInternationalFields && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-blue-50 rounded-lg">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Passport Number
+                  </label>
+                  <input
+                    type="text"
+                    value={passenger.passportNumber}
+                    onChange={(e) => updatePassenger(index, 'passportNumber', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="123456789"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Passport Expiry Date
+                  </label>
+                  <input
+                    type="date"
+                    value={passenger.passportExpiryDate}
+                    onChange={(e) => updatePassenger(index, 'passportExpiryDate', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Passport Issuing Country
+                  </label>
+                  <select
+                    value={passenger.passportIssuingCountry}
+                    onChange={(e) => updatePassenger(index, 'passportIssuingCountry', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Country</option>
+                    <option value="US">United States</option>
+                    <option value="GB">United Kingdom</option>
+                    <option value="CA">Canada</option>
+                    <option value="AU">Australia</option>
+                    <option value="NZ">New Zealand</option>
+                    {/* Add more countries as needed */}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Loyalty Fields Toggle */}
+            <button
+              type="button"
+              onClick={() => setShowLoyaltyFields(!showLoyaltyFields)}
+              className="text-blue-600 hover:text-blue-700 font-medium mb-4 flex items-center gap-2"
+            >
+              {showLoyaltyFields ? '▼' : '▶'} Add Frequent Flyer & TSA Details (optional)
+            </button>
+
+            {showLoyaltyFields && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-green-50 rounded-lg">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Airline
+                  </label>
+                  <input
+                    type="text"
+                    value={passenger.frequentFlyerAirline}
+                    onChange={(e) => updatePassenger(index, 'frequentFlyerAirline', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., United, Delta"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Frequent Flyer Number
+                  </label>
+                  <input
+                    type="text"
+                    value={passenger.frequentFlyerNumber}
+                    onChange={(e) => updatePassenger(index, 'frequentFlyerNumber', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="123456789"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Known Traveler Number (TSA PreCheck)
+                  </label>
+                  <input
+                    type="text"
+                    value={passenger.knownTravelerNumber}
+                    onChange={(e) => updatePassenger(index, 'knownTravelerNumber', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="12345678901"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Redress Number
+                  </label>
+                  <input
+                    type="text"
+                    value={passenger.redressNumber}
+                    onChange={(e) => updatePassenger(index, 'redressNumber', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="1234567"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Submit Section */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h3 className="text-lg font-semibold">Total</h3>
+              <p className="text-sm text-gray-600">
+                {cartItem.pricing?.currency} ${cartItem.pricing?.total?.toFixed(2)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            >
+              Continue to Payment
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
