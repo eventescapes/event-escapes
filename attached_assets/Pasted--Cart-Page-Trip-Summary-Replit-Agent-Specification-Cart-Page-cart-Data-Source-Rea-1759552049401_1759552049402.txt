@@ -1,0 +1,189 @@
+# Cart Page & Trip Summary - Replit Agent Specification
+
+## Cart Page (`/cart`)
+
+### Data Source
+Read from `localStorage.getItem('eventescapes_cart')` which contains array of cart items.
+
+### Cart Item Structure
+```typescript
+interface CartItem {
+  type: 'flight';
+  offerId: string;
+  addedAt: string;
+  flight: {
+    origin: string;
+    destination: string;
+    departureDate: string;
+    returnDate: string | null;
+    airline: string;
+    totalAmount: string;
+    totalCurrency: string;
+  };
+  selectedSeats: Array<{
+    serviceId: string;
+    designator: string;
+    passengerId: string;
+    segmentId: string;
+    amount: string;
+  }>;
+  selectedBaggage: Array<{
+    serviceId: string;
+    quantity: number;
+    passengerId: string;
+    segmentId: string;
+    amount: string;
+  }>;
+  passengers: any[];
+  pricing: {
+    flightBase: number;
+    seats: number;
+    baggage: number;
+    total: number;
+    currency: string;
+  };
+}
+```
+
+### Display Requirements
+
+**For each cart item, show:**
+1. Flight route (e.g., "LAX → JFK")
+2. Departure date
+3. Airline name
+4. Line items:
+   - Base Fare: `{currency} {pricing.flightBase.toFixed(2)}`
+   - Seats (if any): `{currency} {pricing.seats.toFixed(2)}` with seat designators
+   - Baggage (if any): `{currency} {pricing.baggage.toFixed(2)}` with quantity
+   - **Subtotal**: `{currency} {pricing.total.toFixed(2)}`
+5. Remove button (removes item from cart)
+
+**Order Summary Sidebar:**
+- Total items count
+- Grand total (sum of all item.pricing.total)
+- "Proceed to Checkout" button → `/checkout`
+- "Continue Shopping" button → `/flights`
+
+**Empty Cart State:**
+- Show empty cart icon
+- "Your cart is empty" message
+- "Search Flights" button → `/flights`
+
+### Critical Requirements
+- Use `item.pricing` object for all amounts (fallback calculation only if missing)
+- Handle missing fields gracefully (use `item.field?.subfield || 'default'`)
+- Currency should be `item.pricing.currency` or `item.flight.totalCurrency`
+- Format all prices to 2 decimal places
+- Update localStorage when removing items
+
+### Code Pattern
+```typescript
+const loadCart = () => {
+  const data = localStorage.getItem('eventescapes_cart');
+  if (data) {
+    setCartItems(JSON.parse(data));
+  }
+};
+
+const removeItem = (index: number) => {
+  const newCart = cartItems.filter((_, i) => i !== index);
+  setCartItems(newCart);
+  localStorage.setItem('eventescapes_cart', JSON.stringify(newCart));
+};
+
+const calculateTotal = () => {
+  return cartItems.reduce((sum, item) => {
+    return sum + (item.pricing?.total || 0);
+  }, 0);
+};
+```
+
+---
+
+## Trip Summary Component (Flight Results Sidebar)
+
+### Location
+Right sidebar on `/flights/results` page
+
+### Props
+```typescript
+interface TripSummaryProps {
+  currentOffer?: {
+    totalAmount: string;
+    totalCurrency: string;
+  };
+  selectedSeats?: Array<{
+    designator: string;
+    amount: string;
+  }>;
+  selectedBaggage?: Array<{
+    quantity: number;
+    amount: string;
+  }>;
+  onAddToCart?: () => void;
+}
+```
+
+### Display Requirements
+
+**Sections:**
+1. **Outbound**: "Selected" if currentOffer exists, else "Not selected"
+2. **Return**: Always "Not selected" (for now)
+3. **Total**: Large display of current selection total
+   - Formula: `offer.totalAmount + sum(seats.amount) + sum(baggage.amount * quantity)`
+   - Show "For 1 passenger" below
+4. **Add to Cart button**: Calls `onAddToCart` prop
+5. **Price Breakdown** (if anything selected):
+   - Flight: `{currency} {offer.totalAmount}`
+   - Seats: `{currency} {sum}` with designators (e.g., "32A, 29B")
+   - Baggage: `{currency} {sum}` with count (e.g., "2 bags")
+
+### Styling
+- Sticky positioning (`sticky top-4`)
+- White background with shadow
+- Padding: 24px
+- Total amount in large blue text (3xl, bold)
+- Button: Full width, blue background
+
+### Update Pattern
+Component should re-render when props change. Parent component (flight-results page) updates props after:
+- Flight selected
+- Seat selection completed
+- Baggage selection completed
+
+---
+
+## File Locations
+
+- Cart page: `client/src/pages/cart.tsx`
+- Trip summary: `client/src/components/TripSummary.tsx`
+
+---
+
+## Testing Checklist
+
+**Cart Page:**
+- [ ] Shows items from localStorage
+- [ ] Displays all price breakdowns correctly
+- [ ] Total matches sum of individual items
+- [ ] Remove button works
+- [ ] Empty state shows when cart is empty
+- [ ] "Proceed to Checkout" navigates to `/checkout`
+
+**Trip Summary:**
+- [ ] Updates when flight selected
+- [ ] Updates when seats added
+- [ ] Updates when baggage added
+- [ ] Total calculates correctly
+- [ ] Breakdown shows all components
+- [ ] Add to Cart button enabled when flight selected
+
+---
+
+## Common Errors to Avoid
+
+1. **DO NOT** use mock data - read from localStorage
+2. **DO NOT** calculate totals from scratch - use `item.pricing` object
+3. **DO NOT** assume fields exist - use optional chaining (`?.`)
+4. **DO NOT** hardcode currency - read from data
+5. **DO NOT** forget to update localStorage when removing items
