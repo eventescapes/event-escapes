@@ -221,7 +221,7 @@ export function PassengerDetailsPage() {
       if (result.success) {
         sessionStorage.setItem('order_confirmation', JSON.stringify(result));
         sessionStorage.removeItem('checkout_item');
-        navigate('/confirmation');
+        navigate('/booking-confirmation');
       } else {
         alert(`Booking failed: ${result.error || 'Unknown error'}`);
       }
