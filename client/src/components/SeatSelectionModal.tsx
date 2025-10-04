@@ -106,9 +106,14 @@ export const SeatSelectionModal: React.FC<SeatSelectionProps> = ({
   };
 
   const handleContinue = () => {
+    console.log('🎫 === CONTINUE BUTTON CLICKED ===');
     const seats = Object.values(selectedSeats);
-    console.log('[SeatSelectionModal] Continuing with seats:', seats);
+    console.log('🎫 Selected seats object:', selectedSeats);
+    console.log('🎫 Seats array to pass:', seats);
+    console.log('🎫 Number of seats:', seats.length);
+    console.log('🎫 Calling onSeatsSelected callback...');
     onSeatsSelected(seats);
+    console.log('🎫 onSeatsSelected callback completed');
   };
 
   const renderSeatElement = (element: any, elementIndex: number, segmentIndex: number) => {
