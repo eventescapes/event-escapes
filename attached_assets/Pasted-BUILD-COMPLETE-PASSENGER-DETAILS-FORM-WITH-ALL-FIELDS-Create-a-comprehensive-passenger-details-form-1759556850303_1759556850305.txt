@@ -1,0 +1,75 @@
+BUILD COMPLETE PASSENGER DETAILS FORM WITH ALL FIELDS
+
+Create a comprehensive passenger details form that handles both domestic and international flights.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE: client/src/pages/passenger-details.tsx
+
+[Copy the complete artifact code]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ROUTING: Update client/src/App.tsx to add route:
+
+import { PassengerDetailsPage } from '@/pages/passenger-details';
+
+// Add route:
+<Route path="/checkout/passenger-details" element={<PassengerDetailsPage />} />
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+UPDATE: client/src/components/TripSummary.tsx
+
+Change "Book Now" button to navigate to passenger form:
+
+const handleBookNow = () => {
+  sessionStorage.setItem('checkout_item', JSON.stringify(buildCartItem(currentSelection)));
+  navigate('/checkout/passenger-details');
+};
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FEATURES INCLUDED:
+
+Required Fields:
+- Title (Mr/Ms/Mrs/Miss/Dr)
+- First & Last Name
+- Gender (M/F)
+- Date of Birth
+- Email (validated)
+- Phone Number (validated)
+
+Optional - International:
+- Passport Number
+- Passport Expiry Date
+- Passport Issuing Country (dropdown with common countries)
+- Collapsible section (hidden by default)
+
+Optional - Loyalty/TSA:
+- Frequent Flyer Airline
+- Frequent Flyer Number
+- Known Traveler Number (TSA PreCheck)
+- Redress Number
+- Collapsible section (hidden by default)
+
+Validation:
+- All required fields must be filled
+- Email format validation
+- Phone format validation
+- If passport entered, all passport fields required
+- Date of birth must be in the past
+- Passport expiry must be in future
+
+Multi-Passenger Support:
+- Renders one form per passenger
+- Primary passenger labeled as "(Primary Contact)"
+- Each passenger has own collapsible sections
+
+Data Flow:
+- Reads cart item from sessionStorage (set by "Book Now")
+- Validates all fields on submit
+- Saves passenger data to sessionStorage
+- Navigates to review page
+
+Build this now with complete validation and responsive design.

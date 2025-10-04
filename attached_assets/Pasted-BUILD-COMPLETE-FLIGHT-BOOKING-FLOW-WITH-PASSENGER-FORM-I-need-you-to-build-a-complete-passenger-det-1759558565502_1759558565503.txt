@@ -1,0 +1,332 @@
+BUILD COMPLETE FLIGHT BOOKING FLOW WITH PASSENGER FORM
+
+I need you to build a complete passenger details form and booking confirmation flow that integrates with my existing Supabase Edge Function.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CONTEXT:
+- I have a working Supabase Edge Function: flights-book
+- URL: https://jxrrlhsffnxzlszhccg.supabase.co/functions/v1/flights-book
+- It accepts booking data and returns a real Duffel booking confirmation
+- Users select flights and ancillaries, then need to enter passenger details and complete booking
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUILD THESE 2 NEW PAGES:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PAGE 1: PASSENGER DETAILS FORM
+FILE: client/src/pages/PassengerDetailsPage.tsx
+
+REQUIREMENTS:
+
+1. READ FROM SESSIONSSTORAGE:
+   - Get 'checkout_item' which contains: { offer, selectedSeats, selectedBaggage }
+   - If missing, redirect to home page
+
+2. CHECK PASSPORT REQUIREMENT:
+   - Read: offer.passenger_identity_documents_required
+   - Store in state: requiresPassport (boolean)
+
+3. IF PASSPORT IS REQUIRED (requiresPassport === true):
+   - Show blue info banner at top:
+     "✈️ International Flight: Passport information is required for all passengers."
+   - Passport section is ALWAYS VISIBLE and EXPANDED (not collapsible)
+   - All passport fields marked with red asterisk (*)
+
+4. FORM FIELDS (per passenger based on offer.passengers length):
+   
+   REQUIRED FIELDS:
+   - Title (dropdown: mr, ms, mrs, miss, dr) *
+   - First Name (text input) *
+   - Last Name (text input) *
+   - Gender (dropdown: m=Male, f=Female) *
+   - Date of Birth (date picker, must be in past) *
+   - Email (email input with validation) *
+   - Phone Number (tel input, format: +1234567890) *
+
+   PASSPORT SECTION (CONDITIONAL):
+   
+   IF requiresPassport === true (International):
+   - Section is ALWAYS VISIBLE
+   - Fields are REQUIRED:
+     * Passport Number (required)
+     * Issuing Country (required, dropdown: US, GB, CA, AU, DE, FR, IT, ES, JP, CN, IN, etc.)
+     * Expiry Date (required, must be in future)
+   - Show validation errors if not filled
+
+   IF requiresPassport === false (Domestic):
+   - Section is COLLAPSIBLE (collapsed by default)
+   - Show button: "Add Passport Information (Optional)"
+   - When expanded, fields are OPTIONAL
+   - BUT: If user fills ANY passport field, ALL become required
+   - Show message: "If you enter passport info, all passport fields must be completed"
+
+   LOYALTY SECTION (ALWAYS OPTIONAL - collapsible):
+   - Show button: "Add Frequent Flyer Program (Optional)"
+   - When expanded:
+     * Airline Code (2-letter input, e.g., BA, AA, DL)
+     * Membership Number
+   - Always optional
+
+5. VALIDATION:
+   - All required fields must be filled
+   - Email must be valid format: name@domain.com
+   - Phone must match pattern: +[1-9][0-9]{7,14}
+   - Date of birth must be in the past
+   - Passport expiry (if required) must be in future
+   - If passport section filled partially, all passport fields required
+   - Show error messages below each invalid field in red text
+   - Scroll to first error on submit
+
+6. MULTI-PASSENGER SUPPORT:
+   - If offer has 2 passengers, show 2 separate forms
+   - Label first passenger as "Passenger 1 (Primary Contact)"
+   - Each passenger in its own white card with shadow and border
+   - Each passenger needs own passport info (if required)
+
+7. ON SUBMIT:
+   - Validate all fields
+   - Show loading spinner on submit button
+   - Disable button while submitting
+   - Prepare data in this exact format:
+   
+   {
+     offerId: offer.id,
+     passengers: [
+       {
+         id: offer.passengers[0].id,  // IMPORTANT: Use passenger ID from offer
+         title: "mr",
+         givenName: "John",
+         familyName: "Doe",
+         gender: "m",
+         bornOn: "1990-01-01",
+         email: "test@example.com",
+         phoneNumber: "+14155551234",
+         identityDocuments: [  // Only include if passport filled
+           {
+             uniqueIdentifier: "AB123456",
+             type: "passport",
+             issuingCountryCode: "US",
+             expiresOn: "2030-12-31"
+           }
+         ],
+         loyaltyProgrammeAccounts: [  // Only include if loyalty filled
+           {
+             airlineIataCode: "BA",
+             accountNumber: "123456789"
+           }
+         ]
+       }
+     ],
+     services: [
+       ...selectedSeats.map(s => ({ id: s.id, quantity: 1 })),
+       ...selectedBaggage.map(b => ({ id: b.id, quantity: b.quantity }))
+     ],
+     totalAmount: offer.total_amount,
+     currency: offer.total_currency
+   }
+
+   - POST to: https://jxrrlhsffnxzlszhccg.supabase.co/functions/v1/flights-book
+   - Headers: { 'Content-Type': 'application/json' }
+   - On success: 
+     * Save order to sessionStorage as 'order_confirmation'
+     * Clear 'checkout_item' from sessionStorage
+     * Navigate to /confirmation
+   - On error: 
+     * Show alert with error message
+     * Re-enable submit button
+     * Log error to console
+
+8. STYLING:
+   - Modern, clean design with Tailwind CSS
+   - Max width container (max-w-4xl mx-auto)
+   - White cards with shadows for each passenger section
+   - Blue primary color for buttons (#3B82F6)
+   - Gray background (bg-gray-50)
+   - Info banner: blue background (bg-blue-50, border-blue-200)
+   - Warning banner for passport: yellow (bg-yellow-50, border-yellow-200)
+   - Responsive (mobile-friendly)
+   - Proper spacing and padding
+   - Icons from lucide-react (ChevronDown, ChevronUp, AlertCircle)
+   - Bottom action bar:
+     * Back button (gray, outlined)
+     * Submit button (blue, full-width on mobile)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PAGE 2: BOOKING CONFIRMATION
+FILE: client/src/pages/ConfirmationPage.tsx
+
+REQUIREMENTS:
+
+1. READ FROM SESSIONSTORAGE:
+   - Get 'order_confirmation' containing the booking response
+   - If missing, redirect to home page
+
+2. DISPLAY:
+   
+   SUCCESS HEADER (centered):
+   - Large green checkmark icon (CheckCircle from lucide-react, 64px)
+   - "Booking Confirmed!" heading (text-3xl, bold)
+   - "Your flight has been successfully booked" subtext (text-gray-600)
+   - Booking reference in highlighted box:
+     * Label: "Booking Reference:"
+     * Reference: Large text (text-2xl), blue color, bold
+     * Background: bg-blue-50, rounded
+
+   ACTION BUTTONS (top, horizontal):
+   - "Print / Save PDF" button (Download icon)
+   - "Email Confirmation" button (Mail icon)
+   - Gray outlined buttons, side by side
+
+   FLIGHT DETAILS SECTION:
+   - Title: "Flight Details" with plane icon
+   - For each slice in order.slices:
+     * Route header: "LAX → JFK" with city names
+     * Duration display
+     * For each segment:
+       - Airline logo (img src from segment.marketing_carrier.logo_symbol_url)
+       - Airline name and flight number
+       - Two columns (Departure | Arrival):
+         * Time (large, bold)
+         * Date (formatted: "Monday, January 15, 2025")
+         * Airport name
+         * Terminal (if available)
+       - Aircraft type (small text)
+     * Visual timeline/border on left
+
+   PASSENGER INFORMATION:
+   - Title: "Passenger Information"
+   - List all passengers in separate rows:
+     * Full name with title (bold)
+     * Email and phone (gray text)
+     * DOB and gender (small text)
+
+   E-TICKETS SECTION:
+   - Title: "E-Tickets"
+   - For each document in order.documents:
+     * E-ticket number (large, mono font)
+     * Document type badge (green pill)
+     * Passenger name
+
+   PAYMENT SUMMARY:
+   - Title: "Payment Summary"
+   - Table layout:
+     * Order ID
+     * Booking Date
+     * Total Paid (large, bold, blue)
+   - Blue background highlight on total
+
+   IMPORTANT INFORMATION BOX:
+   - Yellow/amber background (bg-yellow-50, border-yellow-200)
+   - Title: "Important Information" (bold, yellow-900)
+   - Bulleted list (yellow-900 text):
+     * Arrive 2-3 hours before departure
+     * Check-in opens 24 hours before
+     * Bring valid ID/passport
+     * Download airline app for boarding pass
+     * Keep booking reference handy
+
+   BOTTOM ACTION:
+   - "Book Another Flight" button (centered, blue, large)
+   - Clears sessionStorage and navigates to home
+
+3. HELPER FUNCTIONS:
+   - formatDate(dateString): "Monday, January 15, 2025"
+   - formatTime(dateString): "10:30 AM"
+
+4. STYLING:
+   - Clean, professional layout
+   - Max width container (max-w-4xl mx-auto)
+   - White cards with shadows for each section
+   - Green success colors (#10B981)
+   - Blue accents for important info
+   - Print-friendly layout (use @media print)
+   - Responsive design
+   - Proper spacing between sections
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ROUTING:
+
+UPDATE: client/src/App.tsx
+
+Add these routes:
+<Route path="/passenger-details" element={<PassengerDetailsPage />} />
+<Route path="/confirmation" element={<ConfirmationPage />} />
+
+Add imports:
+import { PassengerDetailsPage } from './pages/PassengerDetailsPage';
+import { ConfirmationPage } from './pages/ConfirmationPage';
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+UPDATE EXISTING CODE:
+
+FIND: The "Book Now" button (wherever it currently is in your app)
+
+UPDATE IT TO:
+const handleBookNow = () => {
+  sessionStorage.setItem('checkout_item', JSON.stringify({
+    offer: currentOffer,
+    selectedSeats: selectedSeats || [],
+    selectedBaggage: selectedBaggage || [],
+  }));
+  navigate('/passenger-details');
+};
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DATA STRUCTURE REFERENCE:
+
+OFFER OBJECT (from sessionStorage):
+{
+  id: "off_123",
+  total_amount: "350.00",
+  total_currency: "USD",
+  passenger_identity_documents_required: false,  // true for international
+  passengers: [{ id: "pas_123", type: "adult" }],
+  slices: [...],
+}
+
+ORDER RESPONSE (from API):
+{
+  success: true,
+  order: {
+    id: "ord_123",
+    bookingReference: "ABC123",
+    totalAmount: "350.00",
+    totalCurrency: "USD",
+    passengers: [...],
+    slices: [...],
+    documents: [{ unique_identifier: "1234567890", type: "electronic_ticket" }],
+    createdAt: "2025-01-15T10:30:00Z"
+  }
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TESTING SCENARIOS:
+
+DOMESTIC FLIGHT (LAX → JFK):
+- Passport should be OPTIONAL (collapsible)
+- Can book without passport info
+- If user expands passport, can leave empty
+
+INTERNATIONAL FLIGHT (LAX → LHR):
+- Blue banner: "Passport required"
+- Passport section ALWAYS visible
+- Cannot submit without passport info
+- Validation error if passport missing
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BUILD THESE FILES:
+1. client/src/pages/PassengerDetailsPage.tsx (with smart passport handling)
+2. client/src/pages/ConfirmationPage.tsx
+3. Update client/src/App.tsx with routes
+4. Update the "Book Now" button to navigate to /passenger-details
+
+Use modern React with TypeScript, Tailwind CSS, lucide-react icons, and ensure mobile responsiveness.
