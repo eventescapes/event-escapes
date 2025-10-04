@@ -107,12 +107,25 @@ export const SeatSelectionModal: React.FC<SeatSelectionProps> = ({
 
   const handleContinue = () => {
     console.log('🎫 === CONTINUE BUTTON CLICKED ===');
-    const seats = Object.values(selectedSeats);
-    console.log('🎫 Selected seats object:', selectedSeats);
-    console.log('🎫 Seats array to pass:', seats);
-    console.log('🎫 Number of seats:', seats.length);
-    console.log('🎫 Calling onSeatsSelected callback...');
-    onSeatsSelected(seats);
+    const seatsArray = Object.values(selectedSeats).map(seat => ({
+      serviceId: seat.serviceId,
+      designator: seat.designator,
+      passengerId: seat.passengerId,
+      segmentId: seat.segmentIndex?.toString() || '0',
+      amount: seat.price?.toString() || '0',  // CRITICAL - Map price to amount
+    }));
+
+    console.log('🎫 Seats being passed:', seatsArray);
+    
+    // Check each seat has amount
+    seatsArray.forEach((seat, idx) => {
+      console.log(`🎫 Seat ${idx}: designator=${seat.designator}, amount=${seat.amount}`);
+      if (!seat.amount || seat.amount === '0') {
+        console.error(`❌ ERROR: Seat ${idx} missing amount!`);
+      }
+    });
+
+    onSeatsSelected(seatsArray);
     console.log('🎫 onSeatsSelected callback completed');
   };
 

@@ -1,0 +1,72 @@
+FIX SEAT AMOUNT SHOWING $0.00 IN ORDER SUMMARY
+
+PROBLEM: Seat designator shows (28C) but amount is $0.00
+
+ROOT CAUSE: When seat is selected, the amount field is not being included in the seat object passed to parent component.
+
+FIX IN SeatSelectionModal.tsx:
+
+In the handleContinue function, verify you're passing the amount:
+
+const handleContinue = () => {
+  const seatsArray = Array.from(selectedSeats.values()).map(seat => ({
+    serviceId: seat.serviceId,
+    designator: seat.designator,
+    passengerId: seat.passengerId,
+    segmentId: seat.segmentId,
+    amount: seat.amount,  // CRITICAL - Must be included
+  }));
+
+  console.log('Seats being passed:', seatsArray);
+  
+  // Check each seat has amount
+  seatsArray.forEach((seat, idx) => {
+    console.log(`Seat ${idx}: designator=${seat.designator}, amount=${seat.amount}`);
+    if (!seat.amount) {
+      console.error(`ERROR: Seat ${idx} missing amount!`);
+    }
+  });
+
+  onComplete(seatsArray);
+};
+
+FIX IN flight-results.tsx:
+
+When storing seat in state, verify amount is present:
+
+const handleSeatsComplete = (seats) => {
+  console.log('Received seats:', seats);
+  
+  // Verify each seat has amount
+  seats.forEach(seat => {
+    if (!seat.amount || seat.amount === '0' || seat.amount === '0.00') {
+      console.error('SEAT MISSING AMOUNT:', seat);
+    }
+  });
+  
+  setCurrentSelection(prev => ({ ...prev, seats }));
+  setShowSeatModal(false);
+  setShowBaggageModal(true);
+};
+
+ADD DEBUGGING:
+
+In TripSummary.tsx, add this at the top of the component:
+
+console.log('TripSummary received:', {
+  seats: currentSelection.seats,
+  seatsAmount: currentSelection.seats.reduce((sum, s) => {
+    console.log(`Seat ${s.designator}: amount = ${s.amount}`);
+    return sum + parseFloat(s.amount || '0');
+  }, 0)
+});
+
+TESTING:
+1. Open browser console
+2. Select flight
+3. Select seat 28C
+4. Check console for:
+   "Seat 0: designator=28C, amount=40.83" (or whatever the price is)
+5. If you see "amount=undefined" or "amount=0", the problem is in SeatSelectionModal
+
+Report back what the console shows for "Seats being passed:" when you click Continue in the seat modal.

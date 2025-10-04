@@ -17,11 +17,22 @@ export default function TripSummary({
 }: TripSummaryProps) {
   const { offer, seats, baggage } = currentSelection;
   
+  // Debug logging
+  console.log('📊 TripSummary received:', {
+    seats: currentSelection.seats,
+    seatsAmount: currentSelection.seats.reduce((sum, s) => {
+      console.log(`📊 Seat ${s.designator}: amount = ${s.amount}`);
+      return sum + parseFloat(s.amount || '0');
+    }, 0)
+  });
+  
   const flightAmount = offer ? parseFloat(offer.total_amount?.toString() || '0') : 0;
   const seatsAmount = seats.reduce((sum, s) => sum + parseFloat(s.amount || '0'), 0);
   const baggageAmount = baggage.reduce((sum, b) => sum + (parseFloat(b.amount || '0') * (b.quantity || 1)), 0);
   const total = flightAmount + seatsAmount + baggageAmount;
   const currency = offer?.total_currency || 'AUD';
+  
+  console.log('📊 TripSummary calculated:', { flightAmount, seatsAmount, baggageAmount, total });
 
   return (
     <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 sticky top-4" data-testid="order-summary">
