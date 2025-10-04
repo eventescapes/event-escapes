@@ -442,53 +442,99 @@ const FlightResults = () => {
     return true;
   };
 
-  // Handle adding to cart with enhanced data extraction
+  // Handle adding to cart with direct localStorage save
   const handleAddToCart = () => {
-    // Extract detailed flight information for cart
+    console.log('🛒 === ADD TO CART CALLED ===');
+    console.log('Selected Offers:', selectedOffers);
+    console.log('Selected Seats:', selectedSeats);
+    
+    // Extract flight information
     const outboundOffer = selectedOffers[0];
     const returnOffer = selectedOffers[1];
     
-    // Build enhanced outbound flight data
-    if (outboundOffer) {
-      const flight = outboundOffer.flight;
-      const enhancedOutbound = {
-        id: outboundOffer.offerId,
-        airline: flight.airline,
-        flightNumber: flight.flightNumber || `${flight.airline} ${outboundOffer.offerId.slice(-4)}`,
-        departure: flight.departureAirport,
-        arrival: flight.arrivalAirport,
-        departTime: flight.departureTime || "TBD",
-        arriveTime: flight.arrivalTime || "TBD",
-        duration: flight.duration,
-        price: outboundOffer.price,
-        stops: flight.stops,
-        cabinClass: flight.cabinClass || "Economy"
-      };
-      updateSelectedOutboundFlight(enhancedOutbound);
+    if (!outboundOffer) {
+      console.error('❌ No outbound offer selected');
+      return;
     }
-    
-    // Build enhanced return flight data if exists
+
+    console.log('✅ Outbound Offer:', outboundOffer);
     if (returnOffer) {
-      const flight = returnOffer.flight;
-      const enhancedReturn = {
-        id: returnOffer.offerId,
-        airline: flight.airline,
-        flightNumber: flight.flightNumber || `${flight.airline} ${returnOffer.offerId.slice(-4)}`,
-        departure: flight.departureAirport,
-        arrival: flight.arrivalAirport,
-        departTime: flight.departureTime || "TBD",
-        arriveTime: flight.arrivalTime || "TBD",
-        duration: flight.duration,
-        price: returnOffer.price,
-        stops: flight.stops,
-        cabinClass: flight.cabinClass || "Economy"
-      };
-      updateSelectedReturnFlight(enhancedReturn);
+      console.log('✅ Return Offer:', returnOffer);
     }
     
-    // Add to cart with enhanced data
-    const itemId = addToCart(searchParams.passengers);
-    setCartItemId(itemId);
+    // Calculate pricing
+    const flightBase = outboundOffer.price + (returnOffer?.price || 0);
+    const seatsTotal = Object.values(selectedSeats).flat().reduce((sum: number, seat: any) => {
+      return sum + (parseFloat(seat.amount || '0'));
+    }, 0);
+    const baggageTotal = 0; // No baggage in current implementation
+    
+    const totalPrice = flightBase + seatsTotal + baggageTotal;
+    
+    console.log('💰 Pricing Calculation:');
+    console.log('  Flight Base:', flightBase);
+    console.log('  Seats Total:', seatsTotal);
+    console.log('  Baggage Total:', baggageTotal);
+    console.log('  Total Price:', totalPrice);
+    
+    // Build cart item matching spec structure
+    const cartItem = {
+      type: 'flight',
+      offerId: outboundOffer.offerId,
+      addedAt: new Date().toISOString(),
+      flight: {
+        origin: outboundOffer.flight.departureAirport || searchParams.from,
+        destination: outboundOffer.flight.arrivalAirport || searchParams.to,
+        departureDate: searchParams.departDate,
+        returnDate: searchParams.returnDate || null,
+        airline: outboundOffer.flight.airline,
+        totalAmount: totalPrice.toString(),
+        totalCurrency: outboundOffer.currency || 'AUD'
+      },
+      selectedSeats: Object.values(selectedSeats).flat().map((seat: any) => ({
+        serviceId: seat.serviceId || seat.id || '',
+        designator: seat.designator || '',
+        passengerId: seat.passengerId || '',
+        segmentId: seat.segmentId || '',
+        amount: seat.amount || '0'
+      })),
+      selectedBaggage: [], // Empty for now
+      passengers: Array.from({ length: searchParams.passengers }, (_, i) => ({
+        id: `passenger_${i + 1}`,
+        type: 'adult'
+      })),
+      pricing: {
+        flightBase: flightBase,
+        seats: seatsTotal,
+        baggage: baggageTotal,
+        total: totalPrice,
+        currency: outboundOffer.currency || 'AUD'
+      }
+    };
+    
+    console.log('📦 Cart Item Built:', JSON.stringify(cartItem, null, 2));
+    
+    // CRITICAL: Save to localStorage BEFORE showing success modal
+    try {
+      const existingCartData = localStorage.getItem('eventescapes_cart');
+      console.log('📂 Existing cart data:', existingCartData);
+      
+      const cart = existingCartData ? JSON.parse(existingCartData) : [];
+      console.log('📂 Parsed cart:', cart);
+      
+      cart.push(cartItem);
+      console.log('📂 Cart after push:', cart);
+      
+      localStorage.setItem('eventescapes_cart', JSON.stringify(cart));
+      console.log('✅ Cart saved to localStorage');
+      
+      // Verify save
+      const savedCart = localStorage.getItem('eventescapes_cart');
+      console.log('✅ Verification - localStorage after save:', savedCart);
+      
+    } catch (error) {
+      console.error('❌ Error saving to localStorage:', error);
+    }
     
     // Clear current selection state
     setSelectedOffers({});
@@ -496,7 +542,8 @@ const FlightResults = () => {
     setShowSeatSelection(false);
     setCurrentSeatSelection(null);
     
-    // Show success message
+    // NOW show success message (after localStorage save)
+    console.log('✅ Showing success modal');
     setShowSuccessMessage(true);
   };
 
@@ -765,13 +812,19 @@ const FlightResults = () => {
             type: 'adult'
           }))}
           onSeatsSelected={(seats: any[]) => {
-            console.log('Seats selected:', seats);
+            console.log('💺 === SEATS SELECTED CALLBACK ===');
+            console.log('💺 Seats received:', seats);
+            console.log('💺 Current slice index:', currentSeatSelection.sliceIndex);
             
             // Update the selected seats for this slice
-            setSelectedSeats(prev => ({
-              ...prev,
-              [currentSeatSelection.sliceIndex]: seats
-            }));
+            setSelectedSeats(prev => {
+              const newSeats = {
+                ...prev,
+                [currentSeatSelection.sliceIndex]: seats
+              };
+              console.log('💺 Updated selectedSeats state:', newSeats);
+              return newSeats;
+            });
             
             // Update booking context
             updateSelectedSeats({
@@ -783,8 +836,13 @@ const FlightResults = () => {
             const nextSliceIndex = currentSeatSelection.sliceIndex + 1;
             const nextOffer = selectedOffers[nextSliceIndex];
             
+            console.log('💺 Next slice index:', nextSliceIndex);
+            console.log('💺 Next offer exists:', !!nextOffer);
+            console.log('💺 Trip type:', searchParams.tripType);
+            
             if (nextOffer && searchParams.tripType === 'return' && nextSliceIndex === 1) {
               // Go to return flight seat selection
+              console.log('💺 Moving to return flight seat selection');
               setCurrentSeatSelection({
                 sliceIndex: nextSliceIndex,
                 offerId: nextOffer.offerId,
@@ -793,6 +851,7 @@ const FlightResults = () => {
               });
             } else {
               // All seat selection completed - add to cart
+              console.log('💺 All seats selected - calling handleAddToCart');
               handleAddToCart();
             }
           }}
