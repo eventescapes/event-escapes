@@ -1,0 +1,88 @@
+CRITICAL FIX: The passenger object is including an id field which causes Duffel API to reject the booking with error "Field 'id' can't be blank". Duffel generates passenger IDs automatically during order creation, so we must NOT send any id field.
+
+File to update: client/src/pages/PassengerDetailsPage.tsx (or wherever your handleSubmit function is)
+
+Find this code in the handleSubmit function (around line 170-180):
+
+typescript
+const passengers = passengerForms.map((form, index) => {
+  const passenger: any = {
+    id: checkoutItem.offer.passengers[index].id,  // ❌ THIS LINE MUST BE REMOVED
+    type: checkoutItem.offer.passengers[index].type || 'adult',
+    title: form.title,
+    given_name: form.givenName,
+    family_name: form.familyName,
+    gender: form.gender,
+    born_on: form.bornOn,
+    email: form.email,
+    phone_number: form.phoneNumber,
+  };
+Replace with this (remove the id line):
+
+typescript
+const passengers = passengerForms.map((form, index) => {
+  const passenger: any = {
+    type: checkoutItem.offer.passengers[index].type || 'adult',
+    title: form.title,
+    given_name: form.givenName,
+    family_name: form.familyName,
+    gender: form.gender,
+    born_on: form.bornOn,
+    email: form.email,
+    phone_number: form.phoneNumber,
+  };
+Why this fix is needed:
+
+Duffel's Orders API generates passenger IDs automatically
+
+Sending an id field causes validation error: "Field 'id' can't be blank"
+
+The passenger object should only contain passenger details, not reference IDs
+
+The rest of the passenger data (passport, loyalty) remains unchanged
+
+The complete passenger building should look like this:
+
+typescript
+const passengers = passengerForms.map((form, index) => {
+  const passenger: any = {
+    type: checkoutItem.offer.passengers[index].type || 'adult',
+    title: form.title,
+    given_name: form.givenName,
+    family_name: form.familyName,
+    gender: form.gender,
+    born_on: form.bornOn,
+    email: form.email,
+    phone_number: form.phoneNumber,
+  };
+
+  // Add passport if filled
+  if (form.passportNumber && form.passportCountry && form.passportExpiry) {
+    passenger.identity_documents = [{
+      unique_identifier: form.passportNumber,
+      type: 'passport',
+      issuing_country_code: form.passportCountry,
+      expires_on: form.passportExpiry,
+    }];
+  }
+
+  // Add loyalty if filled
+  if (form.loyaltyAirline && form.loyaltyNumber) {
+    passenger.loyalty_programme_accounts = [{
+      airline_iata_code: form.loyaltyAirline,
+      account_number: form.loyaltyNumber,
+    }];
+  }
+
+  return passenger;
+});
+After this change:
+
+✅ Bookings will complete successfully
+
+✅ Duffel will accept the passenger data
+
+✅ No more "Field 'id' can't be blank" errors
+
+✅ Payment and confirmation will work end-to-end
+
