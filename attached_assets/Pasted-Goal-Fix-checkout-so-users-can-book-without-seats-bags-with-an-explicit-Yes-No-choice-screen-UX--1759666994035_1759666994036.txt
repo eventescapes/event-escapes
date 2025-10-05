@@ -1,0 +1,196 @@
+Goal: Fix checkout so users can book without seats/bags, with an explicit Yes/No choice screen.
+
+UX we want
+
+User selects a flight → we add the offer to the cart immediately (services = []) and navigate to a Yes/No page.
+
+Ancillary Choice page shows two questions:
+
+“Do you want to select seats?” Yes / No
+
+“Do you want to add bags?” Yes / No
+
+When the user hits Continue:
+
+If Seats = Yes → go to Seats page
+
+Else if Bags = Yes → go to Bags page
+
+Else → go straight to Cart (or Checkout)
+
+Cart shows the offer even if services are empty and Proceed to Checkout is enabled.
+
+Data model (cart)
+
+If we don’t already have it, create/extend a store so an offer alone is a valid cart item:
+
+// src/types/cart.ts
+export type SelectedService = { id: string; quantity?: number };
+
+export type CartItem = {
+  offerId: string;
+  offer: any;                   // Duffel offer JSON (must include expires_at, total_amount, total_currency)
+  services: SelectedService[];  // empty OK
+};
+
+export type CartState = {
+  items: CartItem[];
+  addOffer: (offer: any) => void;
+  setServicesForOffer: (offerId: string, services: SelectedService[]) => void;
+  clearOffer: (offerId: string) => void;
+  clearAll: () => void;
+};
+
+// src/store/cartStore.ts (Zustand; adapt to your state lib if different)
+import { create } from "zustand";
+import type { CartItem, CartState, SelectedService } from "@/types/cart";
+
+export const useCart = create<CartState>((set, get) => ({
+  items: [],
+  addOffer: (offer) => {
+    const exists = get().items.some(i => i.offerId === offer.id);
+    if (!exists) set({ items: [...get().items, { offerId: offer.id, offer, services: [] }] });
+  },
+  setServicesForOffer: (offerId, services) => {
+    set({ items: get().items.map(i => i.offerId === offerId ? { ...i, services } : i) });
+  },
+  clearOffer: (offerId) => set({ items: get().items.filter(i => i.offerId !== offerId) }),
+  clearAll: () => set({ items: [] }),
+}));
+
+New route: AncillaryChoicePage
+
+Create a simple Yes/No page. If your design uses a modal, that’s fine—make sure the logic matches.
+
+// src/pages/AncillaryChoicePage.tsx
+import { useMemo, useState } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useCart } from "@/store/cartStore";
+
+export default function AncillaryChoicePage() {
+  const { offerId = "" } = useParams();
+  const [sp] = useSearchParams();
+  const navigate = useNavigate();
+  const { items } = useCart();
+  const cartItem = useMemo(() => items.find(i => i.offerId === offerId), [items, offerId]);
+
+  // default to No to avoid blocking
+  const [wantSeats, setWantSeats] = useState(sp.get("seats") === "yes" ? true : false);
+  const [wantBags, setWantBags] = useState(sp.get("bags") === "yes" ? true : false);
+
+  if (!cartItem) {
+    // If user somehow hit this page without an offer, bounce to search
+    navigate("/flights");
+    return null;
+  }
+
+  const onContinue = () => {
+    if (wantSeats) {
+      navigate(`/seats/${offerId}`);
+      return;
+    }
+    if (wantBags) {
+      navigate(`/bags/${offerId}`);
+      return;
+    }
+    navigate("/cart"); // or /checkout if you go straight there
+  };
+
+  return (
+    <div className="max-w-xl mx-auto p-6 space-y-6">
+      <h1 className="text-2xl font-semibold">Add extras?</h1>
+
+      <div className="space-y-4">
+        <fieldset className="space-y-2">
+          <legend className="font-medium">Do you want to select seats now?</legend>
+          <div className="flex gap-4">
+            <label className="inline-flex items-center gap-2">
+              <input type="radio" name="seats" checked={wantSeats} onChange={() => setWantSeats(true)} />
+              <span>Yes</span>
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input type="radio" name="seats" checked={!wantSeats} onChange={() => setWantSeats(false)} />
+              <span>No</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset className="space-y-2">
+          <legend className="font-medium">Do you want to add bags now?</legend>
+          <div className="flex gap-4">
+            <label className="inline-flex items-center gap-2">
+              <input type="radio" name="bags" checked={wantBags} onChange={() => setWantBags(true)} />
+              <span>Yes</span>
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input type="radio" name="bags" checked={!wantBags} onChange={() => setWantBags(false)} />
+              <span>No</span>
+            </label>
+          </div>
+        </fieldset>
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <button className="px-4 py-2 rounded border" onClick={() => navigate("/cart")}>Skip for now</button>
+        <button className="px-4 py-2 rounded bg-blue-600 text-white" onClick={onContinue}>Continue</button>
+      </div>
+    </div>
+  );
+}
+
+Wire it into routing
+
+Add a route:
+
+// src/App.tsx or wherever the router is
+<Route path="/ancillaries/:offerId" element={<AncillaryChoicePage />} />
+
+Search results → when user selects a flight
+
+Add the offer to cart immediately.
+
+Navigate to the Yes/No page.
+
+// In the Select Flight handler (SearchResults or OfferCard)
+import { useCart } from "@/store/cartStore";
+import { useNavigate } from "react-router-dom";
+
+function SelectFlightButton({ offer }: { offer: any }) {
+  const { addOffer } = useCart();
+  const navigate = useNavigate();
+
+  const onSelect = () => {
+    addOffer(offer);
+    navigate(`/ancillaries/${offer.id}`); // ask Yes/No for seats & bags
+  };
+
+  return <button onClick={onSelect}>Select Flight</button>;
+}
+
+Seats & Bags pages
+
+Keep existing pages, but do not block navigation if nothing is chosen.
+
+After saving seats/bags (when user clicks Continue), route back to the choice page to ask the remaining question, or directly to Cart:
+
+// Seats page onContinue:
+navigate(`/ancillaries/${offerId}?seats=yes`);
+
+// Bags page onContinue:
+navigate(`/ancillaries/${offerId}?bags=yes`);
+
+Cart page
+
+Enable Proceed to Checkout if items.length > 0 (do not require services).
+
+If a banner says “No items in cart,” show it only when items.length === 0.
+
+Acceptance tests
+
+Flow A: Select flight → Yes seats? No, Yes bags? No → Cart → Proceed → Stripe.
+
+Flow B: Select flight → Yes seats? Yes → choose seats → back to choice → Yes bags? No → Cart → Proceed.
+
+Flow C: Select flight → Seats No, Bags Yes → add a bag (by available service id) → Cart → Proceed.
+
+Page refresh on Cart keeps item visible (if we persist state).
