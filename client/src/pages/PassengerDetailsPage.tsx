@@ -218,10 +218,13 @@ export function PassengerDetailsPage() {
       console.log('💳 Creating Stripe checkout session...');
 
       const response = await fetch(
-        'https://jxrrlhsffnxzlszhccg.supabase.co/functions/v1/create-checkout-session',
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+          },
           body: JSON.stringify({
             offerId: checkoutItem.offer.id,
             passengers,
