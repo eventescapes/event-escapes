@@ -1,0 +1,64 @@
+CRITICAL BUG FIX: Remove passenger ID field from booking submission
+
+PROBLEM: The frontend is sending passenger objects with an "id" field (e.g., "passenger_1") to the backend, which causes Duffel API to reject the booking with error "Field 'id' can't be blank". Duffel generates passenger IDs automatically and doesn't accept client-provided IDs.
+
+FILE TO FIX: client/src/pages/PassengerDetailsPage.tsx
+
+CURRENT ISSUE: In the handleSubmit function around line 170-190, the passenger object is being built and somehow includes an "id" field. This must be completely removed.
+
+REQUIRED CHANGES:
+1. In the handleSubmit function, ensure the passengers array is built WITHOUT any id field
+2. The passenger object should ONLY contain these fields:
+   - type
+   - title
+   - given_name
+   - family_name
+   - gender
+   - born_on
+   - email
+   - phone_number
+   - identity_documents (if passport provided)
+   - loyalty_programme_accounts (if loyalty provided)
+
+CRITICAL: Do NOT include ANY of these fields:
+- id
+- passenger_id
+- Any other ID-related field
+
+CORRECT CODE STRUCTURE:
+const passengers = passengerForms.map((form, index) => {
+const passenger: any = {
+type: checkoutItem.offer.passengers[index].type || 'adult',
+title: form.title,
+given_name: form.givenName,
+family_name: form.familyName,
+gender: form.gender,
+born_on: form.bornOn,
+email: form.email,
+phone_number: form.phoneNumber,
+};
+
+// Add passport if provided
+if (form.passportNumber && form.passportCountry && form.passportExpiry) {
+passenger.identity_documents = [{
+unique_identifier: form.passportNumber,
+type: 'passport',
+issuing_country_code: form.passportCountry,
+expires_on: form.passportExpiry,
+}];
+}
+
+// Add loyalty if provided
+if (form.loyaltyAirline && form.loyaltyNumber) {
+passenger.loyalty_programme_accounts = [{
+airline_iata_code: form.loyaltyAirline,
+account_number: form.loyaltyNumber,
+}];
+}
+
+return passenger;
+});
+
+text
+
+VERIFICATION: After making changes, ensure no line in handleSubmit assigns an "id" property to the passenger object.
