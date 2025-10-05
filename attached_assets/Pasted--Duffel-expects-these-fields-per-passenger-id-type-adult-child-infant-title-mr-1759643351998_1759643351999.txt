@@ -1,0 +1,123 @@
+// Duffel expects these fields per passenger:
+// id, type ("adult" | "child" | "infant"), title ("mr"|"ms"|"mrs"|"miss"|"dr"),
+// gender ("m"|"f"|"x"), given_name, family_name, born_on (YYYY-MM-DD), email, phone_number
+
+export type RawPassenger = {
+  id?: string;
+  type?: "adult" | "child" | "infant";
+  title: string;           // e.g., "Mr"
+  gender: string;          // e.g., "Male"
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;     // UI: "DD/MM/YYYY" (or "YYYY-MM-DD")
+  email: string;
+  phoneNumber: string;     // "+614..."
+  // Optional extras we just pass through if present:
+  passportNumber?: string;
+  passportIssuingCountry?: string;
+  frequentFlyerProgram?: string;
+  frequentFlyerNumber?: string;
+};
+
+export function toYMD(dob: string) {
+  // Accepts "10/10/1988" or "10-10-1988" and converts to "1988-10-10".
+  // If already "YYYY-MM-DD", returns as-is.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) return dob;
+  const m = dob.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (m) {
+    const [, d, mo, y] = m;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  // last resort: let Date parse, then format
+  const dt = new Date(dob);
+  return Number.isNaN(dt.getTime()) ? dob : dt.toISOString().slice(0, 10);
+}
+
+export function toDuffelPassenger(p: RawPassenger, index: number) {
+  return {
+    id: p.id ?? `passenger_${index + 1}`,
+    type: p.type ?? "adult",
+    title: p.title.toLowerCase(), // "mr" | "ms" | "mrs" | "miss" | "dr"
+    gender: p.gender.toLowerCase().startsWith("m") ? "m" : "f",
+    given_name: p.firstName,
+    family_name: p.lastName,
+    born_on: toYMD(p.dateOfBirth),
+    email: p.email,
+    phone_number: p.phoneNumber,
+    // Keep optional fields if your backend/webhook wants to forward them as services:
+    passport: p.passportNumber
+      ? {
+          number: p.passportNumber,
+          issuing_country_code: p.passportIssuingCountry || undefined,
+        }
+      : undefined,
+    frequent_flyer: p.frequentFlyerProgram && p.frequentFlyerNumber
+      ? {
+          program: p.frequentFlyerProgram,
+          number: p.frequentFlyerNumber,
+        }
+      : undefined,
+  };
+}
+
+export function mapPassengers(raw: RawPassenger[]) {
+  return raw.map(toDuffelPassenger);
+}
+src/api/createCheckoutSession.ts
+ts
+Copy code
+type CreateCheckoutInput = {
+  offerId: string;
+  passengers: any[];   // already normalized with mapPassengers()
+  services?: any[];
+};
+
+type CreateCheckoutResponse = {
+  sessionId: string;
+  url: string;
+};
+
+export async function createCheckoutSession(
+  { offerId, passengers, services = [] }: CreateCheckoutInput
+): Promise<CreateCheckoutResponse> {
+  // Prefer explicit override; otherwise derive from Supabase URL.
+  const directUrl = import.meta.env.VITE_CREATE_CHECKOUT_URL as string | undefined;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+
+  const endpoint = directUrl
+    ?? (supabaseUrl
+          ? `${supabaseUrl}/functions/v1/create-checkout-session`
+          : undefined);
+
+  if (!endpoint) {
+    throw new Error(
+      "Missing endpoint. Set VITE_CREATE_CHECKOUT_URL or VITE_SUPABASE_URL in your environment."
+    );
+  }
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ offerId, passengers, services }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || `Failed to create checkout session (${res.status})`);
+  }
+
+  // Expected shape from your edge function
+  if (!data?.url || !data?.sessionId) {
+    throw new Error("Malformed response from create-checkout-session");
+  }
+
+  return data as CreateCheckoutResponse;
+}
+Quick wiring reminder:
+
+In your form submit handler, build passengers = mapPassengers(formPassengers) and then:
+
+ts
+Copy code
+const { url } = await createCheckoutSession({ offerId, passengers, services });
+window.location.href = url;
