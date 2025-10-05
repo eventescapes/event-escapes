@@ -176,28 +176,29 @@ export function PassengerDetailsPage() {
       const passengers = passengerForms.map((form, index) => {
         const passenger: any = {
           id: checkoutItem.offer.passengers[index].id,
+          type: checkoutItem.offer.passengers[index].type || 'adult',
           title: form.title,
-          givenName: form.givenName,
-          familyName: form.familyName,
+          given_name: form.givenName,
+          family_name: form.familyName,
           gender: form.gender,
-          bornOn: form.bornOn,
+          born_on: form.bornOn,
           email: form.email,
-          phoneNumber: form.phoneNumber,
+          phone_number: form.phoneNumber,
         };
 
         if (form.passportNumber && form.passportCountry && form.passportExpiry) {
-          passenger.identityDocuments = [{
-            uniqueIdentifier: form.passportNumber,
+          passenger.identity_documents = [{
+            unique_identifier: form.passportNumber,
             type: 'passport',
-            issuingCountryCode: form.passportCountry,
-            expiresOn: form.passportExpiry,
+            issuing_country_code: form.passportCountry,
+            expires_on: form.passportExpiry,
           }];
         }
 
         if (form.loyaltyAirline && form.loyaltyNumber) {
-          passenger.loyaltyProgrammeAccounts = [{
-            airlineIataCode: form.loyaltyAirline,
-            accountNumber: form.loyaltyNumber,
+          passenger.loyalty_programme_accounts = [{
+            airline_iata_code: form.loyaltyAirline,
+            account_number: form.loyaltyNumber,
           }];
         }
 
