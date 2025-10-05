@@ -175,7 +175,6 @@ export function PassengerDetailsPage() {
     try {
       const passengers = passengerForms.map((form, index) => {
         const passenger: any = {
-          id: checkoutItem.offer.passengers[index].id,
           type: checkoutItem.offer.passengers[index].type || 'adult',
           title: form.title,
           given_name: form.givenName,
