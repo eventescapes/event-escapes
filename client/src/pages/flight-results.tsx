@@ -434,8 +434,8 @@ const FlightResults = () => {
   const handleFlightSelect = (sliceIndex: number, flight: any) => {
     console.log('✈️ Flight selected:', flight);
     
-    setSelectedOffers(prev => ({
-      ...prev,
+    const newSelectedOffers = {
+      ...selectedOffers,
       [sliceIndex]: {
         offerId: flight.offerId,
         sliceId: flight.sliceId,
@@ -443,7 +443,9 @@ const FlightResults = () => {
         price: flight.price,
         currency: flight.currency
       }
-    }));
+    };
+    
+    setSelectedOffers(newSelectedOffers);
     
     // Update current selection for Order Summary
     const fullOffer = offers.find(o => o.id === flight.offerId);
@@ -454,6 +456,37 @@ const FlightResults = () => {
         seats: [],
         baggage: []
       });
+      
+      // Check if this completes all required selections
+      const requiredSlices = searchParams.tripType === 'one-way' ? 1 :
+                            searchParams.tripType === 'return' ? 2 :
+                            searchParams.multiCitySlices?.length || 0;
+      
+      let allSelected = true;
+      for (let i = 0; i < requiredSlices; i++) {
+        if (i === sliceIndex) continue; // We just selected this one
+        if (!newSelectedOffers[i]) {
+          allSelected = false;
+          break;
+        }
+      }
+      
+      // For one-way, immediately go to ancillary choice
+      if (searchParams.tripType === 'one-way' || allSelected) {
+        console.log('🛒 All flights selected, navigating to ancillary choice...');
+        
+        // Add passengers to offer if not present
+        const offerWithPassengers = {
+          ...fullOffer,
+          passengers: fullOffer.passengers || Array.from(
+            { length: searchParams.passengers },
+            (_, i) => ({ id: `passenger_${i + 1}`, type: 'adult' })
+          )
+        };
+        
+        addOffer(offerWithPassengers, searchParams);
+        navigate(`/ancillaries/${offerWithPassengers.id}`);
+      }
     }
   };
 
