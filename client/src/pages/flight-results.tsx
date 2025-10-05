@@ -449,13 +449,17 @@ const FlightResults = () => {
     
     // Update current selection for Order Summary
     const fullOffer = offers.find(o => o.id === flight.offerId);
-    if (fullOffer && sliceIndex === 0) {
+    if (fullOffer) {
       console.log('✈️ Setting current selection offer:', fullOffer);
-      setCurrentSelection({
-        offer: fullOffer,
-        seats: [],
-        baggage: []
-      });
+      
+      // Update current selection if it's the first slice
+      if (sliceIndex === 0) {
+        setCurrentSelection({
+          offer: fullOffer,
+          seats: [],
+          baggage: []
+        });
+      }
       
       // Check if this completes all required selections
       const requiredSlices = searchParams.tripType === 'one-way' ? 1 :
@@ -464,15 +468,14 @@ const FlightResults = () => {
       
       let allSelected = true;
       for (let i = 0; i < requiredSlices; i++) {
-        if (i === sliceIndex) continue; // We just selected this one
         if (!newSelectedOffers[i]) {
           allSelected = false;
           break;
         }
       }
       
-      // For one-way, immediately go to ancillary choice
-      if (searchParams.tripType === 'one-way' || allSelected) {
+      // Navigate to ancillary choice when all required flights are selected
+      if (allSelected) {
         console.log('🛒 All flights selected, navigating to ancillary choice...');
         
         // Add passengers to offer if not present
