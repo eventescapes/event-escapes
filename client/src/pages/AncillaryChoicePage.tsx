@@ -3,37 +3,92 @@ import { useLocation, useRoute } from "wouter";
 import { useCart } from "@/store/cartStore";
 import { Button } from "@/components/ui/button";
 import { Plane, Luggage, ArrowRight } from "lucide-react";
+import { SeatSelectionModal } from "@/components/SeatSelectionModal";
+import { BaggageSelectionModal } from "@/components/ui/BaggageSelectionModal";
 
 export default function AncillaryChoicePage() {
   const [, params] = useRoute("/ancillaries/:offerId");
   const [, navigate] = useLocation();
   const offerId = params?.offerId || "";
-  const { items } = useCart();
+  const { items, setServicesForOffer } = useCart();
   const cartItem = useMemo(() => items.find(i => i.offerId === offerId), [items, offerId]);
 
   const [wantSeats, setWantSeats] = useState(false);
   const [wantBags, setWantBags] = useState(false);
+  const [showSeatModal, setShowSeatModal] = useState(false);
+  const [showBaggageModal, setShowBaggageModal] = useState(false);
+  const [selectedSeats, setSelectedSeats] = useState<any[]>([]);
+  const [selectedBaggage, setSelectedBaggage] = useState<any[]>([]);
 
   if (!cartItem) {
     navigate("/flights");
     return null;
   }
 
+  const passengers = cartItem.offer.passengers || Array.from(
+    { length: cartItem.searchParams?.passengers || 1 },
+    (_, i) => ({ id: `passenger_${i + 1}`, type: 'adult' })
+  );
+
   const onContinue = () => {
     if (wantSeats) {
-      navigate(`/seats/${offerId}`);
+      setShowSeatModal(true);
       return;
     }
     if (wantBags) {
-      navigate(`/bags/${offerId}`);
+      setShowBaggageModal(true);
       return;
     }
     
     // Go directly to passenger details since we're skipping extras
+    proceedToCheckout();
+  };
+
+  const handleSeatsSelected = (seats: any[]) => {
+    console.log('💺 Seats selected:', seats);
+    setSelectedSeats(seats);
+    setShowSeatModal(false);
+    
+    // After seats, check if user wants bags
+    if (wantBags) {
+      setShowBaggageModal(true);
+    } else {
+      proceedToCheckout();
+    }
+  };
+
+  const handleBaggageComplete = (baggage: any[]) => {
+    console.log('🧳 Baggage selected:', baggage);
+    setSelectedBaggage(baggage);
+    setShowBaggageModal(false);
+    proceedToCheckout();
+  };
+
+  const proceedToCheckout = () => {
+    // Update cart with selected services
+    const services = [
+      ...selectedSeats.map((s: any) => ({ 
+        id: s.serviceId || s.id, 
+        quantity: 1,
+        amount: s.amount,
+        designator: s.designator,
+        passengerId: s.passengerId,
+        segmentId: s.segmentId
+      })),
+      ...selectedBaggage.map((b: any) => ({ 
+        id: b.serviceId || b.id, 
+        quantity: b.quantity,
+        amount: b.amount
+      })),
+    ];
+    
+    setServicesForOffer(offerId, services);
+    
+    // Save to sessionStorage for checkout
     const checkoutData = {
       offer: cartItem.offer,
-      selectedSeats: [],
-      selectedBaggage: [],
+      selectedSeats,
+      selectedBaggage,
     };
     sessionStorage.setItem('checkout_item', JSON.stringify(checkoutData));
     navigate("/passenger-details");
@@ -81,6 +136,10 @@ export default function AncillaryChoicePage() {
               <span className="font-medium">
                 {cartItem.offer.total_currency?.toUpperCase()} ${parseFloat(cartItem.offer.total_amount || '0').toFixed(2)}
               </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="opacity-80">Passengers:</span>
+              <span className="font-medium">{passengers.length}</span>
             </div>
           </div>
         </div>
@@ -197,6 +256,45 @@ export default function AncillaryChoicePage() {
           You can always add these later, but availability may change
         </p>
       </div>
+
+      {/* Seat Selection Modal */}
+      {showSeatModal && (
+        <SeatSelectionModal
+          offerId={offerId}
+          passengers={passengers}
+          onSeatsSelected={handleSeatsSelected}
+          onClose={() => {
+            setShowSeatModal(false);
+            if (wantBags) {
+              setShowBaggageModal(true);
+            } else {
+              proceedToCheckout();
+            }
+          }}
+          onSkip={() => {
+            setShowSeatModal(false);
+            if (wantBags) {
+              setShowBaggageModal(true);
+            } else {
+              proceedToCheckout();
+            }
+          }}
+        />
+      )}
+
+      {/* Baggage Selection Modal */}
+      {showBaggageModal && (
+        <BaggageSelectionModal
+          isOpen={showBaggageModal}
+          onClose={() => {
+            setShowBaggageModal(false);
+            proceedToCheckout();
+          }}
+          offerId={offerId}
+          passengers={passengers}
+          onComplete={handleBaggageComplete}
+        />
+      )}
     </div>
   );
 }
