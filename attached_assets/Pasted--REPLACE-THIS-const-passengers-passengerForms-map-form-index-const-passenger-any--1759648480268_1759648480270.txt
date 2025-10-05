@@ -1,0 +1,64 @@
+// REPLACE THIS:
+const passengers = passengerForms.map((form, index) => {
+  const passenger: any = {
+    id: checkoutItem.offer.passengers[index].id,
+    title: form.title,
+    givenName: form.givenName,
+    familyName: form.familyName,
+    gender: form.gender,
+    bornOn: form.bornOn,
+    email: form.email,
+    phoneNumber: form.phoneNumber,
+  };
+
+  if (form.passportNumber && form.passportCountry && form.passportExpiry) {
+    passenger.identityDocuments = [{
+      uniqueIdentifier: form.passportNumber,
+      type: 'passport',
+      issuingCountryCode: form.passportCountry,
+      expiresOn: form.passportExpiry,
+    }];
+  }
+
+  if (form.loyaltyAirline && form.loyaltyNumber) {
+    passenger.loyaltyProgrammeAccounts = [{
+      airlineIataCode: form.loyaltyAirline,
+      accountNumber: form.loyaltyNumber,
+    }];
+  }
+
+  return passenger;
+});
+
+// WITH THIS:
+const passengers = passengerForms.map((form, index) => {
+  const passenger: any = {
+    id: checkoutItem.offer.passengers[index].id,
+    type: checkoutItem.offer.passengers[index].type || 'adult',
+    title: form.title,
+    given_name: form.givenName,     // Changed to snake_case
+    family_name: form.familyName,   // Changed to snake_case
+    gender: form.gender,
+    born_on: form.bornOn,           // Changed to snake_case
+    email: form.email,
+    phone_number: form.phoneNumber,  // Changed to snake_case
+  };
+
+  if (form.passportNumber && form.passportCountry && form.passportExpiry) {
+    passenger.identity_documents = [{  // Changed to snake_case
+      unique_identifier: form.passportNumber,      // Changed to snake_case
+      type: 'passport',
+      issuing_country_code: form.passportCountry,  // Changed to snake_case
+      expires_on: form.passportExpiry,            // Changed to snake_case
+    }];
+  }
+
+  if (form.loyaltyAirline && form.loyaltyNumber) {
+    passenger.loyalty_programme_accounts = [{  // Changed to snake_case
+      airline_iata_code: form.loyaltyAirline,  // Changed to snake_case
+      account_number: form.loyaltyNumber,      // Changed to snake_case
+    }];
+  }
+
+  return passenger;
+});
