@@ -10,6 +10,7 @@ import Home from "@/pages/home";
 import EventDetail from "@/pages/event-detail";
 import HotelResults from "@/pages/hotel-results";
 import FlightResults from "@/pages/flight-results";
+import AncillaryChoicePage from "@/pages/AncillaryChoicePage";
 import CartPage from "@/pages/cart";
 import Checkout from "@/pages/checkout";
 import FindBooking from "@/pages/find-booking";
@@ -29,6 +30,7 @@ function Router() {
           <Route path="/events/:id" component={EventDetail} />
           <Route path="/hotels" component={HotelResults} />
           <Route path="/flights" component={FlightResults} />
+          <Route path="/ancillaries/:offerId" component={AncillaryChoicePage} />
           <Route path="/cart" component={CartPage} />
           <Route path="/checkout" component={Checkout} />
           <Route path="/confirmation" component={ConfirmationPage} />
