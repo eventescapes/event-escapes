@@ -1,0 +1,105 @@
+Create a Vite + React TypeScript project called "event-escapes-frontend".
+Add two files:
+
+1) src/lib/normalizePassenger.ts  (exact content below)
+2) src/api/createCheckoutSession.ts  (exact content below)
+
+Wire a simple demo page src/App.tsx that:
+- renders one passenger form with fields: title (Mr/Ms), gender (Male/Female), firstName, lastName, dateOfBirth (DD/MM/YYYY), email, phoneNumber
+- keeps the form state in React
+- on submit, builds passengers = mapPassengers([formState]) and calls createCheckoutSession({ offerId: "<REPLACE_WITH_REAL_OFFER_ID>", passengers })
+- redirects the browser to the returned URL
+
+Install dependencies:
+- npm i
+
+Expose two environment variables via Replit "Secrets":
+- VITE_SUPABASE_URL = https://<your-project>.supabase.co
+- VITE_CREATE_CHECKOUT_URL = (optional) full URL to your Supabase edge function /functions/v1/create-checkout-session if you want to override
+
+Use the exact code:
+
+--- src/lib/normalizePassenger.ts ---
+<PASTE THE normalizePassenger.ts CODE FROM CHAT>
+
+--- src/api/createCheckoutSession.ts ---
+<PASTE THE createCheckoutSession.ts CODE FROM CHAT>
+
+--- src/App.tsx ---
+import { useState } from "react";
+import { mapPassengers, RawPassenger } from "./lib/normalizePassenger";
+import { createCheckoutSession } from "./api/createCheckoutSession";
+
+export default function App() {
+  const [p, setP] = useState<RawPassenger>({
+    title: "Mr",
+    gender: "Male",
+    firstName: "Jay",
+    lastName: "Martin",
+    dateOfBirth: "10/10/1988",
+    email: "jay@example.com",
+    phoneNumber: "+61412345678",
+  });
+  const [offerId, setOfferId] = useState("<REPLACE_WITH_REAL_OFFER_ID>");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    setBusy(true);
+    try {
+      const passengers = mapPassengers([p]);
+      const { url } = await createCheckoutSession({ offerId, passengers });
+      window.location.href = url;
+    } catch (e: any) {
+      setErr(e.message || "Failed to start checkout");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 520, margin: "40px auto", fontFamily: "system-ui" }}>
+      <h1>EventEscapes — Test Checkout</h1>
+      <label>Offer ID
+        <input value={offerId} onChange={e=>setOfferId(e.target.value)} style={{width:"100%"}}/>
+      </label>
+      <form onSubmit={onSubmit}>
+        <div style={{display:"grid", gap:12, marginTop:12}}>
+          <label>Title
+            <select value={p.title} onChange={e=>setP({...p, title: e.target.value})}>
+              <option>Mr</option><option>Ms</option><option>Mrs</option><option>Miss</option><option>Dr</option>
+            </select>
+          </label>
+          <label>Gender
+            <select value={p.gender} onChange={e=>setP({...p, gender: e.target.value})}>
+              <option>Male</option><option>Female</option>
+            </select>
+          </label>
+          <label>First name
+            <input value={p.firstName} onChange={e=>setP({...p, firstName: e.target.value})}/>
+          </label>
+          <label>Last name
+            <input value={p.lastName} onChange={e=>setP({...p, lastName: e.target.value})}/>
+          </label>
+          <label>Date of birth (DD/MM/YYYY)
+            <input value={p.dateOfBirth} onChange={e=>setP({...p, dateOfBirth: e.target.value})}/>
+          </label>
+          <label>Email
+            <input value={p.email} onChange={e=>setP({...p, email: e.target.value})}/>
+          </label>
+          <label>Phone (+E.164)
+            <input value={p.phoneNumber} onChange={e=>setP({...p, phoneNumber: e.target.value})}/>
+          </label>
+        </div>
+        <button type="submit" disabled={busy} style={{marginTop:16}}>
+          {busy ? "Creating checkout…" : "Proceed to payment"}
+        </button>
+      </form>
+      {err && <p style={{color:"crimson"}}>{err}</p>}
+    </div>
+  );
+}
+
+Configure the Run command to: "npm run dev". Start the repl.
