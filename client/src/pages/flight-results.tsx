@@ -513,21 +513,38 @@ const FlightResults = () => {
 
   // Handle Book Now - direct checkout
   const handleBookNow = () => {
-    console.log('📱 === BOOK NOW CLICKED ===');
+    console.log('🛒 === BOOK NOW CLICKED ===');
     
     if (!currentSelection.offer) {
       console.error('❌ No offer selected');
       return;
     }
     
+    // Build complete checkout data with all necessary fields
     const checkoutData = {
-      offer: currentSelection.offer,
+      offer: {
+        ...currentSelection.offer,
+        // Ensure passengers array exists for payment processing
+        passengers: currentSelection.offer.passengers || Array.from(
+          { length: searchParams.passengers },
+          (_, i) => ({ id: `passenger_${i + 1}`, type: 'adult' })
+        )
+      },
       selectedSeats: currentSelection.seats || [],
       selectedBaggage: currentSelection.baggage || [],
     };
     
-    console.log('📱 Checkout data:', checkoutData);
+    console.log('🛒 Saving checkout data to sessionStorage:');
+    console.log('🛒 - Offer ID:', checkoutData.offer.id);
+    console.log('🛒 - Total Amount:', checkoutData.offer.total_amount, checkoutData.offer.total_currency);
+    console.log('🛒 - Passengers:', checkoutData.offer.passengers?.length || 0);
+    console.log('🛒 - Selected Seats:', checkoutData.selectedSeats.length);
+    console.log('🛒 - Selected Baggage:', checkoutData.selectedBaggage.length);
+    console.log('🛒 Complete data:', checkoutData);
+    
     sessionStorage.setItem('checkout_item', JSON.stringify(checkoutData));
+    console.log('✅ Saved to sessionStorage successfully!');
+    console.log('🛒 Navigating to /passenger-details...');
     navigate('/passenger-details');
   };
 

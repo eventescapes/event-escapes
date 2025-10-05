@@ -29,20 +29,33 @@ export function PassengerDetailsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    console.log('🎫 === PASSENGER DETAILS PAGE LOADED ===');
     const item = sessionStorage.getItem('checkout_item');
+    
     if (!item) {
+      console.error('❌ No checkout_item found in sessionStorage');
       navigate('/');
       return;
     }
 
     try {
+      console.log('🎫 Raw checkout_item from sessionStorage:', item);
       const parsed = JSON.parse(item);
+      console.log('🎫 Parsed checkout data:');
+      console.log('🎫 - Offer ID:', parsed.offer?.id);
+      console.log('🎫 - Total Amount:', parsed.offer?.total_amount, parsed.offer?.total_currency);
+      console.log('🎫 - Passengers:', parsed.offer?.passengers?.length || 0);
+      console.log('🎫 - Selected Seats:', parsed.selectedSeats?.length || 0);
+      console.log('🎫 - Selected Baggage:', parsed.selectedBaggage?.length || 0);
+      console.log('🎫 Complete parsed data:', parsed);
+      
       setCheckoutItem(parsed);
       
       const passportRequired = parsed.offer?.passenger_identity_documents_required || false;
       setRequiresPassport(passportRequired);
 
       const passengerCount = parsed.offer?.passengers?.length || 1;
+      console.log('🎫 Creating forms for', passengerCount, 'passenger(s)');
       const initialForms = Array.from({ length: passengerCount }, () => ({
         title: '',
         givenName: '',
