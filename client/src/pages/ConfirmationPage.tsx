@@ -22,33 +22,46 @@ export function ConfirmationPage() {
 
     const checkStatus = async () => {
       try {
+        console.log('🔍 Polling booking status for session:', sessionId);
+        
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/check-booking-status`,
           {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+              'Cache-Control': 'no-store, no-cache, must-revalidate',
+              'Pragma': 'no-cache'
             },
+            cache: 'no-store',
             body: JSON.stringify({ sessionId })
           }
         );
 
         const data = await response.json();
+        console.log('📊 Booking status response:', data);
 
         if (data.status === 'confirmed') {
+          console.log('✅ Booking confirmed!', data.booking_reference);
           setStatus('confirmed');
-          setBookingData(data);
+          setBookingData({
+            bookingReference: data.booking_reference,
+            duffelOrderId: data.duffel_order_id,
+            ...data
+          });
         } else if (data.status === 'failed') {
+          console.log('❌ Booking failed:', data.error);
           setStatus('failed');
           setError(data.error || 'Booking creation failed');
         } else if (data.status === 'pending' || data.status === 'processing') {
           // Still processing, check again
+          console.log('⏳ Booking still processing, attempt', attempts + 1);
           attempts++;
           if (attempts < maxAttempts) {
-            setTimeout(checkStatus, 2000);
+            setTimeout(checkStatus, 3000); // Poll every 3 seconds
           } else {
-            // Timeout after 2 minutes
+            // Timeout after 3 minutes
             setStatus('failed');
             setError('Booking is taking longer than expected. Please contact support with reference: ' + sessionId);
           }
@@ -97,16 +110,16 @@ export function ConfirmationPage() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Booking Reference:</span>
-                  <span className="font-mono font-semibold">{bookingData.bookingId}</span>
+                  <span className="font-mono font-semibold text-lg" data-testid="text-booking-reference">
+                    {bookingData.bookingReference || bookingData.booking_reference}
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Amount Paid:</span>
-                  <span className="font-semibold">{bookingData.currency} {bookingData.amount}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Passengers:</span>
-                  <span className="font-semibold">{bookingData.passengerCount}</span>
-                </div>
+                {bookingData.duffelOrderId && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Order ID:</span>
+                    <span className="font-mono text-xs text-gray-500">{bookingData.duffelOrderId}</span>
+                  </div>
+                )}
               </div>
             </div>
 

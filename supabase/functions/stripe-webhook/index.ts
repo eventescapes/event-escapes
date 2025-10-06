@@ -44,14 +44,20 @@ const handler = async (req: Request) => {
       console.log('[stripe-webhook] Amount:', (session.amount_total || 0) / 100, session.currency);
 
       try {
-        const { offerId, passengers, services } = session.metadata || {};
+        const { offerId, passengers } = session.metadata || {};
         
         if (!offerId || !passengers) {
           throw new Error('Missing booking data in session metadata');
         }
 
         const parsedPassengers = JSON.parse(passengers);
-        const parsedServices = services ? JSON.parse(services) : [];
+        
+        // Retrieve services from Deno KV (saved by set-booking-services)
+        const kv = await Deno.openKv();
+        const servicesResult = await kv.get(['booking_services', session.id]);
+        const parsedServices = servicesResult.value?.services || [];
+        
+        console.log('[stripe-webhook] Retrieved services:', JSON.stringify(parsedServices, null, 2));
 
         console.log('[stripe-webhook] Creating Duffel order for offer:', offerId);
 
@@ -129,8 +135,31 @@ const handler = async (req: Request) => {
         console.log('[stripe-webhook] Booking reference:', order.booking_reference);
         console.log('[stripe-webhook] Order creation successful!');
 
+        // Store booking status in Deno KV for polling
+        const kv = await Deno.openKv();
+        await kv.set(['booking_status', session.id], {
+          status: 'confirmed',
+          booking_reference: order.booking_reference,
+          duffel_order_id: order.id,
+          timestamp: new Date().toISOString()
+        });
+        console.log('[stripe-webhook] Booking status stored for session:', session.id);
+
       } catch (error: any) {
         console.error('[stripe-webhook] Error processing payment:', error);
+        
+        // Store failure status in Deno KV for polling
+        try {
+          const kv = await Deno.openKv();
+          await kv.set(['booking_status', session.id], {
+            status: 'failed',
+            error: error.message || 'Booking creation failed',
+            timestamp: new Date().toISOString()
+          });
+          console.log('[stripe-webhook] Failure status stored for session:', session.id);
+        } catch (kvError) {
+          console.error('[stripe-webhook] Failed to store failure status:', kvError);
+        }
       }
     }
 
