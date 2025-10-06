@@ -16,11 +16,12 @@ const handler = async (req: Request) => {
   }
 
   try {
-    const { offerId, passengers, services, totalAmount, currency, offerData } = await req.json();
+    const { offerId, passengers, totalAmount, currency, offerData } = await req.json();
 
     console.log('[create-checkout] Creating session for offer:', offerId);
     console.log('[create-checkout] Amount:', totalAmount, currency);
     console.log('[create-checkout] Passengers:', passengers.length);
+    console.log('[create-checkout] Note: Services will be saved separately via set-booking-services');
 
     if (!offerId || !passengers || !totalAmount || !currency) {
       return new Response(
@@ -54,7 +55,6 @@ const handler = async (req: Request) => {
       metadata: {
         offerId,
         passengers: JSON.stringify(passengers),
-        services: JSON.stringify(services || []),
         offerData: JSON.stringify(offerData),
       },
     });

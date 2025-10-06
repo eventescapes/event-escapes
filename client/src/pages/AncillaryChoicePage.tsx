@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useCart } from "@/store/cartStore";
 import { Button } from "@/components/ui/button";
-import { Plane, Luggage, ArrowRight } from "lucide-react";
+import { Plane, Luggage, ArrowRight, Loader2 } from "lucide-react";
 import { SeatSelectionModal } from "@/components/SeatSelectionModal";
 import { BaggageSelectionModal } from "@/components/ui/BaggageSelectionModal";
 
@@ -19,16 +19,66 @@ export default function AncillaryChoicePage() {
   const [showBaggageModal, setShowBaggageModal] = useState(false);
   const [selectedSeats, setSelectedSeats] = useState<any[]>([]);
   const [selectedBaggage, setSelectedBaggage] = useState<any[]>([]);
+  const [passengers, setPassengers] = useState<any[]>([]);
+  const [loadingPassengers, setLoadingPassengers] = useState(true);
+
+  // Fetch real passenger IDs from Duffel via get-offer-lite
+  useEffect(() => {
+    const fetchPassengerIds = async () => {
+      if (!offerId) return;
+      
+      try {
+        console.log('🎫 Fetching passenger IDs for offer:', offerId);
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-offer-lite`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+            },
+            body: JSON.stringify({ offerId })
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch passenger IDs');
+        }
+
+        const data = await response.json();
+        console.log('✅ Passenger IDs fetched:', data.passengers);
+        setPassengers(data.passengers || []);
+      } catch (error) {
+        console.error('❌ Error fetching passenger IDs:', error);
+        // Fallback to synthetic passengers if fetch fails
+        const fallbackPassengers = Array.from(
+          { length: cartItem?.searchParams?.passengers || 1 },
+          (_, i) => ({ id: `passenger_${i + 1}`, type: 'adult' })
+        );
+        setPassengers(fallbackPassengers);
+      } finally {
+        setLoadingPassengers(false);
+      }
+    };
+
+    fetchPassengerIds();
+  }, [offerId, cartItem]);
 
   if (!cartItem) {
     navigate("/flights");
     return null;
   }
 
-  const passengers = cartItem.offer.passengers || Array.from(
-    { length: cartItem.searchParams?.passengers || 1 },
-    (_, i) => ({ id: `passenger_${i + 1}`, type: 'adult' })
-  );
+  if (loadingPassengers) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 text-blue-400 animate-spin mx-auto mb-4" />
+          <p className="text-blue-200">Loading passenger information...</p>
+        </div>
+      </div>
+    );
+  }
 
   const onContinue = () => {
     if (wantSeats) {
@@ -65,23 +115,23 @@ export default function AncillaryChoicePage() {
   };
 
   const proceedToCheckout = () => {
-    // Update cart with selected services
+    // Format services in Duffel API format: { id, type, quantity, passenger_id }
     const services = [
       ...selectedSeats.map((s: any) => ({ 
         id: s.serviceId || s.id, 
+        type: 'seat',
         quantity: 1,
-        amount: s.amount,
-        designator: s.designator,
-        passengerId: s.passengerId,
-        segmentId: s.segmentId
+        passenger_id: s.passengerId || s.passenger_id
       })),
       ...selectedBaggage.map((b: any) => ({ 
         id: b.serviceId || b.id, 
-        quantity: b.quantity,
-        amount: b.amount
+        type: 'baggage',
+        quantity: b.quantity || 1,
+        passenger_id: b.passengerId || b.passenger_id
       })),
     ];
     
+    console.log('💺🎒 Formatted services for checkout:', services);
     setServicesForOffer(offerId, services);
     
     // Save to sessionStorage for checkout
@@ -89,6 +139,8 @@ export default function AncillaryChoicePage() {
       offer: cartItem.offer,
       selectedSeats,
       selectedBaggage,
+      services, // Include formatted services
+      passengers, // Include real passenger IDs
     };
     sessionStorage.setItem('checkout_item', JSON.stringify(checkoutData));
     navigate("/passenger-details");

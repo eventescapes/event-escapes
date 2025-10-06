@@ -204,18 +204,11 @@ export function PassengerDetailsPage() {
         return passenger;
       });
 
-      const services = [
-        ...(checkoutItem.selectedSeats || []).map((s: any) => ({ 
-          id: s.serviceId || s.id, 
-          quantity: 1 
-        })),
-        ...(checkoutItem.selectedBaggage || []).map((b: any) => ({ 
-          id: b.serviceId || b.id, 
-          quantity: b.quantity 
-        })),
-      ];
-
+      // Use formatted services from ancillary page (includes passenger_id and type)
+      const services = checkoutItem.services || [];
+      
       console.log('💳 Creating Stripe checkout session...');
+      console.log('💺 Services to include:', services);
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`,
@@ -228,7 +221,6 @@ export function PassengerDetailsPage() {
           body: JSON.stringify({
             offerId: checkoutItem.offer.id,
             passengers,
-            services,
             totalAmount: checkoutItem.offer.total_amount,
             currency: checkoutItem.offer.total_currency,
             offerData: checkoutItem.offer,
@@ -242,8 +234,41 @@ export function PassengerDetailsPage() {
         throw new Error(result.error || 'Failed to create checkout session');
       }
 
-      console.log('✅ Checkout session created, redirecting to Stripe...');
-      
+      console.log('✅ Checkout session created:', result.sessionId);
+
+      // Save services to backend using sessionId
+      if (services.length > 0) {
+        console.log('💾 Saving services for session:', result.sessionId);
+        try {
+          const servicesResponse = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/set-booking-services`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+              },
+              body: JSON.stringify({
+                sessionId: result.sessionId,
+                services
+              })
+            }
+          );
+
+          if (!servicesResponse.ok) {
+            console.error('⚠️ Failed to save services, but continuing to checkout');
+          } else {
+            console.log('✅ Services saved successfully');
+          }
+        } catch (err) {
+          console.error('⚠️ Error saving services:', err);
+          // Continue to checkout even if service saving fails
+        }
+      } else {
+        console.log('ℹ️ No services selected, skipping service save');
+      }
+
+      console.log('🚀 Redirecting to Stripe checkout...');
       window.location.href = result.url;
 
     } catch (error: any) {
