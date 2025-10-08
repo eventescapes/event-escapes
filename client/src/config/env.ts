@@ -5,6 +5,7 @@ type EnvKeys = {
   DUFFEL_API_KEY?: string;               // test/live managed in Replit Secrets
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
+  EDGE_URL?: string;                     // Supabase Edge Functions URL
 };
 
 const e = (key: keyof EnvKeys): string | undefined => {
@@ -19,6 +20,7 @@ export const Env = {
   DUFFEL_API_KEY: e("DUFFEL_API_KEY") || (import.meta as any)?.env?.VITE_DUFFEL_API_KEY,
   SUPABASE_URL: e("SUPABASE_URL") || (import.meta as any)?.env?.VITE_SUPABASE_URL,
   SUPABASE_ANON_KEY: e("SUPABASE_ANON_KEY") || (import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY,
+  EDGE_URL: e("EDGE_URL") || (import.meta as any)?.env?.VITE_EDGE_URL,
 } as const;
 
 // Soft validation: log once, don't crash builds.
