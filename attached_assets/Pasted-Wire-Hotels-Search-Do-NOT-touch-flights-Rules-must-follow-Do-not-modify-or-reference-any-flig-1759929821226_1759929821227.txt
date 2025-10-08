@@ -1,0 +1,107 @@
+Wire Hotels Search (Do NOT touch flights)
+
+Rules (must follow):
+
+Do not modify or reference any flights/Duffel files, env vars, types, or components.
+
+Do not add any new env vars except the one provided below.
+
+Do not log or print environment variables.
+
+Backend endpoint (already set as secret):
+
+VITE_HOTELS_URL = https://jxrrhsqffnzeljszbecg.supabase.co/functions/v1/hotelbeds-hotels
+
+
+Goal:
+On the /hotels page, call the Edge Function above and render hotel cards (Airbnb-style layout already exists). Provide solid loading, empty, and error states.
+
+Implement
+
+Create client/src/lib/hotels.ts (or src/lib/hotels.ts depending on current structure):
+
+export const HOTELS_URL = import.meta.env.VITE_HOTELS_URL as string;
+
+export type HotelCard = {
+  hotelId: number | string;
+  name: string;
+  stars?: number;
+  thumbnail?: string | null;
+  locality?: string;
+  price: number;
+  currency: string;
+  board?: string;
+  refundable?: boolean;
+  paymentType?: string;
+  rateKey: string;
+};
+export type HotelsResponse = { total: number; cards: HotelCard[] };
+
+function qs(params: Record<string, string | number>) {
+  return new URLSearchParams(params as any).toString();
+}
+
+export async function fetchHotels(params: Record<string, string | number>): Promise<HotelsResponse> {
+  const url = `${HOTELS_URL}?${qs(params)}`;
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) {
+    const text = await res.text();
+    throw new Error(`Unexpected response (CT=${ct}): ${text.slice(0, 120)}`);
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error || `Hotelbeds ${res.status}`);
+  }
+  return res.json();
+}
+
+
+Update ONLY the Hotels page (e.g., client/src/pages/Hotels.tsx or wherever the Hotels search UI lives):
+
+Import fetchHotels.
+
+On initial load, set sensible defaults: dest="DXB", checkIn=today+21d, checkOut=today+23d, adults=2, rooms=1, maxHotels=24.
+
+On Search Hotels click, call:
+
+const data = await fetchHotels({
+  dest: destinationCode || "DXB",
+  checkIn,
+  checkOut,
+  adults: Number(guests) || 2,
+  rooms: Number(rooms) || 1,
+  maxHotels: 24
+});
+setHotels(data.cards);
+
+
+Render cards: image, name, stars, locality, price+currency, board, refundable pill, and a Select button that does console.log(card.rateKey) (booking wire-up later).
+
+Keep/implement skeleton loaders while fetching; show “No hotels found” empty state.
+
+Do not change any flights/Duffel files:
+
+Never import from or edit files containing Flight, Duffel, Passenger, or FlightSearch.
+
+Do not touch Stripe or Supabase auth code.
+
+Quality checks
+
+Typescript clean (no any escapes).
+
+Mobile responsive grid (1/2/3/4 cols).
+
+Ensure the Network tab shows requests going to the supabase.co/functions/v1/hotelbeds-hotels domain and returning JSON.
+
+Acceptance Criteria
+
+Hotels page successfully fetches from import.meta.env.VITE_HOTELS_URL and renders cards.
+
+Error “Unexpected token ‘<’…” no longer appears.
+
+Flights experience remains identical (no diff in flights files).
+
+Build runs with zero TS errors.
+
+At the end, list the files you changed/created and confirm no flights files were modified.
