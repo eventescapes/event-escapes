@@ -2,7 +2,7 @@ import { HotelCardAirbnb } from './HotelCardAirbnb';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Building2, RefreshCw } from 'lucide-react';
-import type { HotelCard } from '@/types/hotels';
+import type { HotelCard } from '@/lib/hotels';
 
 interface ResultsGridProps {
   hotels: HotelCard[];

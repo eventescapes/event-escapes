@@ -1,21 +1,34 @@
 import { HeroSearch } from '@/components/HeroSearch';
 import { FiltersBar } from '@/components/FiltersBar';
 import { ResultsGrid } from '@/components/ResultsGrid';
-import { useHotelSearch } from '@/hooks/useHotelSearch';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Map } from 'lucide-react';
+import { useState } from 'react';
+import { fetchHotels, type HotelsResponse } from '@/lib/hotels';
 
 export default function HotelResults() {
-  const { data, loading, error, search } = useHotelSearch();
+  const [data, setData] = useState<HotelsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const handleSearch = (params: Record<string, string | number>) => {
-    search(params);
+  const handleSearch = async (params: Record<string, string | number>) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchHotels(params);
+      setData(result);
+    } catch (e: any) {
+      setError(e.message ?? 'Error loading hotels');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleHotelSelect = (rateKey: string) => {
-    console.log('Selected hotel rateKey:', rateKey);
+    console.log(rateKey);
     
     toast({
       title: "Room Saved",
@@ -26,7 +39,7 @@ export default function HotelResults() {
 
   const handleRetry = () => {
     // Re-run the search with default params
-    search({
+    handleSearch({
       dest: 'DXB',
       checkIn: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       checkOut: new Date(Date.now() + 23 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
