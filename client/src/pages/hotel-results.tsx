@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { HeroSearch } from '@/components/HeroSearch';
 import { FiltersBar } from '@/components/FiltersBar';
 import { ResultsGrid } from '@/components/ResultsGrid';
