@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Star, Check, X } from 'lucide-react';
-import type { HotelCard } from '@/types/hotels';
+import type { HotelCard } from '@/lib/hotels';
 
 interface HotelCardAirbnbProps {
   hotel: HotelCard;

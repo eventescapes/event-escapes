@@ -1,0 +1,116 @@
+TASK: Wire Hotelbeds search (do not touch flights)
+
+Context:
+
+Keep all existing flights code unchanged.
+
+We’re adding a separate hotels API client that calls our Supabase Edge Function.
+
+Invoke URL (use exactly this):
+https://jxrrhsqffnzeljszbecg.supabase.co/functions/v1/hotelbeds-hotels
+
+Requirements:
+
+Env setup
+
+Add .env (or Replit Secrets) key:
+
+VITE_HOTELS_URL=https://jxrrhsqffnzeljszbecg.supabase.co/functions/v1/hotelbeds-hotels
+
+
+Do not modify any existing Stripe, Duffel, or Supabase vars.
+
+Hotels API client
+
+Create src/lib/hotels.ts:
+
+export const HOTELS_URL = import.meta.env.VITE_HOTELS_URL!;
+export type HotelCard = {
+  hotelId: number|string;
+  name: string;
+  stars?: number;
+  thumbnail?: string|null;
+  locality?: string;
+  price: number;
+  currency: string;
+  board?: string;
+  refundable?: boolean;
+  paymentType?: string;
+  rateKey: string;
+};
+export type HotelsResponse = { total: number; cards: HotelCard[] };
+
+function qs(params: Record<string, string|number>) {
+  return new URLSearchParams(params as any).toString();
+}
+
+export async function fetchHotels(params: Record<string,string|number>): Promise<HotelsResponse> {
+  const url = `${HOTELS_URL}?${qs(params)}`;
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) {
+    const text = await res.text();
+    throw new Error(`Unexpected response (CT=${ct}): ${text.slice(0,120)}`);
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error || `Hotelbeds ${res.status}`);
+  }
+  return res.json();
+}
+
+
+Hook + page integration
+
+If a flights/env module exists (e.g., server/env.ts), do not edit it.
+
+On the Hotels page only, import fetchHotels from src/lib/hotels.ts.
+
+When user clicks Search Hotels, call:
+
+const params = {
+  dest: destinationCode || "DXB",
+  checkIn,
+  checkOut,
+  adults: Number(adults) || 2,
+  rooms: Number(rooms) || 1,
+  maxHotels: 24
+};
+const data = await fetchHotels(params);
+
+
+Render data.cards (name, stars, price, currency, board, refundable, thumbnail), and keep the Select button exposing rateKey via console.log(rateKey) for now.
+
+Error + empty states
+
+If the fetch throws the <DOCTYPE> error (HTML), show the current error banner but also log the full response snippet (already done in the client above).
+
+Show a skeleton loader while fetching and a friendly “No hotels found” empty state.
+
+Smoke test (Agent to run)
+
+Set default search to dest=DXB, checkIn=today+21d, checkOut=today+23d, adults=2, rooms=1.
+
+Click Search Hotels and confirm network call goes to the Supabase domain above, returns JSON, and cards render.
+
+Do not introduce any changes in flights components or Duffel code paths.
+
+Deliverables
+
+New file: src/lib/hotels.ts
+
+Updated Hotels page component to use the new client.
+
+.env entry for VITE_HOTELS_URL
+
+Brief summary in the Replit task feed noting files changed and where to adjust params later.
+
+Acceptance criteria:
+
+Network request points to ...supabase.co/functions/v1/hotelbeds-hotels.
+
+Response is JSON and cards render.
+
+Flights continue to work unchanged.
+
+No TypeScript errors; build runs.
