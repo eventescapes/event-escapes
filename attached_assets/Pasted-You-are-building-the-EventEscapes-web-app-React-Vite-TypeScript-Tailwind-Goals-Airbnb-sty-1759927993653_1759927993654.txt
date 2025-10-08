@@ -1,0 +1,154 @@
+You are building the EventEscapes web app (React + Vite + TypeScript + Tailwind). Goals:
+
+Airbnb-style homepage layout, premium but simple.
+
+Wire hotel search UI to our backend: Supabase Edge Function hotelbeds-hotels (GET) that returns { total, cards: [{ hotelId, name, stars, thumbnail, locality, price, currency, board, refundable, paymentType, rateKey }] }.
+
+Leave clean stubs for Smart Filters we’ll implement later (distance to event venue, price sliders, refundable toggle, board type, star rating).
+
+Production-quality UX: responsive grid, skeleton loaders, empty/error states, and accessible form elements.
+
+Tech/Structure
+
+Stack: React + Vite + TS + Tailwind (install Tailwind and configure if missing).
+
+Create folders: src/components, src/hooks, src/lib, src/pages.
+
+Use Headless UI patterns (no heavy UI libs). Icons: lucide-react.
+
+Routing optional; homepage is /.
+
+Env / Config
+
+Add .env with VITE_EDGE_URL=https://<YOUR-SUPABASE-PROJECT>.functions.supabase.co (I will replace).
+
+Helper in src/lib/api.ts:
+
+export const EDGE = import.meta.env.VITE_EDGE_URL;
+export async function fetchHotels(params: Record<string,string|number>) {
+  const q = new URLSearchParams(params as any).toString();
+  const res = await fetch(`${EDGE}/hotelbeds-hotels?${q}`);
+  if (!res.ok) throw new Error(`HB ${res.status}`);
+  return res.json(); // { total, cards: [...] }
+}
+
+Components to build
+
+Navbar.tsx – compact bar with logo “EventEscapes”, links: Flights, Hotels, Event Tickets, and a “Sign In” button.
+
+HeroSearch.tsx – hero banner with centered search panel (Airbnb style):
+
+Inputs: Destination (text), Check-in, Check-out, Guests (adults), Rooms.
+
+“Search Hotels” primary CTA.
+
+Defaults: dest=DXB, checkIn = today+21d, checkOut = +23d, adults=2, rooms=1.
+
+FiltersBar.tsx (stubbed for now):
+
+Disabled controls with tooltips “coming soon”: Price slider, Distance to venue (km), Refundable toggle, Board type select, Stars select. Expose onChange props but don’t filter yet.
+
+HotelCard.tsx – image, name, stars, locality, price+currency, board, refundable pill, and a “Select” button that emits the rateKey.
+
+ResultsGrid.tsx – responsive grid (1/2/3/4 cols), shows Skeleton cards (8 placeholders) while loading, Empty state “No hotels found”.
+
+Footer.tsx – minimal.
+
+Homepage Page (src/App.tsx)
+
+Layout: Navbar → HeroSearch → FiltersBar (stub) → ResultsGrid → Footer.
+
+State flow:
+
+When user hits Search, call fetchHotels({ checkIn, checkOut, adults, rooms, dest, maxHotels: 24 }).
+
+While loading: show skeletons.
+
+On success: render cards.
+
+On error: show toast/banner “Couldn’t load hotels. Retry.” with retry button.
+
+Selecting a card triggers onSelect(rateKey) → for now just console.log(rateKey) and show a non-blocking toast “Saved room, ready for checkout step” (we will wire /checkrates + /bookings later).
+
+Styling/UX details
+
+Airbnb-like spacing and rounded corners; Tailwind: rounded-2xl, shadow-lg, soft gradients on hero.
+
+Hero banner: dark overlay on a blurred event photo (use any royalty-free placeholder).
+
+Inputs are large, pill-style (rounded-full, px-5, py-3).
+
+HotelCard image aspect ratio 4:3 with object-cover, fall back to a neutral placeholder if no thumbnail.
+
+Stars render as ★ (aria-label “4 stars”).
+
+Price format: Intl.NumberFormat(undefined, { style:'currency', currency }).
+
+Mobile: search collapses into a sticky bar at top once results load.
+
+Types
+
+Create src/types.ts:
+
+export type HotelCard = {
+  hotelId: number|string;
+  name: string;
+  stars?: number;
+  thumbnail?: string|null;
+  locality?: string;
+  price: number;
+  currency: string;
+  board?: string;
+  refundable?: boolean;
+  paymentType?: 'AT_HOTEL'|'AT_WEB'|string;
+  rateKey: string;
+};
+export type HotelsResponse = { total: number; cards: HotelCard[] };
+
+Hooks
+
+Create src/hooks/useHotelSearch.ts:
+
+import { useState } from 'react';
+import { fetchHotels } from '../lib/api';
+import type { HotelsResponse } from '../types';
+
+export function useHotelSearch() {
+  const [data, setData] = useState<HotelsResponse|null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string|null>(null);
+
+  async function search(params: Record<string,string|number>) {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetchHotels(params);
+      setData(res);
+    } catch (e:any) {
+      setError(e.message ?? 'Error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return { data, loading, error, search };
+}
+
+Acceptance criteria
+
+Homepage loads with hero + search panel; defaults execute a search on first render (DXB, dates+21/+23).
+
+Hitting Search Hotels triggers fetch and renders cards from the edge function.
+
+Grid is responsive; skeletons show during load; empty + error states present.
+
+Clicking Select logs rateKey and shows a toast.
+
+Code is TypeScript-strict, ESLint-clean, mobile-first, and accessible (labels + aria).
+
+Bonus (optional if quick)
+
+Add a Map modal button above grid (placeholder, no map yet).
+
+Persist last search to localStorage.
+
+Please implement all of the above and commit files. If Tailwind isn’t set up, initialize it and include base styles in index.css. When done, print the local preview URL and any env values I need to set.
