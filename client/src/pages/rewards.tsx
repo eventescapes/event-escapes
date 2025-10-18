@@ -123,7 +123,7 @@ export default function RewardsPage() {
   };
 
   const isLaunchPeriod = () => {
-    return new Date() < new Date('2025-04-01');
+    return new Date() < new Date('2025-12-31');
   };
 
   if (loading) {
@@ -207,7 +207,7 @@ export default function RewardsPage() {
             data-testid="launch-banner"
           >
             <h2 className="text-2xl font-bold mb-2">🎉 LAUNCH CELEBRATION ACTIVE 🎉</h2>
-            <p className="text-lg">Book event tickets and earn $20 hotel credit until April 1, 2025!</p>
+            <p className="text-lg">Book event tickets and earn $20 hotel credit until December 31, 2025!</p>
           </div>
         )}
 

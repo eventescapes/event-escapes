@@ -27,7 +27,7 @@ export function UserInfoModal({ open, onClose, event }: UserInfoModalProps) {
   const { toast } = useToast();
 
   const isLaunchPeriod = () => {
-    return new Date() < new Date('2025-04-01');
+    return new Date() < new Date('2025-12-31');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
