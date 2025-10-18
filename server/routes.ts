@@ -66,6 +66,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Ticketmaster Events
+  app.get("/api/ticketmaster-events", async (req, res) => {
+    try {
+      const { country, segment, isMajorEvent, limit } = req.query;
+      
+      const filters: any = {};
+      if (country) filters.country = country as string;
+      if (segment) filters.segment = segment as string;
+      if (isMajorEvent !== undefined) filters.isMajorEvent = isMajorEvent === 'true';
+      if (limit) filters.limit = parseInt(limit as string);
+      
+      const events = await storage.getTicketmasterEvents(filters);
+      res.json(events);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching Ticketmaster events: " + error.message });
+    }
+  });
+
+  app.get("/api/ticketmaster-events/:id", async (req, res) => {
+    try {
+      const event = await storage.getTicketmasterEvent(req.params.id);
+      if (!event) {
+        return res.status(404).json({ message: "Ticketmaster event not found" });
+      }
+      res.json(event);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error fetching Ticketmaster event: " + error.message });
+    }
+  });
+
   // Duffel Seat Map API
   app.get("/api/seat-maps/:offerId", async (req, res) => {
     try {

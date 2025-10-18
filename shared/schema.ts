@@ -66,6 +66,31 @@ export const savedItems = pgTable("saved_items", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const ticketmasterEvents = pgTable("ticketmaster_events", {
+  id: varchar("id").primaryKey(),
+  name: text("name").notNull(),
+  images: text("images"),
+  event_start_date: timestamp("event_start_date").notNull(),
+  venue_name: text("venue_name").notNull(),
+  venue_city: text("venue_city").notNull(),
+  venue_country_code: text("venue_country_code").notNull(),
+  venue_address: text("venue_address"),
+  venue_latitude: decimal("venue_latitude", { precision: 10, scale: 8 }),
+  venue_longitude: decimal("venue_longitude", { precision: 11, scale: 8 }),
+  price_min: decimal("price_min", { precision: 10, scale: 2 }),
+  price_max: decimal("price_max", { precision: 10, scale: 2 }),
+  currency: text("currency").default("USD"),
+  segment: text("segment"),
+  genre: text("genre"),
+  sub_genre: text("sub_genre"),
+  info: text("info"),
+  please_note: text("please_note"),
+  url: text("url").notNull(),
+  is_major_event: boolean("is_major_event").default(false),
+  filter_reason: text("filter_reason"),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -93,6 +118,10 @@ export const insertSavedItemSchema = createInsertSchema(savedItems).omit({
   createdAt: true,
 });
 
+export const insertTicketmasterEventSchema = createInsertSchema(ticketmasterEvents).omit({
+  created_at: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -108,3 +137,6 @@ export type InsertBookingItem = z.infer<typeof insertBookingItemSchema>;
 
 export type SavedItem = typeof savedItems.$inferSelect;
 export type InsertSavedItem = z.infer<typeof insertSavedItemSchema>;
+
+export type TicketmasterEvent = typeof ticketmasterEvents.$inferSelect;
+export type InsertTicketmasterEvent = z.infer<typeof insertTicketmasterEventSchema>;

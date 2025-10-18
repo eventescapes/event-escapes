@@ -9,11 +9,14 @@ import {
   type InsertBookingItem,
   type SavedItem,
   type InsertSavedItem,
+  type TicketmasterEvent,
+  type InsertTicketmasterEvent,
   users,
   events,
   bookings,
   bookingItems,
-  savedItems
+  savedItems,
+  ticketmasterEvents
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { drizzle } from "drizzle-orm/neon-http";
@@ -59,6 +62,15 @@ export interface IStorage {
   getSavedItems(userId?: string, guestEmail?: string): Promise<SavedItem[]>;
   createSavedItem(item: InsertSavedItem): Promise<SavedItem>;
   deleteSavedItem(id: string): Promise<void>;
+  
+  // Ticketmaster Events
+  getTicketmasterEvents(filters?: {
+    country?: string;
+    segment?: string;
+    isMajorEvent?: boolean;
+    limit?: number;
+  }): Promise<TicketmasterEvent[]>;
+  getTicketmasterEvent(id: string): Promise<TicketmasterEvent | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -274,6 +286,50 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSavedItem(id: string): Promise<void> {
     await db.delete(savedItems).where(eq(savedItems.id, id));
+  }
+
+  // Ticketmaster Events
+  async getTicketmasterEvents(filters?: {
+    country?: string;
+    segment?: string;
+    isMajorEvent?: boolean;
+    limit?: number;
+  }): Promise<TicketmasterEvent[]> {
+    const conditions = [];
+    
+    if (filters?.country) {
+      conditions.push(eq(ticketmasterEvents.venue_country_code, filters.country));
+    }
+    
+    if (filters?.segment) {
+      conditions.push(eq(ticketmasterEvents.segment, filters.segment));
+    }
+    
+    if (filters?.isMajorEvent !== undefined) {
+      conditions.push(eq(ticketmasterEvents.is_major_event, filters.isMajorEvent));
+    }
+    
+    // Filter for future events only
+    conditions.push(gte(ticketmasterEvents.event_start_date, new Date()));
+    
+    let query = db.select().from(ticketmasterEvents);
+    
+    if (conditions.length > 0) {
+      query = query.where(conditions.length === 1 ? conditions[0] : and(...conditions)) as any;
+    }
+    
+    query = query.orderBy(ticketmasterEvents.event_start_date) as any;
+    
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+    
+    return await query;
+  }
+
+  async getTicketmasterEvent(id: string): Promise<TicketmasterEvent | undefined> {
+    const result = await db.select().from(ticketmasterEvents).where(eq(ticketmasterEvents.id, id)).limit(1);
+    return result[0];
   }
 }
 
