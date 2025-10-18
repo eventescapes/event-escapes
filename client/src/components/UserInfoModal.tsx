@@ -27,7 +27,7 @@ export function UserInfoModal({ open, onClose, event }: UserInfoModalProps) {
   const { toast } = useToast();
 
   const isLaunchPeriod = () => {
-    return new Date() < new Date('2025-12-31');
+    return new Date() < new Date('2026-06-30');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -151,12 +151,13 @@ export function UserInfoModal({ open, onClose, event }: UserInfoModalProps) {
               className="p-4 rounded-lg text-center"
               style={{ 
                 background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-                color: '#1f2937'
+                color: '#000000'
               }}
               data-testid="banner-launch"
             >
-              <div className="font-bold text-lg">🎊 LAUNCH CELEBRATION 🎊</div>
-              <div className="text-sm mt-1">Earn $20 hotel credit with your ticket purchase!</div>
+              <div className="font-bold text-lg">🎉 Unlock Your $20 Hotel Credit!</div>
+              <div className="text-sm mt-1 font-semibold">Book tickets and get $20 off your next hotel stay</div>
+              <div className="text-xs mt-1 opacity-75">Launch special - ends June 2026</div>
             </div>
           )}
           

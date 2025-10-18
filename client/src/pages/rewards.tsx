@@ -123,7 +123,7 @@ export default function RewardsPage() {
   };
 
   const isLaunchPeriod = () => {
-    return new Date() < new Date('2025-12-31');
+    return new Date() < new Date('2026-06-30');
   };
 
   if (loading) {
@@ -202,12 +202,16 @@ export default function RewardsPage() {
             className="rounded-xl p-6 text-center shadow-lg"
             style={{ 
               background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-              color: '#1f2937'
+              color: '#000000'
             }}
             data-testid="launch-banner"
           >
-            <h2 className="text-2xl font-bold mb-2">🎉 LAUNCH CELEBRATION ACTIVE 🎉</h2>
-            <p className="text-lg">Book event tickets and earn $20 hotel credit until December 31, 2025!</p>
+            <div className="inline-block px-4 py-1 bg-black/10 rounded-full text-sm font-bold mb-3">
+              🎉 LAUNCH SPECIAL
+            </div>
+            <h2 className="text-2xl font-bold mb-2">$20 Hotel Credit per Event Ticket</h2>
+            <p className="text-lg font-semibold mb-1">Valid through June 30, 2026</p>
+            <p className="text-xs opacity-75 mt-2">After June 2026: $10 credit (evergreen program)</p>
           </div>
         )}
 
