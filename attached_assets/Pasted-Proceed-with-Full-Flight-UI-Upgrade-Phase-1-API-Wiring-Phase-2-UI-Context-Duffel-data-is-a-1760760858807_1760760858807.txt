@@ -1,0 +1,164 @@
+Proceed with Full Flight UI Upgrade (Phase 1 = API + Wiring, Phase 2 = UI)
+
+Context
+Duffel data is already correct. We’re fixing UI by persisting the selected offer and hydrating all pages. Use Supabase for the cart session store.
+
+Phase 1 — Add Cart Session API (server/routes.ts)
+
+Create REST endpoints:
+
+POST /api/cart/select → upsert { session_id, duffel_offer_id, offer_json, currency, expires_at }
+
+GET /api/cart/:sid → return row for sid
+
+PUT /api/cart/:sid/expire → push expires_at forward (re-price flow later)
+
+DELETE /api/cart/:sid → clear cart
+
+Use Supabase Service Role key on server (env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).
+
+Validate payloads; never trust client.
+
+Add to server/routes.ts (Express-style)
+
+// server/routes.ts
+import express from 'express';
+import { createClient } from '@supabase/supabase-js';
+
+const router = express.Router();
+
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!, // server only
+  { auth: { persistSession: false } }
+);
+
+// health
+router.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+// select (upsert) an offer into cart
+router.post('/api/cart/select', async (req, res) => {
+  try {
+    const { session_id, offer } = req.body || {};
+    if (!session_id || !offer?.id) return res.status(400).json({ error: 'session_id and offer.id required' });
+
+    const expires_at = new Date(Date.now() + 25 * 60 * 1000).toISOString();
+    const { error } = await supabase.from('cart_sessions').upsert({
+      session_id,
+      duffel_offer_id: offer.id,
+      offer_json: offer,
+      currency: offer.total_currency ?? 'AUD',
+      expires_at
+    });
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true, session_id, expires_at });
+  } catch (e:any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// get cart by session
+router.get('/api/cart/:sid', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('cart_sessions')
+      .select('*')
+      .eq('session_id', req.params.sid)
+      .single();
+
+    if (error) return res.status(404).json({ error: error.message });
+    return res.json({ cart: data });
+  } catch (e:any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// extend/override expiry
+router.put('/api/cart/:sid/expire', async (req, res) => {
+  try {
+    const { minutes = 25 } = req.body || {};
+    const expires_at = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+    const { error } = await supabase
+      .from('cart_sessions')
+      .update({ expires_at })
+      .eq('session_id', req.params.sid);
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true, expires_at });
+  } catch (e:any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// clear cart
+router.delete('/api/cart/:sid', async (req, res) => {
+  try {
+    const { error } = await supabase.from('cart_sessions').delete().eq('session_id', req.params.sid);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ ok: true });
+  } catch (e:any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+export default router;
+
+
+Notes
+
+Expect table cart_sessions(session_id PK, duffel_offer_id text, offer_json jsonb, currency text, expires_at timestamptz, created_at timestamptz default now()) already exists.
+
+Ensure server mounts this router (it likely already imports/uses it).
+
+Add .env entries locally & in Replit Secrets:
+
+SUPABASE_URL=...
+
+SUPABASE_SERVICE_ROLE_KEY=... (server-only, never ship to client)
+
+Phase 1 client wiring (quick)
+
+Add util getOrCreateSessionId() (cookie/localStorage).
+
+On Select click in search:
+
+POST /api/cart/select with { session_id, offer }
+
+Redirect to /review?sid=<session_id>
+
+Phase 2 — UI components (create files)
+
+utils/formatters.ts: fmtTime, fmtIsoDur, journeyDuration, stopsLabel, plusOneDayFlag.
+
+components/Countdown.tsx: shows mm:ss from expires_at, emits onExpire.
+
+components/SegmentList.tsx: renders all segments with terminals, flight nos, operating carrier, aircraft.
+
+components/ItineraryBar.tsx: compact header using offer JSON (airline, cabin/brand, times, duration, stops, baggage, price).
+
+components/FlightCard.tsx: rich search card with expandable details; calls Select handler.
+
+Hydration on pages
+
+/review, /ancillaries, /checkout, /confirmation:
+
+Read sid, GET /api/cart/:sid, render <ItineraryBar offer={offer}/> + <SegmentList/>.
+
+Show <Countdown expiresAt={expires_at}/> on review/ancillaries; disable continue on expiry.
+
+Return search pagination
+
+When fetching offers, request limit=50. If Duffel returns after, show “Load more”—call again with after and append.
+
+Acceptance
+
+No more “N/A”; all four pages show identical, correct itinerary context.
+
+Return searches can load more options.
+
+Countdown disables CTA at expiry.
+
+Do not touch payments yet (BNPL/crypto later).
+
+Proceed now. Commit in a single PR with brief README notes on testing flow.
