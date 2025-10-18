@@ -485,7 +485,18 @@ export default function Events() {
         }
 
         const data = await response.json();
-        const events = data.events || data || [];
+        console.log(`📦 ${country} raw response:`, data);
+        
+        // Handle different response formats
+        let events = [];
+        if (Array.isArray(data)) {
+          events = data;
+        } else if (data && Array.isArray(data.events)) {
+          events = data.events;
+        } else if (data && data.data && Array.isArray(data.data)) {
+          events = data.data;
+        }
+        
         console.log(`✅ ${country} events:`, events.length);
         return events;
       };
