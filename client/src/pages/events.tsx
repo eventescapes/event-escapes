@@ -431,23 +431,63 @@ export default function Events() {
   }, []);
 
   const fetchEvents = async () => {
-    console.log('🎫 Fetching Ticketmaster events...');
+    console.log('🎫 Fetching Ticketmaster events from Supabase...');
     setLoading(true);
     setError(null);
 
     try {
+      // Get Supabase config
+      const configResponse = await fetch('/api/config/supabase');
+      const config = await configResponse.json();
+      
+      if (!config.url || !config.anonKey) {
+        console.warn('⚠️ Supabase not configured, trying local API...');
+        // Fallback to local API
+        const fetchFromLocal = async (country: string) => {
+          const response = await fetch(`/api/ticketmaster-events?country=${country}&isMajorEvent=true&limit=20`);
+          if (response.ok) {
+            return await response.json();
+          }
+          return [];
+        };
+
+        const [us, gb, ca, au] = await Promise.all([
+          fetchFromLocal('US'),
+          fetchFromLocal('GB'),
+          fetchFromLocal('CA'),
+          fetchFromLocal('AU')
+        ]);
+
+        setUsEvents(us);
+        setGbEvents(gb);
+        setCaEvents(ca);
+        setAuEvents(au);
+        return;
+      }
+
       const fetchCountry = async (country: string) => {
-        console.log(`🔍 Fetching ${country} events...`);
-        const response = await fetch(`/api/ticketmaster-events?country=${country}&isMajorEvent=true&limit=20`);
+        console.log(`🔍 Fetching ${country} events from Supabase...`);
         
+        // Call Supabase edge function directly
+        const url = `${config.url}/functions/v1/search-ticketmaster-events?country=${country}&page_size=20&is_major_event=true`;
+        
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${config.anonKey}`,
+            'apikey': config.anonKey,
+            'Content-Type': 'application/json'
+          }
+        });
+
         if (!response.ok) {
-          console.error(`❌ Failed to fetch ${country} events:`, response.status);
-          throw new Error(`Failed to fetch ${country} events`);
+          console.error(`❌ Failed to fetch ${country} events:`, response.status, await response.text());
+          return [];
         }
 
         const data = await response.json();
-        console.log(`✅ ${country} events:`, data.length);
-        return data;
+        const events = data.events || data || [];
+        console.log(`✅ ${country} events:`, events.length);
+        return events;
       };
 
       const [us, gb, ca, au] = await Promise.all([
