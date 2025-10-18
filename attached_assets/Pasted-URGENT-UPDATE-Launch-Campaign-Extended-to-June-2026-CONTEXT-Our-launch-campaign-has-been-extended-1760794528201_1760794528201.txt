@@ -1,0 +1,106 @@
+URGENT UPDATE: Launch Campaign Extended to June 2026
+
+CONTEXT:
+Our launch campaign has been extended. The $20 hotel credit promotion now runs until June 30, 2026 (255 days remaining). After that, it becomes $10 evergreen.
+
+CRITICAL FIX REQUIRED:
+
+1. UPDATE DATE CHECK IN ALL COMPONENTS
+
+Find everywhere that checks if we're in the launch period and update:
+
+OLD CODE (WRONG):
+```javascript
+const isLaunchPeriod = new Date() < new Date('2025-04-01');
+const creditAmount = isLaunchPeriod ? 20 : 10;
+```
+
+NEW CODE (CORRECT):
+```javascript
+const isLaunchPeriod = new Date() < new Date('2026-06-30');
+const creditAmount = isLaunchPeriod ? 20 : 10;
+```
+
+2. UPDATE REWARDS BANNER
+
+Current banner shows "$10" - needs to show "$20"
+
+Replace with:
+```jsx
+<div className="rewards-banner bg-gradient-to-r from-amber-400 to-orange-500 rounded-xl p-6 text-center mb-8 shadow-lg">
+  <h2 className="text-2xl font-bold text-black mb-2">🎉 LAUNCH CELEBRATION 🎉</h2>
+  <p className="text-xl font-bold text-black mb-1">
+    Book Event Tickets → Earn $20 Hotel Credit
+  </p>
+  <p className="text-sm text-black opacity-90 mb-2">
+    Limited Time: Launch Special Through June 2026
+  </p>
+  <p className="text-sm text-black opacity-80">
+    Plus earn points on every booking: Hotels 2pts/$1 • Flights 1pt/$1 • Packages 3pts/$1
+  </p>
+</div>
+```
+
+3. UPDATE USER INFO MODAL
+
+When user clicks "Get Tickets", the modal should show:
+```jsx
+<div className="modal-header">
+  <h2>🎉 Unlock Your $20 Hotel Credit!</h2>
+  <p>Book tickets and get $20 off your next hotel stay</p>
+  <p className="text-sm opacity-75">Launch special - ends June 2026</p>
+</div>
+```
+
+4. UPDATE REWARDS PAGE/DASHBOARD
+
+Explain the program:
+```jsx
+<div className="campaign-info">
+  <h3>Current Campaign</h3>
+  <div className="launch-badge">
+    🎉 LAUNCH SPECIAL
+  </div>
+  <p className="text-lg font-bold">$20 Hotel Credit per Event Ticket</p>
+  <p className="text-sm">Valid through June 30, 2026</p>
+  <p className="text-xs text-gray-600 mt-2">
+    After June 2026: $10 credit (evergreen program)
+  </p>
+</div>
+```
+
+5. SEARCH AND UPDATE ALL INSTANCES
+
+Search the codebase for:
+- "$10" → Check if it should be "$20"
+- "2025-04-01" → Replace with "2026-06-30"
+- "April 2025" → Replace with "June 2026"
+- Any hardcoded credit amounts in promotional text
+
+6. ADD VISUAL INDICATORS
+
+Make the launch special stand out:
+- Use gold/orange gradient backgrounds
+- Add 🎉 emoji to launch messaging
+- Make "$20" bold and prominent
+- Show "Limited Time" to create urgency
+- Consider adding a countdown: "255 days left!"
+
+LOCATIONS TO UPDATE:
+✓ Homepage rewards banner
+✓ Events page promotional section
+✓ User info modal (before Ticketmaster redirect)
+✓ Rewards/Account dashboard
+✓ Any FAQ or help text about the program
+✓ Footer promotional text (if any)
+
+EXPECTED RESULT:
+All mentions of the credit amount should show "$20" with messaging like:
+- "Launch Special: $20 Hotel Credit"
+- "Limited Time Through June 2026"
+- Evergreen messaging should be hidden until July 2026
+
+PRIORITY: CRITICAL
+The backend is already configured for $20 credits. The frontend MUST match to avoid customer confusion!
+
+START IMPLEMENTATION NOW.

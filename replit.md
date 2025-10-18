@@ -48,10 +48,18 @@ Preferred communication style: Simple, everyday language.
 - **Checkout Flow**: Single-step checkout with guest information collection
 - **Security**: Stripe-hosted payment elements for PCI compliance
 
-### External Service Integrations
+#### Event Escapes Rewards Program
+- **Launch Campaign**: $20 hotel credit per event ticket purchase (active until June 30, 2026)
+- **Evergreen Program**: $10 hotel credit per event ticket (begins July 1, 2026)
+- **Points System**: Hotels 2pts/$1, Flights 1pt/$1, Packages 3pts/$1
+- **Redemption**: 100 points = $1, hotel bookings only, 500 point minimum
+- **Tier System**: Member (1x), Preferred (1.2x), Elite (1.5x) multipliers based on annual spend
+- **Affiliate Integration**: Ticketmaster affiliate tracking with automatic credit awarding via webhooks
+
+## External Service Integrations
 - **Flight Booking**: Duffel API integration through Supabase Edge Functions for flight search and booking
 - **Hotel Search**: Supabase Edge Functions for hotel availability and booking
-- **Event Tickets**: Prepared API integration stubs for Ticketmaster and Eventbrite
+- **Event Tickets**: Ticketmaster API with affiliate tracking (ID: 6581273), webhook-based reward processing
 - **Maps and Location**: Geographic coordinate storage for venues and distance calculations
 - **Email**: Prepared for confirmation and booking management emails
 

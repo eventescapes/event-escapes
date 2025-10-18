@@ -598,7 +598,7 @@ export default function Events() {
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12">
         {/* Rewards Banner */}
         {(() => {
-          const isLaunchPeriod = new Date() < new Date('2025-12-31');
+          const isLaunchPeriod = new Date() < new Date('2026-06-30');
           
           if (isLaunchPeriod) {
             return (
@@ -606,13 +606,14 @@ export default function Events() {
                 className="rounded-xl p-6 text-center mb-8 shadow-lg"
                 style={{ 
                   background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-                  color: '#1f2937'
+                  color: '#000000'
                 }}
                 data-testid="banner-launch-celebration"
               >
                 <h2 className="text-3xl font-bold mb-2">🎉 LAUNCH CELEBRATION 🎉</h2>
-                <p className="text-xl mb-1">Book Event Tickets → Earn $20 Hotel Credit</p>
-                <p className="text-base opacity-90">Limited Time Offer + Earn Points on Every Booking</p>
+                <p className="text-xl font-bold mb-1">Book Event Tickets → Earn $20 Hotel Credit</p>
+                <p className="text-sm opacity-90 mb-2">Limited Time: Launch Special Through June 2026</p>
+                <p className="text-sm opacity-80">Plus earn points on every booking: Hotels 2pts/$1 • Flights 1pt/$1 • Packages 3pts/$1</p>
               </div>
             );
           } else {
