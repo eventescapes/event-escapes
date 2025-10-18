@@ -1,0 +1,135 @@
+URGENT FIX: Events page needs to display REAL events from database in Netflix-style horizontal scrollers
+
+CURRENT PROBLEM: Page shows "No major events found" but we have 94 real events in the database
+
+FIX REQUIRED:
+
+1. FETCH REAL EVENTS FROM SUPABASE:
+   - Query the ticketmaster_events table using existing Supabase connection
+   - Use the search-ticketmaster-events edge function
+   - Fetch separately for each country:
+     * GET /functions/v1/search-ticketmaster-events?country=US&page_size=20&is_major_event=true
+     * GET /functions/v1/search-ticketmaster-events?country=GB&page_size=20&is_major_event=true
+     * GET /functions/v1/search-ticketmaster-events?country=CA&page_size=20&is_major_event=true
+     * GET /functions/v1/search-ticketmaster-events?country=AU&page_size=20&is_major_event=true
+   - Display ACTUAL events, not empty states
+
+2. NETFLIX-STYLE HORIZONTAL SCROLLING:
+   Each region section should have:
+   - Horizontal scrolling carousel
+   - Show 4-5 event cards at once (desktop)
+   - Left/Right arrow buttons
+   - Smooth scroll animation
+   - Cards showing: event image, name, date, venue, price
+
+3. EVENT CARD DESIGN:
+   Small cards in horizontal scroll:
+   - 300px x 400px
+   - Event image from images field (parse JSON)
+   - Segment badge (Music/Sports)
+   - Event name (2 lines)
+   - Date with 📅
+   - Venue city with 📍
+   - Price range with 💰
+   - Hover: scale up slightly
+
+4. CLICK INTERACTION - NETFLIX STYLE MODAL:
+   When user clicks an event card:
+   
+   Open a large modal/overlay (Netflix style) showing:
+   
+   MODAL HEADER:
+   - Large event image (hero banner)
+   - Event name (large, bold)
+   - Segment badge (Music/Sports)
+   - Date and venue details
+   
+   MODAL BODY:
+   - Event description/info
+   - Venue details with map preview
+   - Price range
+   - Event start date/time
+   - Filter reason (why it's a major event)
+   - Any additional details from please_note field
+   
+   MODAL ACTIONS (2 prominent buttons):
+   
+   Button 1: "📦 Book Complete Travel Package" (Primary - Purple gradient)
+   - Navigate to: /packages/build?event={event.id}&venue_lat={venue_latitude}&venue_lng={venue_longitude}&venue_name={venue_name}
+   - This is your main revenue source
+   
+   Button 2: "🎫 Get Tickets on Ticketmaster" (Secondary - outlined style)
+   - Opens: event.url in NEW TAB
+   - This earns you affiliate commission/points
+   - Use: window.open(event.url, '_blank', 'noopener,noreferrer')
+   
+   Button 3: "✕ Close" (small, top right corner)
+
+5. MODAL DESIGN (Netflix-inspired):
+   - Dark overlay background (rgba(0,0,0,0.8))
+   - Large centered modal (max-width: 900px)
+   - Smooth fade-in animation
+   - Click outside or ESC key to close
+   - Responsive: full screen on mobile
+   - Scrollable content if too long
+   - Professional, modern design
+
+6. IMAGE HANDLING:
+   - Parse images field (it's JSON string)
+   - Use highest resolution image available
+   - Show in both card and modal
+   - Fallback to placeholder if no image
+
+7. DATA TO DISPLAY IN MODAL:
+   From ticketmaster_events table:
+   - name (event name)
+   - images (event photos)
+   - event_start_date (formatted nicely)
+   - venue_name, venue_city, venue_country_code
+   - venue_address (if available)
+   - price_min, price_max, currency
+   - segment, genre, sub_genre
+   - info (event description)
+   - please_note (important notes)
+   - url (Ticketmaster booking link)
+   - venue_latitude, venue_longitude (for package builder)
+
+8. HORIZONTAL SCROLL BEHAVIOR:
+   - Smooth scrolling
+   - Show 4-5 cards on desktop
+   - Show 2-3 cards on tablet  
+   - Show 1-2 cards on mobile
+   - Arrow buttons to navigate
+   - Drag to scroll support
+   - Snap to card boundaries
+
+9. LOADING STATES:
+   - Show skeleton loaders while fetching
+   - "Loading events from Ticketmaster..." text
+   - Smooth fade-in when data loads
+
+10. ERROR HANDLING:
+    - If API fails: show error message with retry button
+    - If no events in region: show "No events yet" (but this shouldn't happen, we have 94 events)
+    - Log errors to console for debugging
+
+11. POINTS/COMMISSION TRACKING (for future):
+    - Track when user clicks "Get Tickets" button
+    - Could add analytics event: trackEvent('ticketmaster_click', { event_id: event.id })
+    - This is where you earn affiliate commission
+
+12. RESPONSIVE DESIGN:
+    - Desktop: Large modal, horizontal scrolls
+    - Mobile: Full-screen modal, vertical scrolls
+    - Touch-friendly interactions
+    - Proper spacing and padding
+
+CRITICAL:
+- DO NOT use mock data
+- FETCH from actual ticketmaster_events table
+- Display all 94 real events we synced
+- Use proper Supabase queries
+- Show actual Ticketmaster URLs
+- DO NOT modify flight/hotel search functionality
+
+Build this NOW with Netflix-style horizontal scrollers showing real events, and Netflix-style modal on click with ticket purchase + package booking options.
