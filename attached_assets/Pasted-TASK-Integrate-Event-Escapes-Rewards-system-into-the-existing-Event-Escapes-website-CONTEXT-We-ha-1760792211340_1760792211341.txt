@@ -1,0 +1,353 @@
+TASK: Integrate Event Escapes Rewards system into the existing Event Escapes website
+
+CONTEXT:
+We have a fully functional loyalty rewards system:
+- Launch campaign: $20 hotel credit for ticket purchases (until April 1, 2025)
+- Evergreen: $10 hotel credit for ticket purchases (after launch)
+- Earning rates: Hotels 2pts/$1, Flights 1pt/$1, Packages 3pts/$1
+- Redemption: Hotels ONLY, 100 points = $1
+- Database: Supabase with tables customer_rewards, points_transactions, affiliate_clicks
+- Webhook: Fully functional at /functions/v1/webhook-ticketmaster-purchase
+- Email: Automated via Resend
+
+REQUIRED IMPLEMENTATIONS:
+
+═══════════════════════════════════════════════════════════
+1. USER INFO MODAL (Before Ticketmaster Redirect)
+═══════════════════════════════════════════════════════════
+
+When user clicks "Get Tickets" button on any event:
+
+STEP 1: Show modal asking for:
+- Name (required)
+- Email (required)
+- Checkbox: "I agree to earn rewards" (required)
+
+STEP 2: On submit:
+a) Generate unique click_id: `${eventId}_${email}_${timestamp}`
+b) Save to Supabase affiliate_clicks table:
+   - click_id
+   - event_id: event.id
+   - event_name: event.name
+   - event_date: event.dates?.start?.dateTime
+   - event_venue: event._embedded?.venues?.[0]?.name
+   - user_email: email.toLowerCase().trim()
+   - user_name: name
+   - affiliate_id: '6581273'
+   - ticketmaster_url: cleanAffiliateUrl
+   - clicked_at: new Date().toISOString()
+
+c) Initialize customer rewards if new:
+   await supabase
+     .from('customer_rewards')
+     .upsert({
+       user_email: email.toLowerCase().trim(),
+       user_name: name,
+       points_balance: 0,
+       campaign_type: 'launch' // or 'evergreen' based on date
+     }, { 
+       onConflict: 'user_email',
+       ignoreDuplicates: true 
+     });
+
+d) Build CLEAN Ticketmaster affiliate URL:
+   - Remove ALL existing query parameters from event.url
+   - Add ONLY: ?afflky=6581273
+   - Example: https://www.ticketmaster.com/event/123456?afflky=6581273
+
+e) Open in new tab: window.open(affiliateUrl, '_blank')
+
+f) Show success toast: "Opening Ticketmaster... You'll earn rewards when you complete your purchase!"
+
+IMPORTANT: The affiliate URL must be SIMPLE - only ?afflky=6581273
+Do NOT add: irgwc, clickid, camefrom, or any other tracking parameters
+We track everything in OUR database via click_id
+
+MODAL UI:
+- Title: "🎉 Unlock Rewards!"
+- Subtitle: "Earn $20 hotel credit with your ticket purchase!"
+- Show launch celebration banner if before April 1, 2025
+- Clean, modern design matching existing Event Escapes branding
+- Purple gradient accent (#667eea to #764ba2)
+
+═══════════════════════════════════════════════════════════
+2. REWARDS BANNER ON HOMEPAGE
+═══════════════════════════════════════════════════════════
+
+Add prominent banner at top of events page:
+
+DESIGN:
+<div style="background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); padding: 20px; text-align: center; border-radius: 12px; margin-bottom: 30px;">
+  <h2>🎉 LAUNCH CELEBRATION 🎉</h2>
+  <p style="font-size: 18px; margin: 10px 0;">Book Event Tickets → Earn $20 Hotel Credit</p>
+  <p style="font-size: 14px; opacity: 0.9;">Limited Time Offer + Earn Points on Every Booking</p>
+</div>
+
+Show this banner if current date < April 1, 2025
+After April 1, show evergreen version with "$10 Hotel Credit"
+
+═══════════════════════════════════════════════════════════
+3. POINTS DISPLAY IN USER ACCOUNT
+═══════════════════════════════════════════════════════════
+
+If user is logged in (has email in session/auth):
+
+Fetch and display user's rewards:
+```javascript
+const { data: rewards } = await supabase
+  .from('customer_rewards')
+  .select('*')
+  .eq('user_email', userEmail)
+  .single();
+
+if (rewards) {
+  const balance = rewards.points_balance;
+  const value = (balance / 100).toFixed(2);
+  const tier = rewards.tier;
+  
+  // Display in header/account area
+}
+```
+
+DISPLAY FORMAT:
+┌─────────────────────────────────────┐
+│ 💎 YOUR REWARDS                     │
+│                                     │
+│ 1,250 points                        │
+│ = $12.50 value                      │
+│                                     │
+│ 🥈 Member Status                    │
+│                                     │
+│ [View Details →]                    │
+└─────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════
+4. POINTS REDEMPTION ON HOTEL CHECKOUT
+═══════════════════════════════════════════════════════════
+
+On hotel booking checkout page:
+
+IF user has points balance > 500:
+
+Show redemption widget:
+┌─────────────────────────────────────┐
+│ 💎 Redeem Your Points               │
+│                                     │
+│ Available: 1,500 points ($15)       │
+│                                     │
+│ Use: [____] points                  │
+│ Max: 1,500 points                   │
+│                                     │
+│ Discount: -$15.00                   │
+│                                     │
+│ [Apply Points]                      │
+└─────────────────────────────────────┘
+
+On apply:
+1. Validate: points <= balance
+2. Calculate discount: points / 100
+3. Apply to booking total
+4. On successful booking, call:
+   await supabase.rpc('redeem_points_hotels_only', {
+     p_user_email: userEmail,
+     p_points: pointsToRedeem,
+     p_booking_type: 'hotel',
+     p_booking_reference: bookingId,
+     p_description: `Redeemed on hotel booking #${bookingId}`
+   });
+
+IF user tries to redeem on FLIGHTS:
+Show message: "⚠️ Points can only be redeemed on hotel bookings"
+
+═══════════════════════════════════════════════════════════
+5. POINTS EARNING ON BOOKINGS
+═══════════════════════════════════════════════════════════
+
+After ANY successful booking (hotel/flight/package):
+
+Award points:
+```javascript
+async function awardBookingPoints(userEmail, bookingType, amount, bookingRef) {
+  // Get user's tier multiplier
+  const { data: rewards } = await supabase
+    .from('customer_rewards')
+    .select('tier_multiplier')
+    .eq('user_email', userEmail)
+    .single();
+  
+  const multiplier = rewards?.tier_multiplier || 1.0;
+  
+  // Calculate points based on type
+  const rates = {
+    hotel: 2,
+    flight: 1,
+    package: 3
+  };
+  
+  const baseRate = rates[bookingType] || 1;
+  const points = Math.floor(amount * baseRate * multiplier);
+  
+  // Award points
+  await supabase.rpc('award_points', {
+    p_user_email: userEmail,
+    p_points: points,
+    p_source_type: bookingType,
+    p_booking_amount: amount,
+    p_description: `${bookingType} booking`,
+    p_source_reference: bookingRef,
+    p_booking_type: bookingType
+  });
+  
+  // Update spend for tier calculation
+  const { data: current } = await supabase
+    .from('customer_rewards')
+    .select('annual_spend, lifetime_spend')
+    .eq('user_email', userEmail)
+    .single();
+  
+  await supabase
+    .from('customer_rewards')
+    .update({
+      annual_spend: (current?.annual_spend || 0) + amount,
+      lifetime_spend: (current?.lifetime_spend || 0) + amount
+    })
+    .eq('user_email', userEmail);
+  
+  await supabase.rpc('update_tier_status', { p_user_email: userEmail });
+  
+  // Show success message
+  alert(`🎉 You earned ${points} points! ($${(points/100).toFixed(2)} value)`);
+}
+```
+
+Call this function after:
+- Hotel booking confirmation
+- Flight booking confirmation
+- Package booking confirmation
+
+═══════════════════════════════════════════════════════════
+6. REWARDS PAGE / DASHBOARD
+═══════════════════════════════════════════════════════════
+
+Create /rewards or /account/rewards page showing:
+
+SECTION 1: Points Balance
+- Current balance (large, prominent)
+- Value in dollars
+- Tier badge (Member/Preferred/Elite)
+- Progress to next tier (if applicable)
+
+SECTION 2: Recent Activity
+Fetch from points_transactions:
+```javascript
+const { data: transactions } = await supabase
+  .from('points_transactions')
+  .select('*')
+  .eq('user_email', userEmail)
+  .order('created_at', { ascending: false })
+  .limit(10);
+```
+
+Display as:
+Date | Description | Points | Balance
+----------------------------------------
+Oct 18 | Hotel booking | +1,000 | 2,500
+Oct 15 | Event ticket | +1,250 | 1,500
+Oct 12 | Flight booking | +300 | 250
+
+SECTION 3: How to Earn
+- Hotels: 2 pts/$1 (with your tier multiplier)
+- Flights: 1 pt/$1
+- Packages: 3 pts/$1
+- Event Tickets: $10-20 credit
+
+SECTION 4: How to Redeem
+- Hotels only
+- 100 points = $1
+- Minimum 500 points ($5)
+
+═══════════════════════════════════════════════════════════
+7. SUPABASE CLIENT SETUP
+═══════════════════════════════════════════════════════════
+
+Ensure Supabase is properly configured:
+```javascript
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+export default supabase;
+```
+
+Environment variables needed:
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+═══════════════════════════════════════════════════════════
+8. VISUAL DESIGN REQUIREMENTS
+═══════════════════════════════════════════════════════════
+
+COLORS:
+- Primary gradient: #667eea to #764ba2 (purple)
+- Success: #10b981 (green)
+- Launch banner: #fbbf24 to #f59e0b (gold)
+- Background: #f9fafb
+- Text: #333
+
+BADGES:
+- 🥈 Member (gray)
+- 🥇 Preferred (gold)
+- 💎 Elite (purple)
+
+ANIMATIONS:
+- Smooth transitions on point balance updates
+- Confetti or celebration animation when earning points
+- Pulse effect on rewards banner
+
+═══════════════════════════════════════════════════════════
+TESTING CHECKLIST
+═══════════════════════════════════════════════════════════
+
+□ User info modal appears when clicking "Get Tickets"
+□ Click tracking saves to affiliate_clicks table
+□ Ticketmaster redirect uses clean ?afflky=6581273 URL
+□ No security blocks on Ticketmaster
+□ Points balance displays correctly
+□ Hotel redemption works
+□ Flight redemption is blocked with proper message
+□ Points awarded after hotel booking
+□ Points awarded after flight booking
+□ Points awarded after package booking
+□ Email notifications received
+□ Rewards dashboard shows all data
+□ Tier upgrades work correctly
+□ Launch banner shows before April 1, 2025
+□ Evergreen banner shows after April 1, 2025
+
+═══════════════════════════════════════════════════════════
+IMPLEMENTATION NOTES
+═══════════════════════════════════════════════════════════
+
+1. Use existing Event Escapes component structure
+2. Match existing design system and branding
+3. Ensure mobile responsiveness
+4. Add loading states for all async operations
+5. Handle errors gracefully with user-friendly messages
+6. Use React hooks for state management
+7. Implement proper TypeScript types if using TS
+8. Add analytics tracking for rewards interactions
+
+═══════════════════════════════════════════════════════════
+
+IMPORTANT REMINDERS:
+- Ticketmaster affiliate URL must be SIMPLE: only ?afflky=6581273
+- Track everything in OUR database (affiliate_clicks table)
+- Points can ONLY be redeemed on hotels
+- Launch credit is $20 until April 1, 2025, then $10
+- Always use lowercase trimmed emails for consistency
+- Generate unique click_id for every Ticketmaster redirect
+
+START IMPLEMENTATION NOW.

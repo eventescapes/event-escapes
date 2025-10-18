@@ -6,6 +6,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Search, ChevronLeft, ChevronRight, ExternalLink, Package, X, MapPin, Calendar, DollarSign, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { UserInfoModal } from '@/components/UserInfoModal';
 
 interface TicketmasterEvent {
   id: string;
@@ -121,6 +122,8 @@ function EventCard({ event, onClick }: EventCardProps) {
 }
 
 function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClose: () => void }) {
+  const [showUserInfoModal, setShowUserInfoModal] = useState(false);
+  
   const getEventImage = () => {
     try {
       if (!event.images) return 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=1200&auto=format&fit=crop';
@@ -157,30 +160,7 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
   };
 
   const handleTicketPurchase = () => {
-    if (event.url) {
-      // Build proper Ticketmaster affiliate URL to prevent security blocking
-      const affiliateId = '6581273'; // Ticketmaster affiliate ID
-      const clickId = `${event.id}_${Date.now()}`; // Unique click tracking
-      
-      console.log('🎫 Opening Ticketmaster with affiliate tracking:', { affiliateId, clickId });
-      
-      // Remove existing utm_medium and irgwc params that trigger security blocks
-      let cleanUrl = event.url.split('?')[0]; // Get base URL
-      const urlParams = new URLSearchParams(event.url.split('?')[1] || '');
-      
-      // Remove problematic params
-      urlParams.delete('utm_medium');
-      urlParams.delete('irgwc');
-      
-      // Add proper affiliate tracking
-      urlParams.set('afflky', affiliateId);
-      urlParams.set('clickid', clickId);
-      
-      const affiliateUrl = `${cleanUrl}?${urlParams.toString()}`;
-      console.log('✅ Affiliate URL:', affiliateUrl);
-      
-      window.open(affiliateUrl, '_blank', 'noopener,noreferrer');
-    }
+    setShowUserInfoModal(true);
   };
 
   const dateTime = formatDateTime(event.event_start_date);
@@ -341,6 +321,13 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
           </div>
         </ScrollArea>
       </DialogContent>
+      {showUserInfoModal && (
+        <UserInfoModal
+          open={showUserInfoModal}
+          onClose={() => setShowUserInfoModal(false)}
+          event={event}
+        />
+      )}
     </Dialog>
   );
 }
@@ -609,6 +596,43 @@ export default function Events() {
 
       {/* Events Content */}
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12">
+        {/* Rewards Banner */}
+        {(() => {
+          const isLaunchPeriod = new Date() < new Date('2025-04-01');
+          
+          if (isLaunchPeriod) {
+            return (
+              <div 
+                className="rounded-xl p-6 text-center mb-8 shadow-lg"
+                style={{ 
+                  background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                  color: '#1f2937'
+                }}
+                data-testid="banner-launch-celebration"
+              >
+                <h2 className="text-3xl font-bold mb-2">🎉 LAUNCH CELEBRATION 🎉</h2>
+                <p className="text-xl mb-1">Book Event Tickets → Earn $20 Hotel Credit</p>
+                <p className="text-base opacity-90">Limited Time Offer + Earn Points on Every Booking</p>
+              </div>
+            );
+          } else {
+            return (
+              <div 
+                className="rounded-xl p-6 text-center mb-8 shadow-lg"
+                style={{ 
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white'
+                }}
+                data-testid="banner-evergreen-rewards"
+              >
+                <h2 className="text-2xl font-bold mb-2">💎 Event Escapes Rewards</h2>
+                <p className="text-lg mb-1">Book Event Tickets → Earn $10 Hotel Credit</p>
+                <p className="text-sm opacity-90">Plus earn points on every booking: Hotels 2pts/$1 • Flights 1pt/$1 • Packages 3pts/$1</p>
+              </div>
+            );
+          }
+        })()}
+        
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 mb-8" data-testid="error-message">
             <p className="text-red-800 dark:text-red-200">
