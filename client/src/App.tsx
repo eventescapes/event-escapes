@@ -15,6 +15,7 @@ import CartPage from "@/pages/cart";
 import Checkout from "@/pages/checkout";
 import FindBooking from "@/pages/find-booking";
 import EventTickets from "@/pages/event-tickets";
+import Events from "@/pages/events";
 import { PassengerDetailsPage } from "@/pages/PassengerDetailsPage";
 import { ConfirmationPage } from "@/pages/ConfirmationPage";
 import { BookingSuccessPage } from "@/pages/BookingSuccessPage";
@@ -38,6 +39,7 @@ function Router() {
           <Route path="/booking-success" component={BookingSuccessPage} />
           <Route path="/find-booking" component={FindBooking} />
           <Route path="/event-tickets" component={EventTickets} />
+          <Route path="/events" component={Events} />
           <Route component={NotFound} />
         </Switch>
       </main>

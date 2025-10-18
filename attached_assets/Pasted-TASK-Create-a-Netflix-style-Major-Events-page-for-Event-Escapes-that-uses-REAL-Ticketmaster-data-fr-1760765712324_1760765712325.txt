@@ -1,0 +1,172 @@
+TASK: Create a Netflix-style Major Events page for Event Escapes that uses REAL Ticketmaster data from Supabase
+
+⚠️ CRITICAL RULES:
+1. NO MOCK DATA - Use only real events from the ticketmaster_events table in Supabase
+2. DO NOT modify existing flight search functions or code
+3. DO NOT touch hotel search functionality
+4. DO NOT modify any existing pages (home, flights, hotels, bookings, etc.)
+5. ONLY create NEW /events page and update navigation tab name
+6. DO NOT change existing API integrations (Duffel, RateHawk, etc.)
+7. Keep all existing functionality intact
+
+WHAT TO CREATE:
+- NEW page: /events
+- UPDATE: Rename "Event Tickets" → "Events" in navigation (name only, not functionality)
+
+1. UPDATE NAVIGATION:
+   - Rename "Event Tickets" tab to just "Events" in the top navigation
+   - Make it link to /events page
+   - DO NOT modify any other navigation items or functionality
+
+2. CREATE NEW PAGE: /events (do not modify existing pages)
+
+3. DATA SOURCE - REAL TICKETMASTER EVENTS ONLY:
+   - Fetch from Supabase table: ticketmaster_events
+   - Use existing Supabase edge function: search-ticketmaster-events
+   - Make 4 API calls to get real events (one per country):
+     * country=US, page_size=20, sort_by=event_start_date, is_major_event=true
+     * country=GB, page_size=20, sort_by=event_start_date, is_major_event=true
+     * country=CA, page_size=20, sort_by=event_start_date, is_major_event=true
+     * country=AU, page_size=20, sort_by=event_start_date, is_major_event=true
+   - Only show future events (event_start_date >= today)
+   - DO NOT use any mock/dummy/placeholder data
+   - Display actual event names, dates, venues from Ticketmaster API sync
+
+4. PAGE LAYOUT - NETFLIX STYLE:
+   
+   HERO SECTION:
+   - Large hero banner: "Discover Major Events Worldwide"
+   - Subtitle: "Curated packages for F1 races, music festivals, and championship games"
+   - Purple gradient background (#667eea to #764ba2)
+   - Search bar with 3 inputs:
+     * Location/Venue search
+     * Date picker
+     * Event type dropdown (All Events, Music, Sports)
+     * "Discover Events" button (gradient)
+
+   EVENTS BY REGION - HORIZONTAL SCROLLERS (Netflix style):
+   Create 4 sections with horizontal scrolling carousels showing REAL events:
+   - 🇺🇸 United States Events (real US events from database)
+   - 🇬🇧 United Kingdom Events (real UK events from database)
+   - 🇨🇦 Canada Events (real Canada events from database)
+   - 🇦🇺 Australia Events (real Australia events from database)
+
+5. EVENT CARD DESIGN (showing real Ticketmaster data):
+   - 300px wide cards
+   - Event image from images field (parse JSON, use highest resolution)
+   - Segment badge overlay top-right showing actual segment (Music/Sports)
+   - Event name - USE ACTUAL name from database (bold, 2 lines max)
+   - Date: format actual event_start_date with 📅 icon
+   - Location: actual venue_city with 📍 icon
+   - Venue: actual venue_name with 🏟️ icon
+   - Price range: actual price_min - price_max with currency and 💰 icon
+   - Hover effect: scale up 1.05x, show shadow
+
+6. TICKET BOOKING FLOW - CRITICAL:
+   When user clicks on an event card:
+   
+   PRIMARY ACTION - Show modal/overlay with 2 options:
+   
+   Option 1: "📦 Book Complete Package" (Your primary revenue)
+   - Button style: Purple gradient, prominent
+   - Action: Navigate to /packages/build?event={event.id}&venue_lat={venue_latitude}&venue_lng={venue_longitude}
+   - This is where you sell flights + hotels + experiences
+   
+   Option 2: "🎫 Buy Tickets Only on Ticketmaster" (Affiliate revenue)
+   - Button style: Secondary style, less prominent
+   - Action: Open event.url in NEW TAB (external link to Ticketmaster)
+   - This is the Ticketmaster affiliate link from the url field in database
+   - Use target="_blank" rel="noopener noreferrer"
+   
+   Alternative simpler flow:
+   - Primary click on card → Go to package page
+   - "Buy Tickets" button on card → Open Ticketmaster url in new tab
+
+7. HORIZONTAL SCROLL IMPLEMENTATION:
+   - Smooth horizontal scrolling with real event cards
+   - Show 4-5 cards at once on desktop
+   - Show 2-3 cards on tablet
+   - Show 1-2 cards on mobile
+   - Left/Right arrow buttons to scroll
+   - Snap to card boundaries
+   - Hide scrollbar (overflow-x: auto with hidden scrollbar)
+   - Allow mouse drag to scroll
+
+8. RESPONSIVE DESIGN:
+   - Desktop (>1200px): 4-5 cards visible
+   - Tablet (768-1200px): 2-3 cards visible
+   - Mobile (<768px): 1-2 cards visible, stack sections vertically
+   - Hero search becomes vertical on mobile
+
+9. LOADING STATES:
+   - Show skeleton loaders while fetching REAL events
+   - Smooth fade-in animation when real data loads
+   - Loading text: "Loading events from Ticketmaster..."
+
+10. EMPTY STATES:
+    - If a region has no events: show "No major events found in this region yet"
+    - If API call fails: show "Unable to load events. Please try again."
+    - Never show mock data as fallback
+
+11. STYLING:
+    - Modern, clean design inspired by Netflix
+    - Dark/light compatible
+    - Purple gradient accents (#667eea to #764ba2) for hero and buttons
+    - Smooth animations (300ms transitions)
+    - Card hover: transform scale(1.05), shadow increase
+    - Professional spacing and typography
+    - Show actual event images from Ticketmaster
+
+12. DATABASE STRUCTURE (already exists with REAL data):
+    Table: ticketmaster_events
+    Fields to use:
+    - id: event ID
+    - name: actual event name from Ticketmaster
+    - event_start_date: actual event date
+    - venue_name: actual venue name
+    - venue_city: actual city
+    - venue_country_code: US/GB/CA/AU
+    - venue_latitude: for hotel proximity search
+    - venue_longitude: for hotel proximity search
+    - price_min, price_max, currency: actual ticket prices
+    - segment: Music or Sports
+    - images: JSON array/string of event images from Ticketmaster
+    - url: TICKETMASTER BOOKING URL - use this for ticket purchases
+    - is_major_event: filter by true only
+    - filter_reason: why it was marked as major
+
+13. USER JOURNEY:
+    Step 1: User sees real event on Events page
+    Step 2: User clicks event card
+    Step 3: Modal shows:
+       - "📦 Book Package" → /packages/build (your main revenue)
+       - "🎫 Buy Tickets" → Opens Ticketmaster url in new tab (affiliate)
+    Step 4a: If package → User books flights + hotels + tickets through you
+    Step 4b: If tickets only → User goes to Ticketmaster to buy tickets
+
+14. IMPORTANT - NO MOCK DATA:
+    - Fetch ALL events from existing ticketmaster_events table
+    - Use actual event images from images field
+    - Display actual event names, not placeholders
+    - Show actual prices from price_min/price_max
+    - Use actual Ticketmaster booking URLs from url field
+    - If no events exist, show empty state, don't create fake data
+
+15. WHAT NOT TO TOUCH:
+    ❌ DO NOT modify flight search page or functions
+    ❌ DO NOT modify hotel search page or functions
+    ❌ DO NOT change Duffel API integration
+    ❌ DO NOT change RateHawk/hotel API integrations
+    ❌ DO NOT modify booking flow pages
+    ❌ DO NOT change homepage (we'll update later)
+    ❌ DO NOT modify AI Trip Planner
+    ❌ DO NOT touch any existing API routes or functions
+    ❌ DO NOT modify database schema or migrations
+    ❌ DO NOT change authentication or user management
+
+    ✅ ONLY create new /events page
+    ✅ ONLY rename navigation tab from "Event Tickets" to "Events"
+    ✅ ONLY add new components for events display
+    ✅ ONLY use existing Supabase connection (already configured)
+
+Build ONLY the new Events page using real Ticketmaster data. Do not modify any existing functionality.

@@ -52,15 +52,15 @@ export default function Navbar() {
             </Link>
             <div className="w-px h-6 bg-border"></div>
             <Link 
-              href="/event-tickets" 
+              href="/events" 
               className={`font-accent font-medium text-lg tracking-wide transition-all duration-300 hover:text-accent ${
-                isActiveRoute('/event-tickets') 
+                isActiveRoute('/events') 
                   ? 'text-accent border-b-2 border-accent pb-1' 
                   : 'text-secondary hover:scale-105'
               }`}
-              data-testid="link-event-tickets"
+              data-testid="link-events"
             >
-              Event Tickets
+              Events
             </Link>
           </div>
 
