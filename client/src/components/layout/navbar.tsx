@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Brain, User, ShoppingCart } from "lucide-react";
 import { useBooking } from "@/contexts/BookingContext";
+import { RewardsWidget } from "@/components/RewardsWidget";
 
 export default function Navbar() {
   const [location] = useLocation();
@@ -91,6 +92,9 @@ export default function Navbar() {
                 )}
               </Button>
             </Link>
+            
+            <div className="w-px h-6 bg-border"></div>
+            <RewardsWidget />
             
             <div className="w-px h-6 bg-border"></div>
             <Button 
