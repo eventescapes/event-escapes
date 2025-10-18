@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Search, Calendar, ChevronLeft, ChevronRight, ExternalLink, Package } from 'lucide-react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Search, ChevronLeft, ChevronRight, ExternalLink, Package, X, MapPin, Calendar, DollarSign, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface TicketmasterEvent {
   id: string;
@@ -13,15 +14,21 @@ interface TicketmasterEvent {
   venue_name: string;
   venue_city: string;
   venue_country_code: string;
+  venue_address?: string;
   venue_latitude: number;
   venue_longitude: number;
-  price_min: number;
-  price_max: number;
-  currency: string;
+  price_min?: number;
+  price_max?: number;
+  currency?: string;
   segment: string;
-  images: string;
+  genre?: string;
+  sub_genre?: string;
+  info?: string;
+  please_note?: string;
+  images?: string;
   url: string;
   is_major_event: boolean;
+  filter_reason?: string;
 }
 
 interface EventCardProps {
@@ -57,14 +64,14 @@ function EventCard({ event, onClick }: EventCardProps) {
 
   const formatPrice = () => {
     if (event.price_min && event.price_max) {
-      return `${event.currency} ${event.price_min} - ${event.price_max}`;
+      return `${event.currency || 'USD'} ${event.price_min} - ${event.price_max}`;
     }
     return 'Check Ticketmaster';
   };
 
   return (
     <div 
-      className="min-w-[300px] flex-shrink-0 cursor-pointer group"
+      className="min-w-[300px] flex-shrink-0 cursor-pointer group snap-start"
       onClick={onClick}
       data-testid={`event-card-${event.id}`}
     >
@@ -113,6 +120,210 @@ function EventCard({ event, onClick }: EventCardProps) {
   );
 }
 
+function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClose: () => void }) {
+  const getEventImage = () => {
+    try {
+      if (!event.images) return 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=1200&auto=format&fit=crop';
+      
+      const images = typeof event.images === 'string' ? JSON.parse(event.images) : event.images;
+      if (Array.isArray(images) && images.length > 0) {
+        const highResImage = images.find((img: any) => img.width > 1000) || images[0];
+        return highResImage.url || highResImage;
+      }
+      return 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=1200&auto=format&fit=crop';
+    } catch {
+      return 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=1200&auto=format&fit=crop';
+    }
+  };
+
+  const formatDateTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return {
+      date: date.toLocaleDateString('en-US', { 
+        weekday: 'long',
+        month: 'long', 
+        day: 'numeric', 
+        year: 'numeric'
+      }),
+      time: date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    };
+  };
+
+  const handlePackageBooking = () => {
+    window.location.href = `/packages/build?event=${event.id}&venue_lat=${event.venue_latitude}&venue_lng=${event.venue_longitude}&venue_name=${encodeURIComponent(event.venue_name)}`;
+  };
+
+  const handleTicketPurchase = () => {
+    if (event.url) {
+      window.open(event.url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const dateTime = formatDateTime(event.event_start_date);
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black text-white border-none" data-testid="event-modal">
+        <button 
+          onClick={onClose}
+          className="absolute top-4 right-4 z-50 bg-black/50 hover:bg-black/70 rounded-full p-2 transition-colors"
+          data-testid="button-close-modal"
+        >
+          <X className="h-6 w-6" />
+        </button>
+
+        <ScrollArea className="h-[90vh]">
+          {/* Hero Banner */}
+          <div className="relative h-[400px] w-full">
+            <img 
+              src={getEventImage()} 
+              alt={event.name}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-8">
+              <div className="flex items-center gap-3 mb-4">
+                <span className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                  event.segment === 'Music' 
+                    ? 'bg-purple-500' 
+                    : 'bg-blue-500'
+                }`}>
+                  {event.segment}
+                </span>
+                {event.genre && (
+                  <span className="px-4 py-2 rounded-full text-sm bg-white/20">
+                    {event.genre}
+                  </span>
+                )}
+              </div>
+              <h1 className="text-4xl font-bold mb-2">{event.name}</h1>
+              <div className="flex items-center gap-6 text-white/80">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  <span>{dateTime.date}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  <span>{event.venue_city}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-8 bg-gradient-to-b from-black to-slate-900">
+            {/* Action Buttons */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+              <Button
+                onClick={handlePackageBooking}
+                className="h-16 text-lg bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                data-testid="button-book-package-modal"
+              >
+                <Package className="mr-3 h-6 w-6" />
+                <div className="text-left">
+                  <div className="font-bold">Book Complete Package</div>
+                  <div className="text-xs text-white/80">Flights + Hotels + Tickets</div>
+                </div>
+              </Button>
+
+              <Button
+                onClick={handleTicketPurchase}
+                variant="outline"
+                className="h-16 text-lg border-white/30 hover:bg-white/10"
+                data-testid="button-buy-tickets-modal"
+              >
+                <ExternalLink className="mr-3 h-6 w-6" />
+                <div className="text-left">
+                  <div className="font-bold">Get Tickets on Ticketmaster</div>
+                  <div className="text-xs text-white/60">Official tickets</div>
+                </div>
+              </Button>
+            </div>
+
+            {/* Event Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <div>
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Event Details
+                </h3>
+                <div className="space-y-3 text-white/80">
+                  <div>
+                    <div className="text-sm text-white/60">Date & Time</div>
+                    <div className="font-semibold">{dateTime.date} at {dateTime.time}</div>
+                  </div>
+                  {event.price_min && event.price_max && (
+                    <div>
+                      <div className="text-sm text-white/60">Price Range</div>
+                      <div className="font-semibold flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" />
+                        {event.currency || 'USD'} {event.price_min} - {event.price_max}
+                      </div>
+                    </div>
+                  )}
+                  {event.filter_reason && (
+                    <div>
+                      <div className="text-sm text-white/60">Why This Event</div>
+                      <div className="font-semibold">{event.filter_reason}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Venue Information
+                </h3>
+                <div className="space-y-3 text-white/80">
+                  <div>
+                    <div className="text-sm text-white/60">Venue</div>
+                    <div className="font-semibold">{event.venue_name}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-white/60">Location</div>
+                    <div className="font-semibold">
+                      {event.venue_city}, {event.venue_country_code}
+                    </div>
+                  </div>
+                  {event.venue_address && (
+                    <div>
+                      <div className="text-sm text-white/60">Address</div>
+                      <div className="font-semibold">{event.venue_address}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Description */}
+            {event.info && (
+              <div className="mb-6">
+                <h3 className="text-xl font-bold mb-3 flex items-center gap-2">
+                  <Info className="h-5 w-5" />
+                  About This Event
+                </h3>
+                <p className="text-white/80 leading-relaxed">{event.info}</p>
+              </div>
+            )}
+
+            {/* Important Notes */}
+            {event.please_note && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                <h3 className="text-yellow-500 font-bold mb-2">⚠️ Important Information</h3>
+                <p className="text-white/80">{event.please_note}</p>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function HorizontalScroller({ title, events, icon }: { title: string; events: TicketmasterEvent[]; icon: string }) {
   const [selectedEvent, setSelectedEvent] = useState<TicketmasterEvent | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -124,18 +335,6 @@ function HorizontalScroller({ title, events, icon }: { title: string; events: Ti
         left: direction === 'left' ? -scrollAmount : scrollAmount,
         behavior: 'smooth'
       });
-    }
-  };
-
-  const handlePackageBooking = () => {
-    if (selectedEvent) {
-      window.location.href = `/packages/build?event=${selectedEvent.id}&venue_lat=${selectedEvent.venue_latitude}&venue_lng=${selectedEvent.venue_longitude}`;
-    }
-  };
-
-  const handleTicketPurchase = () => {
-    if (selectedEvent && selectedEvent.url) {
-      window.open(selectedEvent.url, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -197,47 +396,9 @@ function HorizontalScroller({ title, events, icon }: { title: string; events: Ti
         </div>
       </div>
 
-      <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
-        <DialogContent className="sm:max-w-[500px]" data-testid="booking-modal">
-          <DialogHeader>
-            <DialogTitle>{selectedEvent?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Choose how you'd like to experience this event:
-            </p>
-            
-            <Button
-              onClick={handlePackageBooking}
-              className="w-full h-auto flex flex-col items-start p-6 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
-              data-testid="button-book-package"
-            >
-              <div className="flex items-center gap-3 mb-2">
-                <Package className="h-6 w-6" />
-                <span className="text-lg font-bold">Book Complete Package</span>
-              </div>
-              <span className="text-sm text-white/90 text-left">
-                Flights + Hotels + Tickets - Everything you need for an amazing experience
-              </span>
-            </Button>
-
-            <Button
-              onClick={handleTicketPurchase}
-              variant="outline"
-              className="w-full h-auto flex flex-col items-start p-6"
-              data-testid="button-buy-tickets"
-            >
-              <div className="flex items-center gap-3 mb-2">
-                <ExternalLink className="h-6 w-6" />
-                <span className="text-lg font-bold">Buy Tickets Only on Ticketmaster</span>
-              </div>
-              <span className="text-sm text-slate-600 dark:text-slate-400 text-left">
-                Purchase tickets directly from Ticketmaster
-              </span>
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {selectedEvent && (
+        <NetflixStyleModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+      )}
     </>
   );
 }
@@ -270,37 +431,23 @@ export default function Events() {
   }, []);
 
   const fetchEvents = async () => {
+    console.log('🎫 Fetching Ticketmaster events...');
     setLoading(true);
     setError(null);
 
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      setError('Supabase configuration missing');
-      setLoading(false);
-      return;
-    }
-
     try {
-      const today = new Date().toISOString().split('T')[0];
-      
       const fetchCountry = async (country: string) => {
-        const url = `${supabaseUrl}/functions/v1/search-ticketmaster-events?country=${country}&page_size=20&sort_by=event_start_date&is_major_event=true&min_date=${today}`;
+        console.log(`🔍 Fetching ${country} events...`);
+        const response = await fetch(`/api/ticketmaster-events?country=${country}&isMajorEvent=true&limit=20`);
         
-        const response = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${supabaseKey}`,
-            'apikey': supabaseKey,
-          }
-        });
-
         if (!response.ok) {
+          console.error(`❌ Failed to fetch ${country} events:`, response.status);
           throw new Error(`Failed to fetch ${country} events`);
         }
 
         const data = await response.json();
-        return data.events || [];
+        console.log(`✅ ${country} events:`, data.length);
+        return data;
       };
 
       const [us, gb, ca, au] = await Promise.all([
@@ -314,8 +461,16 @@ export default function Events() {
       setGbEvents(gb);
       setCaEvents(ca);
       setAuEvents(au);
+      
+      console.log('📊 Total events loaded:', {
+        US: us.length,
+        GB: gb.length,
+        CA: ca.length,
+        AU: au.length,
+        total: us.length + gb.length + ca.length + au.length
+      });
     } catch (err: any) {
-      console.error('Error fetching events:', err);
+      console.error('❌ Error fetching events:', err);
       setError(err.message || 'Failed to load events');
     } finally {
       setLoading(false);
@@ -343,20 +498,20 @@ export default function Events() {
               <div className="md:col-span-1">
                 <Input
                   placeholder="Location or Venue"
-                  className="h-12"
+                  className="h-12 text-slate-900"
                   data-testid="input-location"
                 />
               </div>
               <div>
                 <Input
                   type="date"
-                  className="h-12"
+                  className="h-12 text-slate-900"
                   data-testid="input-date"
                 />
               </div>
               <div>
                 <Select>
-                  <SelectTrigger className="h-12" data-testid="select-event-type">
+                  <SelectTrigger className="h-12 text-slate-900" data-testid="select-event-type">
                     <SelectValue placeholder="Event Type" />
                   </SelectTrigger>
                   <SelectContent>
