@@ -66,15 +66,6 @@ export const savedItems = pgTable("saved_items", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const cartSessions = pgTable("cart_sessions", {
-  sessionId: text("session_id").primaryKey(),
-  duffelOfferId: text("duffel_offer_id"),
-  offerJson: jsonb("offer_json").notNull(),
-  currency: text("currency"),
-  expiresAt: timestamp("expires_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -102,10 +93,6 @@ export const insertSavedItemSchema = createInsertSchema(savedItems).omit({
   createdAt: true,
 });
 
-export const insertCartSessionSchema = createInsertSchema(cartSessions).omit({
-  createdAt: true,
-});
-
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -121,6 +108,3 @@ export type InsertBookingItem = z.infer<typeof insertBookingItemSchema>;
 
 export type SavedItem = typeof savedItems.$inferSelect;
 export type InsertSavedItem = z.infer<typeof insertSavedItemSchema>;
-
-export type CartSession = typeof cartSessions.$inferSelect;
-export type InsertCartSession = z.infer<typeof insertCartSessionSchema>;
