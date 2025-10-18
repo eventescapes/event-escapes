@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, AlertCircle, CheckCircle, Plane, Loader2 } from 'lucide-react';
+import { ItineraryBar } from '@/components/ItineraryBar';
+import { Countdown } from '@/components/Countdown';
+import { apiRequest } from '@/lib/queryClient';
 
 interface PassengerForm {
   title: string;
@@ -27,9 +30,32 @@ export function PassengerDetailsPage() {
   const [showLoyaltySection, setShowLoyaltySection] = useState<boolean[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  
+  // Cart session support
+  const [cartSessionOffer, setCartSessionOffer] = useState<any>(null);
+  const [cartSessionExpiry, setCartSessionExpiry] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('🎫 === PASSENGER DETAILS PAGE LOADED ===');
+    
+    // Load from cart session if sid param is present
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('sid');
+    
+    if (sessionId) {
+      apiRequest(`/api/cart/${sessionId}`)
+        .then((data: any) => {
+          console.log('📦 Loaded offer from cart session:', data.cart);
+          if (data.cart) {
+            setCartSessionOffer(data.cart.offerJson);
+            setCartSessionExpiry(data.cart.expiresAt);
+          }
+        })
+        .catch((error) => {
+          console.error('❌ Failed to load cart session:', error);
+        });
+    }
+    
     const item = sessionStorage.getItem('checkout_item');
     
     if (!item) {
