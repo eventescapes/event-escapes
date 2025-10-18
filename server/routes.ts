@@ -392,6 +392,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cart Session API (for flight offer persistence)
+  app.post("/api/cart/select", async (req, res) => {
+    try {
+      const { session_id, offer } = req.body || {};
+      if (!session_id || !offer?.id) {
+        return res.status(400).json({ error: 'session_id and offer.id required' });
+      }
+
+      const expires_at = new Date(Date.now() + 25 * 60 * 1000);
+      await storage.upsertCartSession({
+        sessionId: session_id,
+        duffelOfferId: offer.id,
+        offerJson: offer,
+        currency: offer.total_currency ?? 'AUD',
+        expiresAt: expires_at,
+      });
+
+      return res.json({ ok: true, session_id, expires_at: expires_at.toISOString() });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/cart/:sid", async (req, res) => {
+    try {
+      const cart = await storage.getCartSession(req.params.sid);
+      if (!cart) {
+        return res.status(404).json({ error: 'Cart session not found' });
+      }
+      return res.json({ cart });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.put("/api/cart/:sid/expire", async (req, res) => {
+    try {
+      const { minutes = 25 } = req.body || {};
+      const expires_at = new Date(Date.now() + minutes * 60 * 1000);
+      await storage.updateCartSessionExpiry(req.params.sid, expires_at);
+      return res.json({ ok: true, expires_at: expires_at.toISOString() });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/cart/:sid", async (req, res) => {
+    try {
+      await storage.deleteCartSession(req.params.sid);
+      return res.json({ ok: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
