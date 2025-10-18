@@ -1,0 +1,154 @@
+PROJECT CONTEXT (EventEscapes – Flights UI)
+We already have Duffel API working end-to-end (search → select → checkout via Stripe → Duffel order). The problem is UI: selected offer context isn’t shown across pages (shows “N/A”), return search shows too few options, and cards lack details.
+
+GOAL
+
+Persist and display the full Duffel offer (outbound + inbound) across Review → Ancillaries → Checkout → Confirmation.
+
+Upgrade search result cards to show rich info (airline, times, duration, stops, flight numbers, baggage, refundability).
+
+Implement pagination for return results per Duffel’s after cursor.
+
+Add an offer expiry countdown on Review/Ancillaries.
+(Stripe BNPL/crypto will be done later—don’t touch payments now.)
+
+STACK ASSUMPTIONS
+
+Next.js + TypeScript + Tailwind.
+
+Supabase client already configured.
+
+Duffel SDK/fetch layer already returns offer objects.
+
+Routing uses query params (e.g., sid session id).
+
+TASKS
+
+A) Create lightweight cart session to persist selected offer
+
+Create Supabase table cart_sessions if not present:
+
+session_id text PK, duffel_offer_id text, offer_json jsonb, currency text, expires_at timestamptz, created_at timestamptz default now().
+
+Utility getOrCreateSessionId() (cookie/localStorage).
+
+When user clicks Select on a search card:
+
+upsert into cart_sessions with { session_id, duffel_offer_id: offer.id, offer_json: full offer object, currency: offer.total_currency, expires_at: now()+25m }.
+
+Redirect to /review?sid=<session_id>.
+
+B) Build shared UI components
+
+components/ItineraryBar.tsx
+
+Props: offer (Duffel offer JSON).
+
+Render: airline name/logo, cabin/fare brand, HH:mm ORG → HH:mm DST, total duration, stops, “+1 day” marker, baggage summary, price (currency/amount).
+
+components/FlightCard.tsx
+
+Props: offer, onSelect.
+
+Condensed summary row + expandable “Details” with segment list (flight numbers, terminals, operating carrier, aircraft).
+
+components/SegmentList.tsx
+
+List each segment with 10:05 SYD T3 → 16:40 HND T1, QF81, operating carrier (if different), aircraft, duration, layover chip between segments.
+
+components/Countdown.tsx
+
+Props: expiresAt ISO. Live mm:ss; emits onExpire to disable CTA and show “Re-price” button.
+
+C) Hydrate pages from Supabase
+
+Review page (/review): read sid, fetch offer_json from cart_sessions, render <ItineraryBar offer={offer}/> + full <SegmentList> + price breakdown; show <Countdown expiresAt={expires_at}/>; “Continue” → /ancillaries?sid=....
+
+Ancillaries page (/ancillaries): same header; keep seat/baggage upsells disabled for now; do NOT show “N/A”.
+
+Checkout page (/checkout): show the same <ItineraryBar> above the Pay section (no payment changes yet).
+
+Confirmation page (/confirmation): show booking reference (PNR) + the same itinerary summary and segments.
+
+D) Improve search results (return itineraries)
+
+In the Duffel search call, set limit = 50. If response contains after cursor, implement a “Load more” button that fetches the next page and appends results.
+
+Add client-side sort toggles: Cheapest | Fastest | Fewest stops.
+
+Render each result with <FlightCard>. For returns, show both slices in the summary (outbound line, inbound line).
+
+E) Formatting helpers
+
+Utilities in utils/formatters.ts:
+
+fmtTime(iso), fmtIsoDuration("PT14H35M") → "14h 35m", totalJourneyDuration(segments), stopsLabel(n).
+
+Show “+1 day” when arrival date > departure date.
+
+Data mapping (Duffel):
+
+Airline: offer.owner.name, owner.iata_code
+
+Segments: offer.slices[].segments[]
+
+Flight no: ${segment.marketing_carrier.iata_code}${segment.marketing_carrier_flight_number}
+
+Operating: segment.operating_carrier?.name
+
+Airports/terminals: segment.origin/destination
+
+Cabin: segment.cabin
+
+Fare brand: offer.conditions?.fare_brand_name
+
+Baggage: offer.included_checked_bags?.quantity (or available baggage fields by SDK version)
+
+Price: offer.total_currency, offer.total_amount
+
+F) Design polish
+
+Tailwind: rounded-2xl cards, soft shadows, 16px+ taps, mobile-first.
+
+Skeleton loaders on page hydrate; never show placeholders like “N/A”.
+
+ACCEPTANCE CRITERIA
+
+Selecting any offer writes a cart_sessions row and navigates to Review with sid.
+
+Review, Ancillaries, Checkout, Confirmation all display identical itinerary context (no “N/A”).
+
+Search page shows rich cards with times, airports, terminals, duration, stops, flight numbers, baggage, refundability chip.
+
+Return searches support “Load more” via Duffel after and display many options.
+
+A visible countdown on Review/Ancillaries disables “Continue” at expiry.
+
+All components responsive and accessible (keyboard focus, aria labels on expand/collapse).
+
+OUT OF SCOPE (for this task)
+
+No changes to Stripe/BNPL or crypto in this PR.
+
+No ancillaries purchase flow—only the header/context.
+
+FILES TO CREATE/EDIT
+
+lib/supabaseCart.ts (getOrCreateSessionId, upsert/fetch by sid)
+
+components/ItineraryBar.tsx
+
+components/FlightCard.tsx
+
+components/SegmentList.tsx
+
+components/Countdown.tsx
+
+utils/formatters.ts
+
+Update pages: pages/search.tsx, pages/review.tsx, pages/ancillaries.tsx, pages/checkout.tsx, pages/confirmation.tsx
+
+DELIVERABLE
+A PR that implements all UI pieces above, passes acceptance criteria, and includes a short README snippet explaining how to test:
+
+Run a search (one-way and return), select an offer, verify Review/Ancillaries/Checkout/Confirmation display complete itinerary info, and that return results can “Load more”.
