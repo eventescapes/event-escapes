@@ -363,6 +363,7 @@ const FlightResults = () => {
   };
 
   // Process offers for display - properly separate outbound and return slices with airport validation
+  // For return trips, filter return flights to only show compatible options with selected outbound
   const processOffersForDisplay = (offers: EdgeFunctionOffer[]) => {
     const sliceGroups: { [sliceIndex: number]: any[] } = {};
     
@@ -378,10 +379,24 @@ const FlightResults = () => {
         if (searchParams.tripType === 'return') {
           if (sliceIndex === 0) {
             // Outbound slice: origin should match departure city
+            // Always show all outbound options
             shouldInclude = slice.origin === searchParams.from.toUpperCase();
-          } else {
-            // Return slice: origin should match destination city (return leg)
+          } else if (sliceIndex === 1) {
+            // Return slice: filter based on selected outbound
             shouldInclude = slice.origin === searchParams.to.toUpperCase();
+            
+            // If outbound is selected, only show return flights from offers with matching outbound
+            if (shouldInclude && selectedOffers[0]) {
+              const selectedOutbound = selectedOffers[0];
+              const outboundSlice = offer.slices[0];
+              
+              const outboundMatches = 
+                outboundSlice.origin === selectedOutbound.flight.departureAirport &&
+                outboundSlice.destination === selectedOutbound.flight.arrivalAirport &&
+                outboundSlice.departure_time === selectedOutbound.flight.departure_time;
+              
+              shouldInclude = outboundMatches;
+            }
           }
         } else if (searchParams.tripType === 'one-way') {
           // One-way: should match exact route
@@ -412,6 +427,11 @@ const FlightResults = () => {
         }
       });
     });
+    
+    // Log filtering for debugging
+    if (searchParams.tripType === 'return' && selectedOffers[0]) {
+      console.log(`🔍 Return flights filtered: ${sliceGroups[1]?.length || 0} compatible with selected outbound`);
+    }
     
     return sliceGroups;
   };
@@ -457,9 +477,10 @@ const FlightResults = () => {
 
   // Flight selection handler
   const handleFlightSelect = async (sliceIndex: number, flight: any) => {
-    console.log('✈️ Flight selected:', flight);
+    console.log('✈️ Flight selected:', { sliceIndex, flight });
     
-    const newSelectedOffers = {
+    // Store selection details
+    let newSelectedOffers = {
       ...selectedOffers,
       [sliceIndex]: {
         offerId: flight.offerId,
@@ -470,21 +491,67 @@ const FlightResults = () => {
       }
     };
     
+    // If changing outbound selection on a return trip, clear the return selection
+    if (searchParams.tripType === 'return' && sliceIndex === 0 && selectedOffers[1]) {
+      console.log('🔄 Outbound changed, clearing return selection');
+      newSelectedOffers = {
+        ...newSelectedOffers,
+        1: undefined as any
+      };
+      delete newSelectedOffers[1];
+    }
+    
     setSelectedOffers(newSelectedOffers);
     
-    // Update current selection for Order Summary
-    const fullOffer = offers.find(o => o.id === flight.offerId);
-    if (fullOffer) {
-      console.log('✈️ Setting current selection offer:', fullOffer);
+    // For return trips, find the complete offer that contains both selected slices
+    let completeOffer: EdgeFunctionOffer | undefined;
+    
+    if (searchParams.tripType === 'return' && sliceIndex === 1) {
+      // User just selected return flight - find offer with both slices
+      const outboundSelection = newSelectedOffers[0];
+      const returnSelection = newSelectedOffers[1];
       
-      // Update current selection if it's the first slice
-      if (sliceIndex === 0) {
-        setCurrentSelection({
-          offer: fullOffer,
-          seats: [],
-          baggage: []
+      if (outboundSelection && returnSelection) {
+        // Find an offer that has matching slices
+        completeOffer = offers.find(offer => {
+          if (offer.slices.length < 2) return false;
+          
+          const outboundMatches = 
+            offer.slices[0].origin === outboundSelection.flight.departureAirport &&
+            offer.slices[0].destination === outboundSelection.flight.arrivalAirport &&
+            offer.slices[0].departure_time === outboundSelection.flight.departure_time;
+          
+          const returnMatches =
+            offer.slices[1].origin === returnSelection.flight.departureAirport &&
+            offer.slices[1].destination === returnSelection.flight.arrivalAirport &&
+            offer.slices[1].departure_time === returnSelection.flight.departure_time;
+          
+          return outboundMatches && returnMatches;
         });
+        
+        if (!completeOffer) {
+          console.error('❌ CRITICAL: No complete offer found for selected slices');
+          console.error('❌ This should never happen due to filtering, but indicates a bug');
+          console.error('❌ Outbound:', outboundSelection);
+          console.error('❌ Return:', returnSelection);
+          alert('Unable to find a valid combined offer for your selected flights. Please try different flights or search again.');
+          return;
+        }
       }
+    } else {
+      // One-way or first slice of return - use the offer directly
+      completeOffer = offers.find(o => o.id === flight.offerId);
+    }
+    
+    if (completeOffer) {
+      console.log('✈️ Complete offer found:', completeOffer.id);
+      
+      // Update current selection
+      setCurrentSelection({
+        offer: completeOffer,
+        seats: [],
+        baggage: []
+      });
       
       // Check if this completes all required selections
       const requiredSlices = searchParams.tripType === 'one-way' ? 1 :
@@ -502,11 +569,16 @@ const FlightResults = () => {
       // Navigate to ancillary choice when all required flights are selected
       if (allSelected) {
         console.log('🛒 All flights selected, navigating to ancillary choice...');
+        console.log('🛒 Using complete offer:', completeOffer.id, {
+          total_amount: completeOffer.total_amount,
+          total_currency: completeOffer.total_currency,
+          slices: completeOffer.slices.length
+        });
         
         // Add passengers to offer if not present
         const offerWithPassengers = {
-          ...fullOffer,
-          passengers: fullOffer.passengers || Array.from(
+          ...completeOffer,
+          passengers: completeOffer.passengers || Array.from(
             { length: searchParams.passengers },
             (_, i) => ({ id: `passenger_${i + 1}`, type: 'adult' })
           )

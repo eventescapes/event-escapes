@@ -59,9 +59,21 @@ export function ItineraryBar({ offer, className = '' }: ItineraryBarProps) {
 
           const isNextDay = plusOneDayFlag(firstSegment.departing_at, lastSegment.arriving_at);
           const stops = slice.segments.length - 1;
+          
+          // Determine slice label
+          const sliceLabel = offer.slices.length > 1 
+            ? (index === 0 ? 'Outbound' : 'Return')
+            : 'Flight';
 
           return (
-            <div key={index} className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg">
+            <div key={index} className="space-y-2">
+              {/* Slice Label */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-700">{sliceLabel}</span>
+                <div className="flex-1 h-px bg-slate-200" />
+              </div>
+              
+              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg">
               <div className="flex-1">
                 <div className="flex items-center justify-between">
                   {/* Departure */}
@@ -109,6 +121,7 @@ export function ItineraryBar({ offer, className = '' }: ItineraryBarProps) {
                   </div>
                 </div>
               </div>
+            </div>
             </div>
           );
         })}
