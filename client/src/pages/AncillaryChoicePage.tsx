@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Plane, Luggage, ArrowRight, Loader2 } from "lucide-react";
 import { SeatSelectionModal } from "@/components/SeatSelectionModal";
 import { BaggageSelectionModal } from "@/components/ui/BaggageSelectionModal";
+import { ItineraryBar } from "@/components/ItineraryBar";
+import { Countdown } from "@/components/Countdown";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function AncillaryChoicePage() {
   const [, params] = useRoute("/ancillaries/:offerId");
@@ -12,6 +15,11 @@ export default function AncillaryChoicePage() {
   const offerId = params?.offerId || "";
   const { items, setServicesForOffer } = useCart();
   const cartItem = useMemo(() => items.find(i => i.offerId === offerId), [items, offerId]);
+  
+  // Cart session support
+  const [cartSessionOffer, setCartSessionOffer] = useState<any>(null);
+  const [cartSessionExpiry, setCartSessionExpiry] = useState<string | null>(null);
+  const [loadingCartSession, setLoadingCartSession] = useState(false);
 
   const [wantSeats, setWantSeats] = useState(false);
   const [wantBags, setWantBags] = useState(false);
@@ -21,6 +29,30 @@ export default function AncillaryChoicePage() {
   const [selectedBaggage, setSelectedBaggage] = useState<any[]>([]);
   const [passengers, setPassengers] = useState<any[]>([]);
   const [loadingPassengers, setLoadingPassengers] = useState(true);
+
+  // Load from cart session if sid param is present
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('sid');
+    
+    if (sessionId) {
+      setLoadingCartSession(true);
+      apiRequest(`/api/cart/${sessionId}`)
+        .then((data: any) => {
+          console.log('📦 Loaded offer from cart session:', data.cart);
+          if (data.cart) {
+            setCartSessionOffer(data.cart.offerJson);
+            setCartSessionExpiry(data.cart.expiresAt);
+          }
+        })
+        .catch((error) => {
+          console.error('❌ Failed to load cart session:', error);
+        })
+        .finally(() => {
+          setLoadingCartSession(false);
+        });
+    }
+  }, []);
 
   // Fetch real passenger IDs from Duffel via get-offer-lite
   useEffect(() => {
@@ -64,17 +96,20 @@ export default function AncillaryChoicePage() {
     fetchPassengerIds();
   }, [offerId, cartItem]);
 
-  if (!cartItem) {
+  // Use cart session offer if available, otherwise fall back to cartItem
+  const displayOffer = cartSessionOffer || cartItem?.offer;
+
+  if (!cartItem && !cartSessionOffer) {
     navigate("/flights");
     return null;
   }
 
-  if (loadingPassengers) {
+  if (loadingPassengers || loadingCartSession) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-12 w-12 text-blue-400 animate-spin mx-auto mb-4" />
-          <p className="text-blue-200">Loading passenger information...</p>
+          <p className="text-blue-200">Loading flight information...</p>
         </div>
       </div>
     );
@@ -134,27 +169,49 @@ export default function AncillaryChoicePage() {
     console.log('💺🎒 Formatted services for checkout:', services);
     setServicesForOffer(offerId, services);
     
+    // Use cart session offer if available
+    const offerToSave = displayOffer || cartItem.offer;
+    
     // Save to sessionStorage for checkout
     const checkoutData = {
-      offer: cartItem.offer,
+      offer: offerToSave,
       selectedSeats,
       selectedBaggage,
       services, // Include formatted services
       passengers, // Include real passenger IDs
     };
     sessionStorage.setItem('checkout_item', JSON.stringify(checkoutData));
-    navigate("/passenger-details");
+    
+    // Pass session ID if available
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('sid');
+    if (sessionId) {
+      navigate(`/passenger-details?sid=${sessionId}`);
+    } else {
+      navigate("/passenger-details");
+    }
   };
 
   const handleSkip = () => {
+    // Use cart session offer if available
+    const offerToSave = displayOffer || cartItem.offer;
+    
     // Skip directly to passenger details
     const checkoutData = {
-      offer: cartItem.offer,
+      offer: offerToSave,
       selectedSeats: [],
       selectedBaggage: [],
     };
     sessionStorage.setItem('checkout_item', JSON.stringify(checkoutData));
-    navigate("/passenger-details");
+    
+    // Pass session ID if available
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('sid');
+    if (sessionId) {
+      navigate(`/passenger-details?sid=${sessionId}`);
+    } else {
+      navigate("/passenger-details");
+    }
   };
 
   return (
@@ -170,30 +227,46 @@ export default function AncillaryChoicePage() {
           </p>
         </div>
 
+        {/* Countdown Timer (if from cart session) */}
+        {cartSessionExpiry && (
+          <div className="mb-6">
+            <Countdown expiresAt={cartSessionExpiry} />
+          </div>
+        )}
+
+        {/* Itinerary Bar (if offer is available) */}
+        {displayOffer && (
+          <div className="mb-6">
+            <ItineraryBar offer={displayOffer} />
+          </div>
+        )}
+
         {/* Flight Summary */}
         <div className="bg-white/10 backdrop-blur-lg rounded-xl border border-white/20 p-6 mb-8">
           <div className="flex items-center gap-3 mb-4">
             <Plane className="h-6 w-6 text-blue-300" />
             <h2 className="text-xl font-semibold text-white">Your Flight</h2>
           </div>
-          <div className="space-y-2 text-blue-100">
-            <div className="flex justify-between">
-              <span className="opacity-80">Route:</span>
-              <span className="font-medium">
-                {cartItem.offer.slices?.[0]?.origin?.iata_code || 'N/A'} → {cartItem.offer.slices?.[0]?.destination?.iata_code || 'N/A'}
-              </span>
+          {displayOffer && (
+            <div className="space-y-2 text-blue-100">
+              <div className="flex justify-between">
+                <span className="opacity-80">Route:</span>
+                <span className="font-medium">
+                  {displayOffer.slices?.[0]?.origin?.iata_code || 'N/A'} → {displayOffer.slices?.[0]?.destination?.iata_code || 'N/A'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="opacity-80">Price:</span>
+                <span className="font-medium">
+                  {displayOffer.total_currency?.toUpperCase()} ${parseFloat(displayOffer.total_amount || '0').toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="opacity-80">Passengers:</span>
+                <span className="font-medium">{passengers.length}</span>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="opacity-80">Price:</span>
-              <span className="font-medium">
-                {cartItem.offer.total_currency?.toUpperCase()} ${parseFloat(cartItem.offer.total_amount || '0').toFixed(2)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="opacity-80">Passengers:</span>
-              <span className="font-medium">{passengers.length}</span>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Choice Cards */}

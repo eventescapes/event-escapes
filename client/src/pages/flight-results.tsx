@@ -10,6 +10,9 @@ import { SeatSelectionModal } from '@/components/SeatSelectionModal';
 import { BaggageSelectionModal } from '@/components/ui/BaggageSelectionModal';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Plane, Clock, MapPin } from 'lucide-react';
+import { FlightCard } from '@/components/FlightCard';
+import { getOrCreateSessionId } from '@/lib/session';
+import { apiRequest } from '@/lib/queryClient';
 
 // Backend response types matching Edge Function format
 interface EdgeFunctionOffer {
@@ -430,8 +433,30 @@ const FlightResults = () => {
     }
   };
 
+  // Save offer to cart session
+  const saveOfferToCartSession = async (offer: EdgeFunctionOffer) => {
+    try {
+      const sessionId = getOrCreateSessionId();
+      console.log('💾 Saving offer to cart session:', sessionId);
+      
+      await apiRequest('/api/cart/select', {
+        method: 'POST',
+        body: JSON.stringify({
+          session_id: sessionId,
+          offer: offer
+        })
+      });
+      
+      console.log('✅ Offer saved to cart session');
+      return sessionId;
+    } catch (error) {
+      console.error('❌ Failed to save offer to cart session:', error);
+      return null;
+    }
+  };
+
   // Flight selection handler
-  const handleFlightSelect = (sliceIndex: number, flight: any) => {
+  const handleFlightSelect = async (sliceIndex: number, flight: any) => {
     console.log('✈️ Flight selected:', flight);
     
     const newSelectedOffers = {
@@ -487,8 +512,18 @@ const FlightResults = () => {
           )
         };
         
+        // Save to cart session
+        const sessionId = await saveOfferToCartSession(offerWithPassengers);
+        
+        // Legacy cart store (keep for compatibility)
         addOffer(offerWithPassengers, searchParams);
-        navigate(`/ancillaries/${offerWithPassengers.id}`);
+        
+        // Navigate with session ID if available
+        if (sessionId) {
+          navigate(`/ancillaries/${offerWithPassengers.id}?sid=${sessionId}`);
+        } else {
+          navigate(`/ancillaries/${offerWithPassengers.id}`);
+        }
       }
     }
   };
