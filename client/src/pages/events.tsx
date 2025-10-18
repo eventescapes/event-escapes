@@ -598,7 +598,7 @@ export default function Events() {
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12">
         {/* Rewards Banner */}
         {(() => {
-          const isLaunchPeriod = new Date() < new Date('2025-04-01');
+          const isLaunchPeriod = new Date() < new Date('2025-12-31');
           
           if (isLaunchPeriod) {
             return (
