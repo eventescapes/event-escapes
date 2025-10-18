@@ -20,16 +20,17 @@ interface EdgeFunctionSearchRequest {
   };
   cabinClass?: 'economy' | 'premium_economy' | 'business' | 'first';
   maxConnections?: 0 | 1 | 2;
+  after?: string; // Pagination cursor
 }
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    console.log('[flights-search] CORS preflight request')
+    console.log('✈️ [flights-search] CORS preflight request')
     return new Response('ok', { headers: corsHeaders })
   }
 
-  console.log(`[flights-search] ${req.method} request from origin: ${req.headers.get('origin')}`)
+  console.log(`✈️ [flights-search] ${req.method} request from origin: ${req.headers.get('origin')}`)
 
   try {
     if (req.method !== 'POST') {
@@ -42,10 +43,10 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.text()
-    console.log(`[flights-search] Payload size: ${body.length} bytes`)
+    console.log(`📦 [flights-search] Payload size: ${body.length} bytes`)
     
     const requestData: EdgeFunctionSearchRequest = JSON.parse(body)
-    console.log('[flights-search] Request data:', JSON.stringify(requestData, null, 2))
+    console.log('🔍 [flights-search] Request data:', JSON.stringify(requestData, null, 2))
 
     // Build passengers array for Duffel
     const passengers: Array<{ type: string }> = []
@@ -63,48 +64,105 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Build Duffel offer request
-    const duffelRequest = {
-      data: {
-        slices: requestData.slices.map(slice => ({
-          origin: slice.origin,
-          destination: slice.destination,
-          departure_date: slice.departureDate,
-        })),
-        passengers,
-        cabin_class: requestData.cabinClass || 'economy',
-        max_connections: requestData.maxConnections ?? 1,
+    // STEP 1: Create offer request (or use existing one if we have an 'after' cursor)
+    let offerRequestId = requestData.after ? null : null; // We'll need to track this differently
+    
+    // For pagination, we need to store the offer_request_id somewhere or pass it
+    // For now, we'll always create a new offer request and fetch the first page
+    // In production, you'd want to cache the offer_request_id
+    
+    if (!requestData.after) {
+      // Build Duffel offer request
+      const duffelRequest = {
+        data: {
+          slices: requestData.slices.map(slice => ({
+            origin: slice.origin,
+            destination: slice.destination,
+            departure_date: slice.departureDate,
+          })),
+          passengers,
+          cabin_class: requestData.cabinClass || 'economy',
+          max_connections: requestData.maxConnections ?? 1,
+        }
+      }
+
+      console.log('🚀 [flights-search] Creating Duffel offer request:', JSON.stringify(duffelRequest, null, 2))
+
+      // STEP 1: Create offer request
+      const createRequestResponse = await fetch('https://api.duffel.com/air/offer_requests', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${DUFFEL_API_KEY}`,
+          'Duffel-Version': 'v2',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(duffelRequest),
+      })
+
+      if (!createRequestResponse.ok) {
+        const errorText = await createRequestResponse.text()
+        console.error('❌ [flights-search] Duffel offer request creation error:', errorText)
+        throw new Error(`Duffel API returned ${createRequestResponse.status}: ${errorText}`)
+      }
+
+      const createRequestData = await createRequestResponse.json()
+      offerRequestId = createRequestData.data.id
+      console.log(`✅ [flights-search] Created offer request: ${offerRequestId}`)
+    }
+
+    // For pagination to work properly, we need to pass the offer_request_id
+    // Since we can't easily do this without state, let's include it in the 'after' parameter
+    // Format: "offer_request_id:cursor" or just the offer_request_id for first page
+    
+    let actualOfferId = offerRequestId;
+    let cursorToken = null;
+    
+    if (requestData.after) {
+      // Parse the combined token
+      const parts = requestData.after.split(':');
+      if (parts.length === 2) {
+        actualOfferId = parts[0];
+        cursorToken = parts[1];
+      } else {
+        actualOfferId = requestData.after;
       }
     }
 
-    console.log('[flights-search] Calling Duffel API with:', JSON.stringify(duffelRequest, null, 2))
+    // STEP 2: Fetch offers from the offer request with pagination
+    const offersUrl = new URL(`https://api.duffel.com/air/offer_requests/${actualOfferId}/offers`);
+    offersUrl.searchParams.set('limit', '50');
+    offersUrl.searchParams.set('sort', 'total_amount'); // Cheapest first
+    if (cursorToken) {
+      offersUrl.searchParams.set('after', cursorToken);
+    }
 
-    // Call Duffel API
-    const duffelResponse = await fetch('https://api.duffel.com/air/offer_requests', {
-      method: 'POST',
+    console.log(`🔎 [flights-search] Fetching offers: ${offersUrl.toString()}`)
+
+    const offersResponse = await fetch(offersUrl.toString(), {
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${DUFFEL_API_KEY}`,
         'Duffel-Version': 'v2',
-        'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      body: JSON.stringify(duffelRequest),
     })
 
-    if (!duffelResponse.ok) {
-      const errorText = await duffelResponse.text()
-      console.error('[flights-search] Duffel API error:', errorText)
-      throw new Error(`Duffel API returned ${duffelResponse.status}: ${errorText}`)
+    if (!offersResponse.ok) {
+      const errorText = await offersResponse.text()
+      console.error('❌ [flights-search] Duffel offers fetch error:', errorText)
+      throw new Error(`Duffel offers API returned ${offersResponse.status}: ${errorText}`)
     }
 
-    const duffelData = await duffelResponse.json()
-    console.log('[flights-search] Duffel response:', {
-      offersCount: duffelData.data?.offers?.length || 0,
-      requestId: duffelData.data?.id
+    const offersData = await offersResponse.json()
+    console.log('📊 [flights-search] Duffel offers response:', {
+      offersCount: offersData.data?.length || 0,
+      hasMore: !!offersData.meta?.after,
+      after: offersData.meta?.after
     })
 
     // Transform Duffel response to our format
-    const offers = (duffelData.data?.offers || []).map((offer: any) => ({
+    const offers = (offersData.data || []).map((offer: any) => ({
       id: offer.id,
       slices: offer.slices.map((slice: any, index: number) => ({
         slice_index: index,
@@ -139,12 +197,20 @@ Deno.serve(async (req) => {
       conditions: offer.conditions,
     }))
 
-    console.log(`[flights-search] ✅ Fetched ${offers.length} offers from Duffel`)
+    console.log(`✅ [flights-search] Fetched ${offers.length} offers from Duffel`)
+
+    // Build the next cursor token
+    let nextAfter = null;
+    if (offersData.meta?.after) {
+      // Combine offer_request_id with cursor for pagination
+      nextAfter = `${actualOfferId}:${offersData.meta.after}`;
+    }
 
     const responseData = {
       success: true,
       trip_type: requestData.tripType,
       offers,
+      after: nextAfter, // Pagination cursor
       total_offers: offers.length,
       search_params: {
         cabin_class: requestData.cabinClass || 'economy',
@@ -162,7 +228,7 @@ Deno.serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('[flights-search] Error:', error)
+    console.error('❌ [flights-search] Error:', error)
     
     return new Response(
       JSON.stringify({ 
