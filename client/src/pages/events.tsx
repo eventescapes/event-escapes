@@ -158,7 +158,28 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
 
   const handleTicketPurchase = () => {
     if (event.url) {
-      window.open(event.url, '_blank', 'noopener,noreferrer');
+      // Build proper Ticketmaster affiliate URL to prevent security blocking
+      const affiliateId = '6581273'; // Ticketmaster affiliate ID
+      const clickId = `${event.id}_${Date.now()}`; // Unique click tracking
+      
+      console.log('🎫 Opening Ticketmaster with affiliate tracking:', { affiliateId, clickId });
+      
+      // Remove existing utm_medium and irgwc params that trigger security blocks
+      let cleanUrl = event.url.split('?')[0]; // Get base URL
+      const urlParams = new URLSearchParams(event.url.split('?')[1] || '');
+      
+      // Remove problematic params
+      urlParams.delete('utm_medium');
+      urlParams.delete('irgwc');
+      
+      // Add proper affiliate tracking
+      urlParams.set('afflky', affiliateId);
+      urlParams.set('clickid', clickId);
+      
+      const affiliateUrl = `${cleanUrl}?${urlParams.toString()}`;
+      console.log('✅ Affiliate URL:', affiliateUrl);
+      
+      window.open(affiliateUrl, '_blank', 'noopener,noreferrer');
     }
   };
 

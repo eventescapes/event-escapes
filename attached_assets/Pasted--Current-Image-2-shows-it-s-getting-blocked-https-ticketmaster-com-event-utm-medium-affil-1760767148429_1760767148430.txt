@@ -1,0 +1,70 @@
+// Current (Image 2 shows it's getting blocked):
+https://ticketmaster.com/event/...?utm_medium=affiliate&irgwc=1&clickid=...
+
+// Should be:
+https://ticketmaster.com/event/...?afflky=AFFLKY_ID&clickid=CLICK_ID
+```
+
+---
+
+## 🎯 **Tell Replit Agent to Fix This:**
+```
+FIX: Update Ticketmaster affiliate link format to prevent "browsing activity paused" error
+
+PROBLEM: When clicking "Check Ticketmaster" button, users get blocked by Ticketmaster security
+
+SOLUTION: Update the event.url to use proper Ticketmaster affiliate tracking format
+
+CODE CHANGES NEEDED:
+
+In the modal where the "Check Ticketmaster" button is:
+
+OLD CODE (probably something like):
+window.open(event.url, '_blank')
+
+NEW CODE:
+// Build proper affiliate URL
+const affiliateId = '6581273'; // Your Ticketmaster affiliate ID
+const clickId = `${event.id}_${Date.now()}`; // Unique click tracking
+
+// Check if event.url already has query params
+const separator = event.url.includes('?') ? '&' : '?';
+
+// Add affiliate tracking
+const affiliateUrl = `${event.url}${separator}afflky=${affiliateId}&clickid=${clickId}`;
+
+// Open in new tab
+window.open(affiliateUrl, '_blank', 'noopener,noreferrer');
+
+ALTERNATIVE (if above doesn't work):
+Use Ticketmaster's Impact affiliate network format:
+const affiliateUrl = `https://www.ticketmaster.com/event/${event.id}?afflky=6581273`;
+
+UPDATE THE BUTTON:
+The "Check Ticketmaster" button should:
+1. Track the click (for your analytics)
+2. Build proper affiliate URL with your affiliate ID
+3. Open in new tab
+4. Include unique click ID for commission tracking
+
+IMPORTANT:
+- Use YOUR affiliate ID: 6581273
+- Generate unique clickid for each click
+- Test that Ticketmaster doesn't block it
+- Make sure to track clicks in your database for commission reporting
+
+Fix this in the events modal component where the Ticketmaster button is defined.
+```
+
+---
+
+## 🔑 **Key Information from Your Screenshots:**
+
+From Image 4 (Affiliate IDs tab):
+- **Provider:** Impact
+- **Country:** United States  
+- **Affiliate Tracking ID:** `6581273`
+
+So your affiliate link should look like:
+```
+https://www.ticketmaster.com/2025-formula-1-msc-cruises-united-austin-texas-10-18-2025/event/3A00628794071A29?afflky=6581273&clickid=uniqueid123
