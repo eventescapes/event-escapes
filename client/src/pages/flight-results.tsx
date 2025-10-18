@@ -84,6 +84,9 @@ const FlightResults = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offers, setOffers] = useState<EdgeFunctionOffer[]>([]);
+  const [paginationCursor, setPaginationCursor] = useState<string | null>(null);
+  const [selectedOutboundKey, setSelectedOutboundKey] = useState<string | null>(null);
+  const [selectedOffer, setSelectedOffer] = useState<EdgeFunctionOffer | null>(null);
   const [selectedOffers, setSelectedOffers] = useState<{
     [sliceIndex: number]: {
       offerId: string;
@@ -183,8 +186,67 @@ const FlightResults = () => {
     }
   };
 
+  // Helper function to generate a stable key for a slice
+  const generateSliceKey = (slice: EdgeFunctionSlice): string => {
+    const firstSeg = slice.segments[0];
+    const lastSeg = slice.segments[slice.segments.length - 1];
+    const flightChain = slice.segments
+      .map(s => `${s.airline_code}${s.flight_number}`)
+      .join('-');
+    
+    return [
+      firstSeg.origin,
+      lastSeg.destination,
+      firstSeg.departing_at,
+      flightChain
+    ].join('|');
+  };
+
+  // Group offers by outbound slice for return trips
+  const groupOffersByOutbound = (offers: EdgeFunctionOffer[]) => {
+    const groups = new Map<string, {
+      sampleSlice: EdgeFunctionSlice;
+      options: Array<{
+        inboundKey: string;
+        inboundSlice: EdgeFunctionSlice;
+        offer: EdgeFunctionOffer;
+      }>;
+    }>();
+
+    for (const offer of offers) {
+      if (offer.slices.length < 2) continue; // Skip non-return offers
+      
+      const outboundSlice = offer.slices[0];
+      const inboundSlice = offer.slices[1];
+      
+      const outboundKey = generateSliceKey(outboundSlice);
+      const inboundKey = generateSliceKey(inboundSlice);
+      
+      if (!groups.has(outboundKey)) {
+        groups.set(outboundKey, {
+          sampleSlice: outboundSlice,
+          options: []
+        });
+      }
+      
+      groups.get(outboundKey)!.options.push({
+        inboundKey,
+        inboundSlice,
+        offer
+      });
+    }
+
+    return Array.from(groups.entries()).map(([key, group]) => ({
+      key,
+      sample: group.sampleSlice,
+      minPrice: Math.min(...group.options.map(o => o.offer.total_amount)),
+      currency: group.options[0]?.offer.total_currency || 'USD',
+      options: group.options
+    }));
+  };
+
   // Main search function - FIXES Status 422 errors with correct format
-  const searchFlights = async (e?: React.MouseEvent) => {
+  const searchFlights = async (e?: React.MouseEvent, loadMore = false) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -232,7 +294,7 @@ const FlightResults = () => {
         }));
       }
 
-      const requestPayload = {
+      const requestPayload: any = {
         tripType: searchParams.tripType,
         slices: slices,
         passengers: {
@@ -242,6 +304,11 @@ const FlightResults = () => {
         },
         cabinClass: searchParams.cabinClass || 'economy'
       };
+
+      // Add pagination cursor if loading more
+      if (loadMore && paginationCursor) {
+        requestPayload.after = paginationCursor;
+      }
 
       console.log('=== REQUEST PAYLOAD ===', JSON.stringify(requestPayload, null, 2));
 
@@ -277,7 +344,7 @@ const FlightResults = () => {
       }
 
       if (data.success && data.offers) {
-        console.log('=== SUCCESS ===', `${data.offers.length} offers received`);
+        console.log('✈️ [flights-search] ===  SUCCESS ===', `${data.offers.length} offers received`);
         
         // FILTER offers to exact airports only - FIX for wrong airport codes
         const filteredOffers = validateAndFilterOffers(
@@ -288,12 +355,25 @@ const FlightResults = () => {
 
         console.log(`✅ Filtered ${data.offers.length} offers to ${filteredOffers.length} exact matches`);
 
-        if (filteredOffers.length === 0) {
+        if (filteredOffers.length === 0 && !loadMore) {
           throw new Error(`No flights found for exact route ${searchParams.from.toUpperCase()}→${searchParams.to.toUpperCase()}. API returned flights from other airports.`);
         }
 
-        // Store FILTERED REAL offers - NO MOCK DATA, EXACT AIRPORTS ONLY
-        setOffers(filteredOffers);
+        // Store FILTERED REAL offers - append if loading more, replace if new search
+        if (loadMore) {
+          setOffers(prev => [...prev, ...filteredOffers]);
+        } else {
+          // Fresh search: reset all selection state
+          setOffers(filteredOffers);
+          setSelectedOutboundKey(null);
+          setSelectedOffer(null);
+          setSelectedOffers({});
+          console.log('🔄 [reset] Cleared selection state for fresh search');
+        }
+
+        // Store pagination cursor for "Load more"
+        setPaginationCursor(data.after || null);
+        console.log('📄 [pagination] Cursor for next page:', data.after || 'none');
       } else {
         throw new Error(data.error || 'No flights found');
       }
@@ -362,49 +442,35 @@ const FlightResults = () => {
     }
   };
 
-  // Process offers for display - properly separate outbound and return slices with airport validation
-  // For return trips, filter return flights to only show compatible options with selected outbound
-  const processOffersForDisplay = (offers: EdgeFunctionOffer[]) => {
-    const sliceGroups: { [sliceIndex: number]: any[] } = {};
-    
-    offers.forEach(offer => {
-      offer.slices.forEach((slice, sliceIndex) => {
-        if (!sliceGroups[sliceIndex]) {
-          sliceGroups[sliceIndex] = [];
-        }
-        
-        // Only include slice if it matches the expected route
-        let shouldInclude = true;
-        
-        if (searchParams.tripType === 'return') {
-          if (sliceIndex === 0) {
-            // Outbound slice: origin should match departure city
-            // Always show all outbound options
-            shouldInclude = slice.origin === searchParams.from.toUpperCase();
-          } else if (sliceIndex === 1) {
-            // Return slice: filter based on selected outbound
-            shouldInclude = slice.origin === searchParams.to.toUpperCase();
-            
-            // If outbound is selected, only show return flights from offers with matching outbound
-            if (shouldInclude && selectedOffers[0]) {
-              const selectedOutbound = selectedOffers[0];
-              const outboundSlice = offer.slices[0];
-              
-              const outboundMatches = 
-                outboundSlice.origin === selectedOutbound.flight.departureAirport &&
-                outboundSlice.destination === selectedOutbound.flight.arrivalAirport &&
-                outboundSlice.departure_time === selectedOutbound.flight.departure_time;
-              
-              shouldInclude = outboundMatches;
-            }
+  // Process offers for display - NEW: Group by outbound/return for return trips
+  const processOffersForDisplay = (offers: EdgeFunctionOffer[]): {
+    isGrouped: boolean;
+    outboundGroups?: Array<any>;
+    selectedOutboundKey?: string | null;
+    sliceGroups?: { [sliceIndex: number]: any[] };
+  } => {
+    if (searchParams.tripType === 'return') {
+      // For return trips, use new grouping logic
+      const grouped = groupOffersByOutbound(offers);
+      
+      console.log(`🔢 [grouping] Created ${grouped.length} outbound groups from ${offers.length} offers`);
+      
+      // Return in a format compatible with current display logic
+      return {
+        isGrouped: true,
+        outboundGroups: grouped,
+        selectedOutboundKey
+      };
+    } else {
+      // For one-way trips, use legacy logic
+      const sliceGroups: { [sliceIndex: number]: any[] } = {};
+      
+      offers.forEach(offer => {
+        offer.slices.forEach((slice, sliceIndex) => {
+          if (!sliceGroups[sliceIndex]) {
+            sliceGroups[sliceIndex] = [];
           }
-        } else if (searchParams.tripType === 'one-way') {
-          // One-way: should match exact route
-          shouldInclude = slice.origin === searchParams.from.toUpperCase() && 
-                         slice.destination === searchParams.to.toUpperCase();
-        }
-        
-        if (shouldInclude) {
+          
           const displayFlight = {
             id: `${offer.id}-slice-${sliceIndex}`,
             offerId: offer.id,
@@ -418,22 +484,18 @@ const FlightResults = () => {
             arrivalAirport: slice.destination,
             duration: slice.duration,
             stops: slice.segments.length - 1,
-            price: sliceIndex === 0 ? parseFloat(offer.total_amount.toString()) : 0,
+            price: parseFloat(offer.total_amount.toString()),
             currency: offer.total_currency,
-            segments: slice.segments
+            segments: slice.segments,
+            offer // Include full offer for cart saving
           };
           
           sliceGroups[sliceIndex].push(displayFlight);
-        }
+        });
       });
-    });
-    
-    // Log filtering for debugging
-    if (searchParams.tripType === 'return' && selectedOffers[0]) {
-      console.log(`🔍 Return flights filtered: ${sliceGroups[1]?.length || 0} compatible with selected outbound`);
+      
+      return { isGrouped: false, sliceGroups };
     }
-    
-    return sliceGroups;
   };
 
 
@@ -459,13 +521,20 @@ const FlightResults = () => {
       const sessionId = getOrCreateSessionId();
       console.log('💾 Saving offer to cart session:', sessionId);
       
-      await apiRequest('/api/cart/select', {
+      const response = await fetch('/api/cart/select', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           session_id: sessionId,
           offer: offer
         })
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to save to cart');
+      }
       
       console.log('✅ Offer saved to cart session');
       return sessionId;
@@ -867,14 +936,27 @@ const FlightResults = () => {
   // Display data processing
   const getFlightDisplayData = () => {
     if (offers.length === 0) {
-      return { hasResults: false, sliceGroups: {} };
+      return { hasResults: false, sliceGroups: {}, isGrouped: false, outboundGroups: [] };
     }
 
-    const sliceGroups = processOffersForDisplay(offers);
-    return {
-      hasResults: Object.keys(sliceGroups).length > 0,
-      sliceGroups
-    };
+    const processed = processOffersForDisplay(offers);
+    
+    if (processed.isGrouped) {
+      return {
+        hasResults: (processed.outboundGroups?.length || 0) > 0,
+        isGrouped: true,
+        outboundGroups: processed.outboundGroups || [],
+        selectedOutboundKey: processed.selectedOutboundKey,
+        sliceGroups: {}
+      };
+    } else {
+      return {
+        hasResults: Object.keys(processed.sliceGroups || {}).length > 0,
+        isGrouped: false,
+        sliceGroups: processed.sliceGroups || {},
+        outboundGroups: []
+      };
+    }
   };
 
   const displayData = getFlightDisplayData();
@@ -933,12 +1015,231 @@ const FlightResults = () => {
             <div className="lg:col-span-3">
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
                 <p className="text-green-800 font-medium" data-testid="text-results-count">
-                  Found {offers.length} flight options across {Object.keys(displayData.sliceGroups).length} slice(s).
+                  {displayData.isGrouped 
+                    ? `Found ${displayData.outboundGroups?.length || 0} outbound options from ${offers.length} total offers.`
+                    : `Found ${offers.length} flight options across ${Object.keys(displayData.sliceGroups || {}).length} slice(s).`
+                  }
                 </p>
               </div>
 
-              {/* Render flight slices */}
-              {Object.entries(displayData.sliceGroups).map(([sliceIndexStr, flights]) => {
+              {/* Render GROUPED flights (return trips) */}
+              {displayData.isGrouped && (
+                <>
+                  {/* Outbound flights */}
+                  {!selectedOutboundKey && (
+                    <div className="mb-8">
+                      <h2 className="text-xl font-bold text-blue-900 mb-4" data-testid="text-slice-title-outbound">
+                        Select Outbound Flight ({searchParams.from} → {searchParams.to})
+                      </h2>
+                      
+                      <div className="space-y-4">
+                        {displayData.outboundGroups?.map((group, idx) => {
+                          const sample = group.sample;
+                          const firstSeg = sample.segments[0];
+                          const lastSeg = sample.segments[sample.segments.length - 1];
+                          
+                          return (
+                            <div 
+                              key={group.key}
+                              className="bg-white rounded-lg border shadow-sm p-4 cursor-pointer transition-colors hover:shadow-md border-gray-200"
+                              data-testid={`card-outbound-${idx}`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-4 mb-2">
+                                    <div className="text-sm font-medium text-blue-600">
+                                      {firstSeg.airline}
+                                    </div>
+                                    <div className="text-sm text-gray-600">
+                                      Flight {firstSeg.flight_number}
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-3 items-center gap-4">
+                                    <div className="text-center">
+                                      <div className="text-xl font-bold text-gray-900">
+                                        {new Date(firstSeg.departing_at).toLocaleTimeString('en-US', { 
+                                          hour: '2-digit', 
+                                          minute: '2-digit', 
+                                          hour12: false 
+                                        })}
+                                      </div>
+                                      <div className="text-sm text-gray-600">{sample.origin}</div>
+                                    </div>
+
+                                    <div className="text-center">
+                                      <div className="flex items-center justify-center gap-2">
+                                        <Clock className="h-4 w-4 text-gray-400" />
+                                        <span className="text-sm text-gray-600">{sample.duration}</span>
+                                      </div>
+                                      <div className="text-xs text-gray-500">
+                                        {sample.stops === 0 ? 'Direct' : `${sample.stops} stop${sample.stops > 1 ? 's' : ''}`}
+                                      </div>
+                                    </div>
+
+                                    <div className="text-center">
+                                      <div className="text-xl font-bold text-gray-900">
+                                        {new Date(lastSeg.arriving_at).toLocaleTimeString('en-US', { 
+                                          hour: '2-digit', 
+                                          minute: '2-digit', 
+                                          hour12: false 
+                                        })}
+                                      </div>
+                                      <div className="text-sm text-gray-600">{sample.destination}</div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-col items-end gap-3">
+                                  <div className="text-right">
+                                    <div className="text-sm text-gray-600 mb-1">From</div>
+                                    <div className="text-2xl font-bold text-gray-900">
+                                      ${group.minPrice.toFixed(2)}
+                                    </div>
+                                    <div className="text-sm text-gray-600">{group.currency}</div>
+                                  </div>
+
+                                  <Button
+                                    onClick={() => setSelectedOutboundKey(group.key)}
+                                    variant="outline"
+                                    data-testid={`button-select-outbound-${idx}`}
+                                  >
+                                    View {group.options.length} Return Options
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Load More Pagination */}
+                      {paginationCursor && (
+                        <div className="mt-6 text-center">
+                          <Button
+                            onClick={() => searchFlights(undefined, true)}
+                            disabled={loading}
+                            variant="outline"
+                            data-testid="button-load-more"
+                          >
+                            {loading ? 'Loading...' : 'Load More Results'}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Return flights */}
+                  {selectedOutboundKey && (
+                    <div className="mb-8">
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl font-bold text-blue-900" data-testid="text-slice-title-return">
+                          Select Return Flight ({searchParams.to} → {searchParams.from})
+                        </h2>
+                        <Button
+                          variant="ghost"
+                          onClick={() => setSelectedOutboundKey(null)}
+                          data-testid="button-change-outbound"
+                        >
+                          <ArrowLeft className="h-4 w-4 mr-2" />
+                          Change Outbound
+                        </Button>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        {displayData.outboundGroups
+                          ?.find((g: any) => g.key === selectedOutboundKey)
+                          ?.options.map((option: any, idx: number) => {
+                            const sample = option.inboundSlice;
+                            const firstSeg = sample.segments[0];
+                            const lastSeg = sample.segments[sample.segments.length - 1];
+                            
+                            return (
+                              <div 
+                                key={option.inboundKey}
+                                className="bg-white rounded-lg border shadow-sm p-4 cursor-pointer transition-colors hover:shadow-md border-gray-200"
+                                data-testid={`card-return-${idx}`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-4 mb-2">
+                                      <div className="text-sm font-medium text-blue-600">
+                                        {firstSeg.airline}
+                                      </div>
+                                      <div className="text-sm text-gray-600">
+                                        Flight {firstSeg.flight_number}
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 items-center gap-4">
+                                      <div className="text-center">
+                                        <div className="text-xl font-bold text-gray-900">
+                                          {new Date(firstSeg.departing_at).toLocaleTimeString('en-US', { 
+                                            hour: '2-digit', 
+                                            minute: '2-digit', 
+                                            hour12: false 
+                                          })}
+                                        </div>
+                                        <div className="text-sm text-gray-600">{sample.origin}</div>
+                                      </div>
+
+                                      <div className="text-center">
+                                        <div className="flex items-center justify-center gap-2">
+                                          <Clock className="h-4 w-4 text-gray-400" />
+                                          <span className="text-sm text-gray-600">{sample.duration}</span>
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          {sample.stops === 0 ? 'Direct' : `${sample.stops} stop${sample.stops > 1 ? 's' : ''}`}
+                                        </div>
+                                      </div>
+
+                                      <div className="text-center">
+                                        <div className="text-xl font-bold text-gray-900">
+                                          {new Date(lastSeg.arriving_at).toLocaleTimeString('en-US', { 
+                                            hour: '2-digit', 
+                                            minute: '2-digit', 
+                                            hour12: false 
+                                          })}
+                                        </div>
+                                        <div className="text-sm text-gray-600">{sample.destination}</div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-col items-end gap-3">
+                                    <div className="text-right">
+                                      <div className="text-sm text-gray-600 mb-1">Total Price</div>
+                                      <div className="text-2xl font-bold text-gray-900">
+                                        ${option.offer.total_amount.toFixed(2)}
+                                      </div>
+                                      <div className="text-sm text-gray-600">{option.offer.total_currency}</div>
+                                    </div>
+
+                                    <Button
+                                      onClick={async () => {
+                                        setSelectedOffer(option.offer);
+                                        const sessionId = await saveOfferToCartSession(option.offer);
+                                        if (sessionId) {
+                                          navigate(`/passenger-details?sid=${sessionId}`);
+                                        }
+                                      }}
+                                      data-testid={`button-select-return-${idx}`}
+                                    >
+                                      Select Flight
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Render NON-GROUPED flights (one-way, multi-city) */}
+              {!displayData.isGrouped && Object.entries(displayData.sliceGroups || {}).map(([sliceIndexStr, flights]: [string, any]) => {
                 const sliceIndex = parseInt(sliceIndexStr);
                 return (
                   <div key={sliceIndex} className="mb-8">
@@ -947,7 +1248,7 @@ const FlightResults = () => {
                     </h2>
                     
                     <div className="space-y-4">
-                      {flights.map((flight, flightIndex) => (
+                      {(flights as any[]).map((flight: any, flightIndex: number) => (
                         <div 
                           key={flight.id} 
                           className={`bg-white rounded-lg border shadow-sm p-4 cursor-pointer transition-colors hover:shadow-md ${
@@ -1014,11 +1315,23 @@ const FlightResults = () => {
                               )}
 
                               <Button
-                                onClick={() => handleFlightSelect(sliceIndex, flight)}
+                                onClick={async () => {
+                                  if (flight.offer) {
+                                    // For one-way flights, save directly to cart and navigate
+                                    setSelectedOffer(flight.offer);
+                                    const sessionId = await saveOfferToCartSession(flight.offer);
+                                    if (sessionId) {
+                                      navigate(`/passenger-details?sid=${sessionId}`);
+                                    }
+                                  } else {
+                                    // Fallback to old handler
+                                    handleFlightSelect(sliceIndex, flight);
+                                  }
+                                }}
                                 variant={selectedOffers[sliceIndex]?.offerId === flight.offerId ? "default" : "outline"}
                                 data-testid={`button-select-flight-${sliceIndex}-${flightIndex}`}
                               >
-                                {selectedOffers[sliceIndex]?.offerId === flight.offerId ? 'Selected' : 'Select Flight'}
+                                {flight.offer ? 'Select Flight' : (selectedOffers[sliceIndex]?.offerId === flight.offerId ? 'Selected' : 'Select Flight')}
                               </Button>
                             </div>
                           </div>

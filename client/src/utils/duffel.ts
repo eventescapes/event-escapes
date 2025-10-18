@@ -126,6 +126,7 @@ export interface EdgeFunctionSearchRequest {
   cabinClass?: 'economy' | 'premium_economy' | 'business' | 'first';
   maxConnections?: 0 | 1 | 2;
   directOnly?: boolean;
+  after?: string; // Pagination cursor
 }
 
 // NEW: Edge Function Response Types
@@ -158,8 +159,13 @@ export interface EdgeFunctionSearchResponse {
     total_currency: string;
     expires_at: string;
     cabin_class: string;
-    available_services: number;
+    available_services: any[];
+    passengers?: any[];
+    passenger_identity_documents_required?: boolean;
+    owner?: any;
+    conditions?: any;
   }>;
+  after?: string; // Pagination cursor
   total_offers: number;
   search_params: {
     cabin_class: string;
