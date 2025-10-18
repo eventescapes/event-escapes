@@ -562,6 +562,18 @@ export function PassengerDetailsPage() {
       <div className="max-w-4xl mx-auto px-4">
         <h1 className="text-3xl font-bold text-gray-900 mb-6">Passenger Details</h1>
 
+        {/* Flight Itinerary */}
+        {checkoutItem?.offer && (
+          <div className="mb-6">
+            <ItineraryBar offer={checkoutItem.offer} />
+            {cartSessionExpiry && (
+              <div className="mt-2">
+                <Countdown expiresAt={cartSessionExpiry} onExpire={() => navigate('/')} />
+              </div>
+            )}
+          </div>
+        )}
+
         {requiresPassport && (
           <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
             <Plane className="w-5 h-5 text-blue-600 mt-0.5" />
