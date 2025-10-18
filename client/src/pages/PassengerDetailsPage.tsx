@@ -2,9 +2,6 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, AlertCircle, CheckCircle, Plane, Loader2 } from 'lucide-react';
-import { ItineraryBar } from '@/components/ItineraryBar';
-import { Countdown } from '@/components/Countdown';
-import { apiRequest } from '@/lib/queryClient';
 
 interface PassengerForm {
   title: string;
@@ -30,129 +27,58 @@ export function PassengerDetailsPage() {
   const [showLoyaltySection, setShowLoyaltySection] = useState<boolean[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  
-  // Cart session support
-  const [cartSessionOffer, setCartSessionOffer] = useState<any>(null);
-  const [cartSessionExpiry, setCartSessionExpiry] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('🎫 === PASSENGER DETAILS PAGE LOADED ===');
+    const item = sessionStorage.getItem('checkout_item');
     
-    // Load from cart session if sid param is present
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('sid');
-    
-    const loadCheckoutData = async () => {
-      const item = sessionStorage.getItem('checkout_item');
-      
-      // If sessionStorage has the item, use it
-      if (item) {
-        try {
-          console.log('🎫 Raw checkout_item from sessionStorage:', item);
-          const parsed = JSON.parse(item);
-          console.log('🎫 Parsed checkout data:');
-          console.log('🎫 - Offer ID:', parsed.offer?.id);
-          console.log('🎫 - Total Amount:', parsed.offer?.total_amount, parsed.offer?.total_currency);
-          console.log('🎫 - Passengers:', parsed.offer?.passengers?.length || 0);
-          console.log('🎫 - Selected Seats:', parsed.selectedSeats?.length || 0);
-          console.log('🎫 - Selected Baggage:', parsed.selectedBaggage?.length || 0);
-          console.log('🎫 Complete parsed data:', parsed);
-          
-          setCheckoutItem(parsed);
-          
-          const passportRequired = parsed.offer?.passenger_identity_documents_required || false;
-          setRequiresPassport(passportRequired);
-
-          const passengerCount = parsed.offer?.passengers?.length || 1;
-          console.log('🎫 Creating forms for', passengerCount, 'passenger(s)');
-          const initialForms = Array.from({ length: passengerCount }, () => ({
-            title: '',
-            givenName: '',
-            familyName: '',
-            gender: '',
-            bornOn: '',
-            email: '',
-            phoneNumber: '',
-            passportNumber: '',
-            passportCountry: '',
-            passportExpiry: '',
-            loyaltyAirline: '',
-            loyaltyNumber: '',
-          }));
-          
-          setPassengerForms(initialForms);
-          setShowPassportSection(Array(passengerCount).fill(passportRequired));
-          setShowLoyaltySection(Array(passengerCount).fill(false));
-        } catch (err) {
-          console.error('Error parsing checkout item:', err);
-          navigate('/');
-        }
-        return;
-      }
-      
-      // If no sessionStorage but we have a session ID, load from cart session
-      if (sessionId) {
-        try {
-          const data: any = await apiRequest(`/api/cart/${sessionId}`);
-          console.log('📦 Loaded offer from cart session:', data.cart);
-          
-          if (data.cart) {
-            setCartSessionOffer(data.cart.offerJson);
-            setCartSessionExpiry(data.cart.expiresAt);
-            
-            // Build checkout item from cart session
-            const checkoutData = {
-              offer: data.cart.offerJson,
-              selectedSeats: [],
-              selectedBaggage: [],
-              services: [],
-              passengers: data.cart.offerJson.passengers || [],
-            };
-            
-            setCheckoutItem(checkoutData);
-            
-            const passportRequired = data.cart.offerJson?.passenger_identity_documents_required || false;
-            setRequiresPassport(passportRequired);
-
-            const passengerCount = data.cart.offerJson?.passengers?.length || 1;
-            console.log('🎫 Creating forms for', passengerCount, 'passenger(s) from cart session');
-            const initialForms = Array.from({ length: passengerCount }, () => ({
-              title: '',
-              givenName: '',
-              familyName: '',
-              gender: '',
-              bornOn: '',
-              email: '',
-              phoneNumber: '',
-              passportNumber: '',
-              passportCountry: '',
-              passportExpiry: '',
-              loyaltyAirline: '',
-              loyaltyNumber: '',
-            }));
-            
-            setPassengerForms(initialForms);
-            setShowPassportSection(Array(passengerCount).fill(passportRequired));
-            setShowLoyaltySection(Array(passengerCount).fill(false));
-          } else {
-            console.error('❌ No cart session data found');
-            navigate('/');
-          }
-        } catch (error) {
-          console.error('❌ Failed to load cart session:', error);
-          navigate('/');
-        }
-        return;
-      }
-      
-      // No session storage and no session ID - redirect
-      console.error('❌ No checkout_item or session ID found');
+    if (!item) {
+      console.error('❌ No checkout_item found in sessionStorage');
       navigate('/');
-    };
-    
-    loadCheckoutData();
-  }, [navigate]);
+      return;
+    }
 
+    try {
+      console.log('🎫 Raw checkout_item from sessionStorage:', item);
+      const parsed = JSON.parse(item);
+      console.log('🎫 Parsed checkout data:');
+      console.log('🎫 - Offer ID:', parsed.offer?.id);
+      console.log('🎫 - Total Amount:', parsed.offer?.total_amount, parsed.offer?.total_currency);
+      console.log('🎫 - Passengers:', parsed.offer?.passengers?.length || 0);
+      console.log('🎫 - Selected Seats:', parsed.selectedSeats?.length || 0);
+      console.log('🎫 - Selected Baggage:', parsed.selectedBaggage?.length || 0);
+      console.log('🎫 Complete parsed data:', parsed);
+      
+      setCheckoutItem(parsed);
+      
+      const passportRequired = parsed.offer?.passenger_identity_documents_required || false;
+      setRequiresPassport(passportRequired);
+
+      const passengerCount = parsed.offer?.passengers?.length || 1;
+      console.log('🎫 Creating forms for', passengerCount, 'passenger(s)');
+      const initialForms = Array.from({ length: passengerCount }, () => ({
+        title: '',
+        givenName: '',
+        familyName: '',
+        gender: '',
+        bornOn: '',
+        email: '',
+        phoneNumber: '',
+        passportNumber: '',
+        passportCountry: '',
+        passportExpiry: '',
+        loyaltyAirline: '',
+        loyaltyNumber: '',
+      }));
+      
+      setPassengerForms(initialForms);
+      setShowPassportSection(Array(passengerCount).fill(passportRequired));
+      setShowLoyaltySection(Array(passengerCount).fill(false));
+    } catch (err) {
+      console.error('Error parsing checkout item:', err);
+      navigate('/');
+    }
+  }, [navigate]);
 
   const updatePassengerForm = (index: number, field: string, value: string) => {
     setPassengerForms(prev => {
@@ -561,18 +487,6 @@ export function PassengerDetailsPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
         <h1 className="text-3xl font-bold text-gray-900 mb-6">Passenger Details</h1>
-
-        {/* Flight Itinerary */}
-        {checkoutItem?.offer && (
-          <div className="mb-6">
-            <ItineraryBar offer={checkoutItem.offer} />
-            {cartSessionExpiry && (
-              <div className="mt-2">
-                <Countdown expiresAt={cartSessionExpiry} onExpire={() => navigate('/')} />
-              </div>
-            )}
-          </div>
-        )}
 
         {requiresPassport && (
           <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
