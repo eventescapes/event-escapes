@@ -17,9 +17,11 @@ export default function AncillaryChoicePage() {
   const cartItem = useMemo(() => items.find(i => i.offerId === offerId), [items, offerId]);
   
   // Cart session support
+  const urlParams = new URLSearchParams(window.location.search);
+  const sessionId = urlParams.get('sid');
   const [cartSessionOffer, setCartSessionOffer] = useState<any>(null);
   const [cartSessionExpiry, setCartSessionExpiry] = useState<string | null>(null);
-  const [loadingCartSession, setLoadingCartSession] = useState(false);
+  const [loadingCartSession, setLoadingCartSession] = useState(!!sessionId);
 
   const [wantSeats, setWantSeats] = useState(false);
   const [wantBags, setWantBags] = useState(false);
@@ -32,11 +34,7 @@ export default function AncillaryChoicePage() {
 
   // Load from cart session if sid param is present
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('sid');
-    
     if (sessionId) {
-      setLoadingCartSession(true);
       apiRequest(`/api/cart/${sessionId}`)
         .then((data: any) => {
           console.log('📦 Loaded offer from cart session:', data.cart);
@@ -52,7 +50,7 @@ export default function AncillaryChoicePage() {
           setLoadingCartSession(false);
         });
     }
-  }, []);
+  }, [sessionId]);
 
   // Fetch real passenger IDs from Duffel via get-offer-lite
   useEffect(() => {
@@ -167,10 +165,12 @@ export default function AncillaryChoicePage() {
     ];
     
     console.log('💺🎒 Formatted services for checkout:', services);
-    setServicesForOffer(offerId, services);
+    if (offerId) {
+      setServicesForOffer(offerId, services);
+    }
     
     // Use cart session offer if available
-    const offerToSave = displayOffer || cartItem.offer;
+    const offerToSave = displayOffer || cartItem?.offer;
     
     // Save to sessionStorage for checkout
     const checkoutData = {
@@ -183,8 +183,6 @@ export default function AncillaryChoicePage() {
     sessionStorage.setItem('checkout_item', JSON.stringify(checkoutData));
     
     // Pass session ID if available
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('sid');
     if (sessionId) {
       navigate(`/passenger-details?sid=${sessionId}`);
     } else {
@@ -194,7 +192,7 @@ export default function AncillaryChoicePage() {
 
   const handleSkip = () => {
     // Use cart session offer if available
-    const offerToSave = displayOffer || cartItem.offer;
+    const offerToSave = displayOffer || cartItem?.offer;
     
     // Skip directly to passenger details
     const checkoutData = {
@@ -205,8 +203,6 @@ export default function AncillaryChoicePage() {
     sessionStorage.setItem('checkout_item', JSON.stringify(checkoutData));
     
     // Pass session ID if available
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('sid');
     if (sessionId) {
       navigate(`/passenger-details?sid=${sessionId}`);
     } else {
