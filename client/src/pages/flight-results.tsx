@@ -10,9 +10,6 @@ import { SeatSelectionModal } from '@/components/SeatSelectionModal';
 import { BaggageSelectionModal } from '@/components/ui/BaggageSelectionModal';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Plane, Clock, MapPin } from 'lucide-react';
-import { FlightCard } from '@/components/FlightCard';
-import { getOrCreateSessionId } from '@/lib/session';
-import { apiRequest } from '@/lib/queryClient';
 
 // Backend response types matching Edge Function format
 interface EdgeFunctionOffer {
@@ -84,9 +81,6 @@ const FlightResults = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offers, setOffers] = useState<EdgeFunctionOffer[]>([]);
-  const [paginationCursor, setPaginationCursor] = useState<string | null>(null);
-  const [selectedOutboundKey, setSelectedOutboundKey] = useState<string | null>(null);
-  const [selectedOffer, setSelectedOffer] = useState<EdgeFunctionOffer | null>(null);
   const [selectedOffers, setSelectedOffers] = useState<{
     [sliceIndex: number]: {
       offerId: string;
@@ -186,67 +180,8 @@ const FlightResults = () => {
     }
   };
 
-  // Helper function to generate a stable key for a slice
-  const generateSliceKey = (slice: EdgeFunctionSlice): string => {
-    const firstSeg = slice.segments[0];
-    const lastSeg = slice.segments[slice.segments.length - 1];
-    const flightChain = slice.segments
-      .map(s => `${s.airline_code}${s.flight_number}`)
-      .join('-');
-    
-    return [
-      firstSeg.origin,
-      lastSeg.destination,
-      firstSeg.departing_at,
-      flightChain
-    ].join('|');
-  };
-
-  // Group offers by outbound slice for return trips
-  const groupOffersByOutbound = (offers: EdgeFunctionOffer[]) => {
-    const groups = new Map<string, {
-      sampleSlice: EdgeFunctionSlice;
-      options: Array<{
-        inboundKey: string;
-        inboundSlice: EdgeFunctionSlice;
-        offer: EdgeFunctionOffer;
-      }>;
-    }>();
-
-    for (const offer of offers) {
-      if (offer.slices.length < 2) continue; // Skip non-return offers
-      
-      const outboundSlice = offer.slices[0];
-      const inboundSlice = offer.slices[1];
-      
-      const outboundKey = generateSliceKey(outboundSlice);
-      const inboundKey = generateSliceKey(inboundSlice);
-      
-      if (!groups.has(outboundKey)) {
-        groups.set(outboundKey, {
-          sampleSlice: outboundSlice,
-          options: []
-        });
-      }
-      
-      groups.get(outboundKey)!.options.push({
-        inboundKey,
-        inboundSlice,
-        offer
-      });
-    }
-
-    return Array.from(groups.entries()).map(([key, group]) => ({
-      key,
-      sample: group.sampleSlice,
-      minPrice: Math.min(...group.options.map(o => o.offer.total_amount)),
-      currency: group.options[0]?.offer.total_currency || 'USD',
-      options: group.options
-    }));
-  };
-
   // Main search function - FIXES Status 422 errors with correct format
-  const searchFlights = async (e?: React.MouseEvent, loadMore = false) => {
+  const searchFlights = async (e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -294,7 +229,7 @@ const FlightResults = () => {
         }));
       }
 
-      const requestPayload: any = {
+      const requestPayload = {
         tripType: searchParams.tripType,
         slices: slices,
         passengers: {
@@ -304,11 +239,6 @@ const FlightResults = () => {
         },
         cabinClass: searchParams.cabinClass || 'economy'
       };
-
-      // Add pagination cursor if loading more
-      if (loadMore && paginationCursor) {
-        requestPayload.after = paginationCursor;
-      }
 
       console.log('=== REQUEST PAYLOAD ===', JSON.stringify(requestPayload, null, 2));
 
@@ -344,7 +274,7 @@ const FlightResults = () => {
       }
 
       if (data.success && data.offers) {
-        console.log('✈️ [flights-search] ===  SUCCESS ===', `${data.offers.length} offers received`);
+        console.log('=== SUCCESS ===', `${data.offers.length} offers received`);
         
         // FILTER offers to exact airports only - FIX for wrong airport codes
         const filteredOffers = validateAndFilterOffers(
@@ -355,25 +285,12 @@ const FlightResults = () => {
 
         console.log(`✅ Filtered ${data.offers.length} offers to ${filteredOffers.length} exact matches`);
 
-        if (filteredOffers.length === 0 && !loadMore) {
+        if (filteredOffers.length === 0) {
           throw new Error(`No flights found for exact route ${searchParams.from.toUpperCase()}→${searchParams.to.toUpperCase()}. API returned flights from other airports.`);
         }
 
-        // Store FILTERED REAL offers - append if loading more, replace if new search
-        if (loadMore) {
-          setOffers(prev => [...prev, ...filteredOffers]);
-        } else {
-          // Fresh search: reset all selection state
-          setOffers(filteredOffers);
-          setSelectedOutboundKey(null);
-          setSelectedOffer(null);
-          setSelectedOffers({});
-          console.log('🔄 [reset] Cleared selection state for fresh search');
-        }
-
-        // Store pagination cursor for "Load more"
-        setPaginationCursor(data.after || null);
-        console.log('📄 [pagination] Cursor for next page:', data.after || 'none');
+        // Store FILTERED REAL offers - NO MOCK DATA, EXACT AIRPORTS ONLY
+        setOffers(filteredOffers);
       } else {
         throw new Error(data.error || 'No flights found');
       }
@@ -442,35 +359,34 @@ const FlightResults = () => {
     }
   };
 
-  // Process offers for display - NEW: Group by outbound/return for return trips
-  const processOffersForDisplay = (offers: EdgeFunctionOffer[]): {
-    isGrouped: boolean;
-    outboundGroups?: Array<any>;
-    selectedOutboundKey?: string | null;
-    sliceGroups?: { [sliceIndex: number]: any[] };
-  } => {
-    if (searchParams.tripType === 'return') {
-      // For return trips, use new grouping logic
-      const grouped = groupOffersByOutbound(offers);
-      
-      console.log(`🔢 [grouping] Created ${grouped.length} outbound groups from ${offers.length} offers`);
-      
-      // Return in a format compatible with current display logic
-      return {
-        isGrouped: true,
-        outboundGroups: grouped,
-        selectedOutboundKey
-      };
-    } else {
-      // For one-way trips, use legacy logic
-      const sliceGroups: { [sliceIndex: number]: any[] } = {};
-      
-      offers.forEach(offer => {
-        offer.slices.forEach((slice, sliceIndex) => {
-          if (!sliceGroups[sliceIndex]) {
-            sliceGroups[sliceIndex] = [];
+  // Process offers for display - properly separate outbound and return slices with airport validation
+  const processOffersForDisplay = (offers: EdgeFunctionOffer[]) => {
+    const sliceGroups: { [sliceIndex: number]: any[] } = {};
+    
+    offers.forEach(offer => {
+      offer.slices.forEach((slice, sliceIndex) => {
+        if (!sliceGroups[sliceIndex]) {
+          sliceGroups[sliceIndex] = [];
+        }
+        
+        // Only include slice if it matches the expected route
+        let shouldInclude = true;
+        
+        if (searchParams.tripType === 'return') {
+          if (sliceIndex === 0) {
+            // Outbound slice: origin should match departure city
+            shouldInclude = slice.origin === searchParams.from.toUpperCase();
+          } else {
+            // Return slice: origin should match destination city (return leg)
+            shouldInclude = slice.origin === searchParams.to.toUpperCase();
           }
-          
+        } else if (searchParams.tripType === 'one-way') {
+          // One-way: should match exact route
+          shouldInclude = slice.origin === searchParams.from.toUpperCase() && 
+                         slice.destination === searchParams.to.toUpperCase();
+        }
+        
+        if (shouldInclude) {
           const displayFlight = {
             id: `${offer.id}-slice-${sliceIndex}`,
             offerId: offer.id,
@@ -484,18 +400,17 @@ const FlightResults = () => {
             arrivalAirport: slice.destination,
             duration: slice.duration,
             stops: slice.segments.length - 1,
-            price: parseFloat(offer.total_amount.toString()),
+            price: sliceIndex === 0 ? parseFloat(offer.total_amount.toString()) : 0,
             currency: offer.total_currency,
-            segments: slice.segments,
-            offer // Include full offer for cart saving
+            segments: slice.segments
           };
           
           sliceGroups[sliceIndex].push(displayFlight);
-        });
+        }
       });
-      
-      return { isGrouped: false, sliceGroups };
-    }
+    });
+    
+    return sliceGroups;
   };
 
 
@@ -515,41 +430,11 @@ const FlightResults = () => {
     }
   };
 
-  // Save offer to cart session
-  const saveOfferToCartSession = async (offer: EdgeFunctionOffer) => {
-    try {
-      const sessionId = getOrCreateSessionId();
-      console.log('💾 Saving offer to cart session:', sessionId);
-      
-      const response = await fetch('/api/cart/select', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          session_id: sessionId,
-          offer: offer
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save to cart');
-      }
-      
-      console.log('✅ Offer saved to cart session');
-      return sessionId;
-    } catch (error) {
-      console.error('❌ Failed to save offer to cart session:', error);
-      return null;
-    }
-  };
-
   // Flight selection handler
-  const handleFlightSelect = async (sliceIndex: number, flight: any) => {
-    console.log('✈️ Flight selected:', { sliceIndex, flight });
+  const handleFlightSelect = (sliceIndex: number, flight: any) => {
+    console.log('✈️ Flight selected:', flight);
     
-    // Store selection details
-    let newSelectedOffers = {
+    const newSelectedOffers = {
       ...selectedOffers,
       [sliceIndex]: {
         offerId: flight.offerId,
@@ -560,67 +445,21 @@ const FlightResults = () => {
       }
     };
     
-    // If changing outbound selection on a return trip, clear the return selection
-    if (searchParams.tripType === 'return' && sliceIndex === 0 && selectedOffers[1]) {
-      console.log('🔄 Outbound changed, clearing return selection');
-      newSelectedOffers = {
-        ...newSelectedOffers,
-        1: undefined as any
-      };
-      delete newSelectedOffers[1];
-    }
-    
     setSelectedOffers(newSelectedOffers);
     
-    // For return trips, find the complete offer that contains both selected slices
-    let completeOffer: EdgeFunctionOffer | undefined;
-    
-    if (searchParams.tripType === 'return' && sliceIndex === 1) {
-      // User just selected return flight - find offer with both slices
-      const outboundSelection = newSelectedOffers[0];
-      const returnSelection = newSelectedOffers[1];
+    // Update current selection for Order Summary
+    const fullOffer = offers.find(o => o.id === flight.offerId);
+    if (fullOffer) {
+      console.log('✈️ Setting current selection offer:', fullOffer);
       
-      if (outboundSelection && returnSelection) {
-        // Find an offer that has matching slices
-        completeOffer = offers.find(offer => {
-          if (offer.slices.length < 2) return false;
-          
-          const outboundMatches = 
-            offer.slices[0].origin === outboundSelection.flight.departureAirport &&
-            offer.slices[0].destination === outboundSelection.flight.arrivalAirport &&
-            offer.slices[0].departure_time === outboundSelection.flight.departure_time;
-          
-          const returnMatches =
-            offer.slices[1].origin === returnSelection.flight.departureAirport &&
-            offer.slices[1].destination === returnSelection.flight.arrivalAirport &&
-            offer.slices[1].departure_time === returnSelection.flight.departure_time;
-          
-          return outboundMatches && returnMatches;
+      // Update current selection if it's the first slice
+      if (sliceIndex === 0) {
+        setCurrentSelection({
+          offer: fullOffer,
+          seats: [],
+          baggage: []
         });
-        
-        if (!completeOffer) {
-          console.error('❌ CRITICAL: No complete offer found for selected slices');
-          console.error('❌ This should never happen due to filtering, but indicates a bug');
-          console.error('❌ Outbound:', outboundSelection);
-          console.error('❌ Return:', returnSelection);
-          alert('Unable to find a valid combined offer for your selected flights. Please try different flights or search again.');
-          return;
-        }
       }
-    } else {
-      // One-way or first slice of return - use the offer directly
-      completeOffer = offers.find(o => o.id === flight.offerId);
-    }
-    
-    if (completeOffer) {
-      console.log('✈️ Complete offer found:', completeOffer.id);
-      
-      // Update current selection
-      setCurrentSelection({
-        offer: completeOffer,
-        seats: [],
-        baggage: []
-      });
       
       // Check if this completes all required selections
       const requiredSlices = searchParams.tripType === 'one-way' ? 1 :
@@ -638,33 +477,18 @@ const FlightResults = () => {
       // Navigate to ancillary choice when all required flights are selected
       if (allSelected) {
         console.log('🛒 All flights selected, navigating to ancillary choice...');
-        console.log('🛒 Using complete offer:', completeOffer.id, {
-          total_amount: completeOffer.total_amount,
-          total_currency: completeOffer.total_currency,
-          slices: completeOffer.slices.length
-        });
         
         // Add passengers to offer if not present
         const offerWithPassengers = {
-          ...completeOffer,
-          passengers: completeOffer.passengers || Array.from(
+          ...fullOffer,
+          passengers: fullOffer.passengers || Array.from(
             { length: searchParams.passengers },
             (_, i) => ({ id: `passenger_${i + 1}`, type: 'adult' })
           )
         };
         
-        // Save to cart session
-        const sessionId = await saveOfferToCartSession(offerWithPassengers);
-        
-        // Legacy cart store (keep for compatibility)
         addOffer(offerWithPassengers, searchParams);
-        
-        // Navigate with session ID if available
-        if (sessionId) {
-          navigate(`/ancillaries/${offerWithPassengers.id}?sid=${sessionId}`);
-        } else {
-          navigate(`/ancillaries/${offerWithPassengers.id}`);
-        }
+        navigate(`/ancillaries/${offerWithPassengers.id}`);
       }
     }
   };
@@ -936,27 +760,14 @@ const FlightResults = () => {
   // Display data processing
   const getFlightDisplayData = () => {
     if (offers.length === 0) {
-      return { hasResults: false, sliceGroups: {}, isGrouped: false, outboundGroups: [] };
+      return { hasResults: false, sliceGroups: {} };
     }
 
-    const processed = processOffersForDisplay(offers);
-    
-    if (processed.isGrouped) {
-      return {
-        hasResults: (processed.outboundGroups?.length || 0) > 0,
-        isGrouped: true,
-        outboundGroups: processed.outboundGroups || [],
-        selectedOutboundKey: processed.selectedOutboundKey,
-        sliceGroups: {}
-      };
-    } else {
-      return {
-        hasResults: Object.keys(processed.sliceGroups || {}).length > 0,
-        isGrouped: false,
-        sliceGroups: processed.sliceGroups || {},
-        outboundGroups: []
-      };
-    }
+    const sliceGroups = processOffersForDisplay(offers);
+    return {
+      hasResults: Object.keys(sliceGroups).length > 0,
+      sliceGroups
+    };
   };
 
   const displayData = getFlightDisplayData();
@@ -1015,231 +826,12 @@ const FlightResults = () => {
             <div className="lg:col-span-3">
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
                 <p className="text-green-800 font-medium" data-testid="text-results-count">
-                  {displayData.isGrouped 
-                    ? `Found ${displayData.outboundGroups?.length || 0} outbound options from ${offers.length} total offers.`
-                    : `Found ${offers.length} flight options across ${Object.keys(displayData.sliceGroups || {}).length} slice(s).`
-                  }
+                  Found {offers.length} flight options across {Object.keys(displayData.sliceGroups).length} slice(s).
                 </p>
               </div>
 
-              {/* Render GROUPED flights (return trips) */}
-              {displayData.isGrouped && (
-                <>
-                  {/* Outbound flights */}
-                  {!selectedOutboundKey && (
-                    <div className="mb-8">
-                      <h2 className="text-xl font-bold text-blue-900 mb-4" data-testid="text-slice-title-outbound">
-                        Select Outbound Flight ({searchParams.from} → {searchParams.to})
-                      </h2>
-                      
-                      <div className="space-y-4">
-                        {displayData.outboundGroups?.map((group, idx) => {
-                          const sample = group.sample;
-                          const firstSeg = sample.segments[0];
-                          const lastSeg = sample.segments[sample.segments.length - 1];
-                          
-                          return (
-                            <div 
-                              key={group.key}
-                              className="bg-white rounded-lg border shadow-sm p-4 cursor-pointer transition-colors hover:shadow-md border-gray-200"
-                              data-testid={`card-outbound-${idx}`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-4 mb-2">
-                                    <div className="text-sm font-medium text-blue-600">
-                                      {firstSeg.airline}
-                                    </div>
-                                    <div className="text-sm text-gray-600">
-                                      Flight {firstSeg.flight_number}
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-3 items-center gap-4">
-                                    <div className="text-center">
-                                      <div className="text-xl font-bold text-gray-900">
-                                        {new Date(firstSeg.departing_at).toLocaleTimeString('en-US', { 
-                                          hour: '2-digit', 
-                                          minute: '2-digit', 
-                                          hour12: false 
-                                        })}
-                                      </div>
-                                      <div className="text-sm text-gray-600">{sample.origin}</div>
-                                    </div>
-
-                                    <div className="text-center">
-                                      <div className="flex items-center justify-center gap-2">
-                                        <Clock className="h-4 w-4 text-gray-400" />
-                                        <span className="text-sm text-gray-600">{sample.duration}</span>
-                                      </div>
-                                      <div className="text-xs text-gray-500">
-                                        {sample.stops === 0 ? 'Direct' : `${sample.stops} stop${sample.stops > 1 ? 's' : ''}`}
-                                      </div>
-                                    </div>
-
-                                    <div className="text-center">
-                                      <div className="text-xl font-bold text-gray-900">
-                                        {new Date(lastSeg.arriving_at).toLocaleTimeString('en-US', { 
-                                          hour: '2-digit', 
-                                          minute: '2-digit', 
-                                          hour12: false 
-                                        })}
-                                      </div>
-                                      <div className="text-sm text-gray-600">{sample.destination}</div>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="flex flex-col items-end gap-3">
-                                  <div className="text-right">
-                                    <div className="text-sm text-gray-600 mb-1">From</div>
-                                    <div className="text-2xl font-bold text-gray-900">
-                                      ${group.minPrice.toFixed(2)}
-                                    </div>
-                                    <div className="text-sm text-gray-600">{group.currency}</div>
-                                  </div>
-
-                                  <Button
-                                    onClick={() => setSelectedOutboundKey(group.key)}
-                                    variant="outline"
-                                    data-testid={`button-select-outbound-${idx}`}
-                                  >
-                                    View {group.options.length} Return Options
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Load More Pagination */}
-                      {paginationCursor && (
-                        <div className="mt-6 text-center">
-                          <Button
-                            onClick={() => searchFlights(undefined, true)}
-                            disabled={loading}
-                            variant="outline"
-                            data-testid="button-load-more"
-                          >
-                            {loading ? 'Loading...' : 'Load More Results'}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Return flights */}
-                  {selectedOutboundKey && (
-                    <div className="mb-8">
-                      <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-bold text-blue-900" data-testid="text-slice-title-return">
-                          Select Return Flight ({searchParams.to} → {searchParams.from})
-                        </h2>
-                        <Button
-                          variant="ghost"
-                          onClick={() => setSelectedOutboundKey(null)}
-                          data-testid="button-change-outbound"
-                        >
-                          <ArrowLeft className="h-4 w-4 mr-2" />
-                          Change Outbound
-                        </Button>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        {displayData.outboundGroups
-                          ?.find((g: any) => g.key === selectedOutboundKey)
-                          ?.options.map((option: any, idx: number) => {
-                            const sample = option.inboundSlice;
-                            const firstSeg = sample.segments[0];
-                            const lastSeg = sample.segments[sample.segments.length - 1];
-                            
-                            return (
-                              <div 
-                                key={option.inboundKey}
-                                className="bg-white rounded-lg border shadow-sm p-4 cursor-pointer transition-colors hover:shadow-md border-gray-200"
-                                data-testid={`card-return-${idx}`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-4 mb-2">
-                                      <div className="text-sm font-medium text-blue-600">
-                                        {firstSeg.airline}
-                                      </div>
-                                      <div className="text-sm text-gray-600">
-                                        Flight {firstSeg.flight_number}
-                                      </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-3 items-center gap-4">
-                                      <div className="text-center">
-                                        <div className="text-xl font-bold text-gray-900">
-                                          {new Date(firstSeg.departing_at).toLocaleTimeString('en-US', { 
-                                            hour: '2-digit', 
-                                            minute: '2-digit', 
-                                            hour12: false 
-                                          })}
-                                        </div>
-                                        <div className="text-sm text-gray-600">{sample.origin}</div>
-                                      </div>
-
-                                      <div className="text-center">
-                                        <div className="flex items-center justify-center gap-2">
-                                          <Clock className="h-4 w-4 text-gray-400" />
-                                          <span className="text-sm text-gray-600">{sample.duration}</span>
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                          {sample.stops === 0 ? 'Direct' : `${sample.stops} stop${sample.stops > 1 ? 's' : ''}`}
-                                        </div>
-                                      </div>
-
-                                      <div className="text-center">
-                                        <div className="text-xl font-bold text-gray-900">
-                                          {new Date(lastSeg.arriving_at).toLocaleTimeString('en-US', { 
-                                            hour: '2-digit', 
-                                            minute: '2-digit', 
-                                            hour12: false 
-                                          })}
-                                        </div>
-                                        <div className="text-sm text-gray-600">{sample.destination}</div>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex flex-col items-end gap-3">
-                                    <div className="text-right">
-                                      <div className="text-sm text-gray-600 mb-1">Total Price</div>
-                                      <div className="text-2xl font-bold text-gray-900">
-                                        ${option.offer.total_amount.toFixed(2)}
-                                      </div>
-                                      <div className="text-sm text-gray-600">{option.offer.total_currency}</div>
-                                    </div>
-
-                                    <Button
-                                      onClick={async () => {
-                                        setSelectedOffer(option.offer);
-                                        const sessionId = await saveOfferToCartSession(option.offer);
-                                        if (sessionId) {
-                                          navigate(`/passenger-details?sid=${sessionId}`);
-                                        }
-                                      }}
-                                      data-testid={`button-select-return-${idx}`}
-                                    >
-                                      Select Flight
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Render NON-GROUPED flights (one-way, multi-city) */}
-              {!displayData.isGrouped && Object.entries(displayData.sliceGroups || {}).map(([sliceIndexStr, flights]: [string, any]) => {
+              {/* Render flight slices */}
+              {Object.entries(displayData.sliceGroups).map(([sliceIndexStr, flights]) => {
                 const sliceIndex = parseInt(sliceIndexStr);
                 return (
                   <div key={sliceIndex} className="mb-8">
@@ -1248,7 +840,7 @@ const FlightResults = () => {
                     </h2>
                     
                     <div className="space-y-4">
-                      {(flights as any[]).map((flight: any, flightIndex: number) => (
+                      {flights.map((flight, flightIndex) => (
                         <div 
                           key={flight.id} 
                           className={`bg-white rounded-lg border shadow-sm p-4 cursor-pointer transition-colors hover:shadow-md ${
@@ -1315,23 +907,11 @@ const FlightResults = () => {
                               )}
 
                               <Button
-                                onClick={async () => {
-                                  if (flight.offer) {
-                                    // For one-way flights, save directly to cart and navigate
-                                    setSelectedOffer(flight.offer);
-                                    const sessionId = await saveOfferToCartSession(flight.offer);
-                                    if (sessionId) {
-                                      navigate(`/passenger-details?sid=${sessionId}`);
-                                    }
-                                  } else {
-                                    // Fallback to old handler
-                                    handleFlightSelect(sliceIndex, flight);
-                                  }
-                                }}
+                                onClick={() => handleFlightSelect(sliceIndex, flight)}
                                 variant={selectedOffers[sliceIndex]?.offerId === flight.offerId ? "default" : "outline"}
                                 data-testid={`button-select-flight-${sliceIndex}-${flightIndex}`}
                               >
-                                {flight.offer ? 'Select Flight' : (selectedOffers[sliceIndex]?.offerId === flight.offerId ? 'Selected' : 'Select Flight')}
+                                {selectedOffers[sliceIndex]?.offerId === flight.offerId ? 'Selected' : 'Select Flight'}
                               </Button>
                             </div>
                           </div>

@@ -9,14 +9,11 @@ import {
   type InsertBookingItem,
   type SavedItem,
   type InsertSavedItem,
-  type CartSession,
-  type InsertCartSession,
   users,
   events,
   bookings,
   bookingItems,
-  savedItems,
-  cartSessions
+  savedItems
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { drizzle } from "drizzle-orm/neon-http";
@@ -62,12 +59,6 @@ export interface IStorage {
   getSavedItems(userId?: string, guestEmail?: string): Promise<SavedItem[]>;
   createSavedItem(item: InsertSavedItem): Promise<SavedItem>;
   deleteSavedItem(id: string): Promise<void>;
-  
-  // Cart Sessions
-  getCartSession(sessionId: string): Promise<CartSession | undefined>;
-  upsertCartSession(session: InsertCartSession): Promise<CartSession>;
-  updateCartSessionExpiry(sessionId: string, expiresAt: Date): Promise<void>;
-  deleteCartSession(sessionId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -283,40 +274,6 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSavedItem(id: string): Promise<void> {
     await db.delete(savedItems).where(eq(savedItems.id, id));
-  }
-
-  // Cart Sessions
-  async getCartSession(sessionId: string): Promise<CartSession | undefined> {
-    const result = await db.select().from(cartSessions).where(eq(cartSessions.sessionId, sessionId)).limit(1);
-    return result[0];
-  }
-
-  async upsertCartSession(insertSession: InsertCartSession): Promise<CartSession> {
-    const result = await db
-      .insert(cartSessions)
-      .values(insertSession)
-      .onConflictDoUpdate({
-        target: cartSessions.sessionId,
-        set: {
-          duffelOfferId: insertSession.duffelOfferId,
-          offerJson: insertSession.offerJson,
-          currency: insertSession.currency,
-          expiresAt: insertSession.expiresAt,
-        },
-      })
-      .returning();
-    return result[0];
-  }
-
-  async updateCartSessionExpiry(sessionId: string, expiresAt: Date): Promise<void> {
-    await db
-      .update(cartSessions)
-      .set({ expiresAt })
-      .where(eq(cartSessions.sessionId, sessionId));
-  }
-
-  async deleteCartSession(sessionId: string): Promise<void> {
-    await db.delete(cartSessions).where(eq(cartSessions.sessionId, sessionId));
   }
 }
 
