@@ -101,13 +101,13 @@ function EventCard({ event, onClick, showRewardsBadge = true }: EventCardProps) 
 
   return (
     <div 
-      className="min-w-[300px] flex-shrink-0 cursor-pointer group snap-start"
+      className="cursor-pointer group"
       onClick={onClick}
       data-testid={`event-card-${event.id}`}
     >
-      <div className="relative overflow-hidden rounded-2xl transform transition-all duration-500 group-hover:scale-[1.03] group-hover:shadow-2xl group-hover:shadow-purple-500/20 bg-gradient-to-b from-slate-900 to-black border border-slate-800 group-hover:border-purple-500/50">
+      <div className="relative overflow-hidden rounded-2xl transform transition-all duration-500 group-hover:scale-[1.05] group-hover:shadow-2xl group-hover:shadow-purple-500/20 bg-gradient-to-b from-slate-900 to-black border border-slate-800 group-hover:border-purple-500/50 h-full flex flex-col">
         {/* Image Section */}
-        <div className="relative h-[400px] overflow-hidden">
+        <div className="relative h-[280px] overflow-hidden flex-shrink-0">
           <img 
             src={getEventImage()} 
             alt={event.name}
@@ -166,17 +166,17 @@ function EventCard({ event, onClick, showRewardsBadge = true }: EventCardProps) 
         </div>
 
         {/* Price Section - Below Image */}
-        <div className="p-4 bg-gradient-to-b from-slate-900 to-black border-t border-slate-800">
+        <div className="p-3 bg-gradient-to-b from-slate-900 to-black border-t border-slate-800 mt-auto">
           <div className="flex items-center justify-between" data-testid={`event-price-${event.id}`}>
             <div className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-green-400" />
+              <DollarSign className="h-4 w-4 text-green-400" />
               <div>
-                <div className="text-xs text-slate-400">Starting from</div>
-                <div className="text-lg font-bold text-white">{formatPrice()}</div>
+                <div className="text-xs text-slate-400">From</div>
+                <div className="text-base font-bold text-white">{formatPrice()}</div>
               </div>
             </div>
-            <div className="bg-purple-600/20 border border-purple-500/50 rounded-lg px-3 py-2">
-              <div className="text-xs text-purple-300 font-semibold">Click for Details</div>
+            <div className="bg-purple-600/20 border border-purple-500/50 rounded px-2 py-1">
+              <div className="text-xs text-purple-300 font-semibold">Details</div>
             </div>
           </div>
         </div>
@@ -400,38 +400,33 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
   viewAllCount?: number;
 }) {
   const [selectedEvent, setSelectedEvent] = useState<TicketmasterEvent | null>(null);
-  const [isPaused, setIsPaused] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const cardsPerPage = 10; // Show 10 cards at a time (2 rows × 5 cards)
+  
+  const totalPages = Math.ceil(events.length / cardsPerPage);
+  const currentEvents = events.slice(
+    currentPage * cardsPerPage,
+    (currentPage + 1) * cardsPerPage
+  );
 
-  const scroll = (direction: 'left' | 'right') => {
-    if (scrollRef.current) {
-      const scrollAmount = 400;
-      scrollRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  };
-
-  // Auto-scroll every 5 seconds
+  // Auto-advance page every 8 seconds
   useEffect(() => {
-    if (isPaused || !scrollRef.current || events.length === 0) return;
-
+    if (events.length === 0) return;
+    
     const interval = setInterval(() => {
-      if (scrollRef.current) {
-        const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
-        
-        // If at end, scroll back to start
-        if (scrollLeft >= scrollWidth - clientWidth - 10) {
-          scrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
-        } else {
-          scrollRef.current.scrollBy({ left: 400, behavior: 'smooth' });
-        }
-      }
-    }, 5000);
+      setCurrentPage((prev) => (prev + 1) % totalPages);
+    }, 8000);
 
     return () => clearInterval(interval);
-  }, [isPaused, events.length]);
+  }, [totalPages, events.length]);
+
+  const goToPage = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      setCurrentPage((prev) => Math.max(0, prev - 1));
+    } else {
+      setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1));
+    }
+  };
 
   if (events.length === 0) {
     return null;
@@ -440,21 +435,26 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
   return (
     <>
       <div className="mb-12">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold flex items-center gap-2" data-testid={`section-title-${title}`}>
-            <span>{icon}</span> {title}
-          </h2>
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            {viewAllCount && (
-              <span className="text-sm text-slate-600 dark:text-slate-400">
-                {viewAllCount} events
-              </span>
-            )}
+            <span className="text-3xl">{icon}</span>
+            <h2 className="text-2xl font-bold" data-testid={`section-title-${title}`}>
+              {title}
+            </h2>
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              ({events.length} events)
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-600 dark:text-slate-400">
+              Page {currentPage + 1} of {totalPages}
+            </span>
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => scroll('left')}
+                onClick={() => goToPage('prev')}
+                disabled={currentPage === 0}
                 className="rounded-full"
                 data-testid={`scroll-left-${title}`}
               >
@@ -463,7 +463,8 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => scroll('right')}
+                onClick={() => goToPage('next')}
+                disabled={currentPage === totalPages - 1}
                 className="rounded-full"
                 data-testid={`scroll-right-${title}`}
               >
@@ -472,21 +473,40 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
             </div>
           </div>
         </div>
-        <div 
-          ref={scrollRef}
-          onMouseEnter={() => setIsPaused(true)}
-          onMouseLeave={() => setIsPaused(false)}
-          className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory pb-4"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
-          {events.map((event) => (
-            <EventCard 
-              key={event.id} 
-              event={event} 
-              onClick={() => setSelectedEvent(event)}
-            />
+        
+        {/* Responsive Grid: 1 col mobile, 3 cols tablet, 5 cols desktop */}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+          {currentEvents.map((event, index) => (
+            <div 
+              key={event.id}
+              className="animate-fadeIn"
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
+              <EventCard 
+                event={event} 
+                onClick={() => setSelectedEvent(event)}
+              />
+            </div>
           ))}
         </div>
+
+        {/* Page Indicators */}
+        {totalPages > 1 && (
+          <div className="flex justify-center gap-2 mt-6">
+            {Array.from({ length: Math.min(totalPages, 10) }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrentPage(i)}
+                className={`h-2 rounded-full transition-all ${
+                  i === currentPage 
+                    ? 'w-8 bg-purple-600' 
+                    : 'w-2 bg-gray-600 hover:bg-gray-500'
+                }`}
+                data-testid={`page-indicator-${i}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {selectedEvent && (
