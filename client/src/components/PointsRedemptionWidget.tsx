@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { createClient } from '@supabase/supabase-js';
+import { ensureSupabaseInit } from '@/lib/supabase';
 import { Gift, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -35,21 +35,14 @@ export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail
 
   const fetchPointsBalance = async (email: string) => {
     try {
-      const configResponse = await fetch('/api/config/supabase');
+      // Get Supabase singleton client
+      const { supabase, isSupabaseConfigured } = await ensureSupabaseInit();
       
-      if (!configResponse.ok) {
-        throw new Error('Failed to load rewards configuration');
-      }
-      
-      const config = await configResponse.json();
-      
-      if (!config.isConfigured) {
+      if (!isSupabaseConfigured || !supabase) {
         setFetchError('Rewards system not configured');
         setLoading(false);
         return;
       }
-
-      const supabase = createClient(config.url, config.anonKey);
       
       const { data, error } = await supabase
         .from('customer_rewards')

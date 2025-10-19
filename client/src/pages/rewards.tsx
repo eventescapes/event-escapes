@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { createClient } from '@supabase/supabase-js';
+import { ensureSupabaseInit } from '@/lib/supabase';
 import { Award, TrendingUp, Gift, Info, Star } from 'lucide-react';
 
 interface CustomerRewards {
@@ -58,15 +58,12 @@ export default function RewardsPage() {
     try {
       console.log('💎 Fetching rewards for:', email);
       
-      // Get Supabase config
-      const configResponse = await fetch('/api/config/supabase');
-      const config = await configResponse.json();
+      // Get Supabase singleton client
+      const { supabase, isSupabaseConfigured } = await ensureSupabaseInit();
       
-      if (!config.isConfigured) {
+      if (!isSupabaseConfigured || !supabase) {
         throw new Error('Supabase not configured');
       }
-
-      const supabase = createClient(config.url, config.anonKey);
       
       // Fetch customer rewards
       const { data: rewardsData, error: rewardsError } = await supabase

@@ -1,11 +1,7 @@
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { ensureSupabaseInit } from '@/lib/supabase';
 import { X, Loader2, Luggage, Plus, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface BaggageSelectionModalProps {
   isOpen: boolean;
@@ -44,6 +40,16 @@ export function BaggageSelectionModal({
     try {
       setLoading(true);
       console.log('🧳 Fetching baggage options for offer:', offerId);
+      
+      // Get Supabase singleton client
+      const { supabase, isSupabaseConfigured } = await ensureSupabaseInit();
+      
+      if (!isSupabaseConfigured || !supabase) {
+        console.error('🧳 Supabase not configured');
+        setBaggageServices([]);
+        setLoading(false);
+        return;
+      }
       
       const { data, error } = await supabase.functions.invoke('available-services', {
         body: { offer_id: offerId },

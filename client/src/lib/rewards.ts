@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { ensureSupabaseInit } from '@/lib/supabase';
 
 interface AwardPointsParams {
   userEmail: string;
@@ -69,15 +69,12 @@ export async function redeemPoints(params: {
   try {
     console.log('💎 Redeeming points:', { userEmail, points, bookingReference });
 
-    // Get Supabase config
-    const configResponse = await fetch('/api/config/supabase');
-    const config = await configResponse.json();
+    // Get Supabase singleton client
+    const { supabase, isSupabaseConfigured } = await ensureSupabaseInit();
     
-    if (!config.isConfigured) {
+    if (!isSupabaseConfigured || !supabase) {
       return { success: false, error: 'Rewards system not configured' };
     }
-
-    const supabase = createClient(config.url, config.anonKey);
 
     // Redeem points using Supabase RPC function
     const { error: redeemError } = await supabase.rpc('redeem_points_hotels_only', {
