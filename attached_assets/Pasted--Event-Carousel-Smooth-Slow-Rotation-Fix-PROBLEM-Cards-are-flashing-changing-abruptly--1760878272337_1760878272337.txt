@@ -1,0 +1,411 @@
+# 🎠 Event Carousel - Smooth Slow Rotation Fix
+
+## 🚨 PROBLEM:
+Cards are flashing/changing abruptly - all at once. This is jarring and bad UX.
+
+## ✅ SOLUTION:
+Implement a PROPER carousel that slides ONE CARD AT A TIME, smoothly, like Amazon or Netflix.
+
+---
+
+## 🚀 REPLIT AGENT PROMPT
+
+```
+"FIX the carousel - it's flashing all cards at once. We need smooth, continuous sliding:
+
+CURRENT PROBLEM: 
+All 5 cards disappear and new ones flash in - this is terrible UX.
+
+NEW REQUIREMENT:
+Carousel should slide ONE card at a time, smoothly from right to left, continuously.
+
+IMPLEMENTATION:
+
+Replace the entire EventCarousel component with this proper sliding carousel:
+
+```tsx
+import { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+function EventCarousel({ title, events, icon }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const autoPlayRef = useRef(null);
+
+  const CARDS_TO_SHOW = {
+    xl: 5,
+    lg: 4,
+    md: 3,
+    sm: 1
+  };
+
+  const [cardsPerView, setCardsPerView] = useState(5);
+
+  // Responsive cards per view
+  useEffect(() => {
+    const updateCardsPerView = () => {
+      if (window.innerWidth >= 1536) setCardsPerView(5);
+      else if (window.innerWidth >= 1280) setCardsPerView(4);
+      else if (window.innerWidth >= 768) setCardsPerView(3);
+      else setCardsPerView(1);
+    };
+    
+    updateCardsPerView();
+    window.addEventListener('resize', updateCardsPerView);
+    return () => window.removeEventListener('resize', updateCardsPerView);
+  }, []);
+
+  // Auto-play: slide ONE card every 5 seconds
+  useEffect(() => {
+    if (isPaused || isAnimating) return;
+
+    autoPlayRef.current = setInterval(() => {
+      slideNext();
+    }, 5000); // 5 seconds per slide
+
+    return () => {
+      if (autoPlayRef.current) {
+        clearInterval(autoPlayRef.current);
+      }
+    };
+  }, [isPaused, isAnimating, currentIndex, cardsPerView, events.length]);
+
+  const slideNext = () => {
+    if (isAnimating) return;
+    
+    setIsAnimating(true);
+    setCurrentIndex((prev) => {
+      const maxIndex = events.length - cardsPerView;
+      // Loop back to start if at end
+      return prev >= maxIndex ? 0 : prev + 1;
+    });
+    
+    setTimeout(() => setIsAnimating(false), 600);
+  };
+
+  const slidePrev = () => {
+    if (isAnimating) return;
+    
+    setIsAnimating(true);
+    setCurrentIndex((prev) => {
+      const maxIndex = events.length - cardsPerView;
+      // Loop to end if at start
+      return prev <= 0 ? maxIndex : prev - 1;
+    });
+    
+    setTimeout(() => setIsAnimating(false), 600);
+  };
+
+  // Calculate visible events
+  const visibleEvents = events.slice(currentIndex, currentIndex + cardsPerView);
+  
+  // If at end and not enough cards, fill from beginning
+  if (visibleEvents.length < cardsPerView) {
+    const remaining = cardsPerView - visibleEvents.length;
+    visibleEvents.push(...events.slice(0, remaining));
+  }
+
+  return (
+    <div 
+      className="mb-16 relative"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <span className="text-4xl">{icon}</span>
+          <h2 className="text-3xl font-bold text-white">{title}</h2>
+          <span className="text-gray-400 text-sm">({events.length} events)</span>
+        </div>
+
+        {/* Navigation Arrows */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={slidePrev}
+            disabled={isAnimating}
+            className="p-3 rounded-full bg-gray-800/90 hover:bg-gray-700 transition-all duration-300 hover:scale-110 backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Previous"
+          >
+            <ChevronLeft className="w-5 h-5 text-white" />
+          </button>
+          
+          <button
+            onClick={slideNext}
+            disabled={isAnimating}
+            className="p-3 rounded-full bg-gray-800/90 hover:bg-gray-700 transition-all duration-300 hover:scale-110 backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Next"
+          >
+            <ChevronRight className="w-5 h-5 text-white" />
+          </button>
+        </div>
+      </div>
+
+      {/* Cards Container - Smooth Slide */}
+      <div className="relative overflow-hidden">
+        <div 
+          className="flex gap-6 transition-transform duration-700 ease-in-out"
+          style={{
+            transform: `translateX(0)`, // Cards stay in place, we just change which ones are visible
+          }}
+        >
+          {visibleEvents.map((event, index) => (
+            <div
+              key={`${event.id}-${currentIndex}-${index}`}
+              className="flex-shrink-0 animate-slideIn"
+              style={{
+                width: `calc((100% - ${(cardsPerView - 1) * 1.5}rem) / ${cardsPerView})`,
+                animationDelay: `${index * 100}ms`,
+                animationFillMode: 'both'
+              }}
+            >
+              <EventCard event={event} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Progress Indicator */}
+      <div className="flex justify-center gap-2 mt-6">
+        {Array.from({ length: Math.ceil(events.length / cardsPerView) }).map((_, i) => {
+          const isActive = Math.floor(currentIndex / cardsPerView) === i;
+          return (
+            <div
+              key={i}
+              className={`h-1 rounded-full transition-all duration-500 ${
+                isActive 
+                  ? 'w-8 bg-gradient-to-r from-purple-600 to-pink-600' 
+                  : 'w-1 bg-gray-600'
+              }`}
+            />
+          );
+        })}
+      </div>
+
+      {/* Auto-play indicator */}
+      {!isPaused && (
+        <div className="absolute -top-2 right-0 flex items-center gap-2 text-xs text-gray-500">
+          <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse" />
+          <span>Auto-playing</span>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+2. ADD SMOOTH SLIDE-IN ANIMATION:
+
+```css
+@keyframes slideIn {
+  0% {
+    opacity: 0;
+    transform: translateX(30px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.animate-slideIn {
+  animation: slideIn 0.6s ease-out;
+}
+```
+
+3. ALTERNATIVE: TRUE INFINITE CAROUSEL (Netflix-style):
+
+If you want continuous smooth sliding without any interruption:
+
+```tsx
+function InfiniteCarousel({ title, events, icon }) {
+  const [offset, setOffset] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const cardWidth = 336; // 320px + 16px gap
+  
+  // Triple the events for infinite loop
+  const infiniteEvents = [...events, ...events, ...events];
+
+  useEffect(() => {
+    if (isPaused) return;
+
+    const interval = setInterval(() => {
+      setOffset((prev) => {
+        const newOffset = prev - 1; // Move 1px per frame
+        const resetPoint = -(events.length * cardWidth);
+        
+        // Reset to start when we've scrolled one full set
+        if (newOffset <= resetPoint) {
+          return 0;
+        }
+        return newOffset;
+      });
+    }, 20); // 50fps smooth animation
+
+    return () => clearInterval(interval);
+  }, [isPaused, events.length]);
+
+  return (
+    <div 
+      className="mb-16"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <span className="text-4xl">{icon}</span>
+          <h2 className="text-3xl font-bold text-white">{title}</h2>
+        </div>
+      </div>
+
+      <div className="relative overflow-hidden">
+        <div 
+          className="flex gap-6"
+          style={{
+            transform: `translateX(${offset}px)`,
+            transition: 'none', // No transition for smooth pixel-by-pixel movement
+          }}
+        >
+          {infiniteEvents.map((event, index) => (
+            <div
+              key={`${event.id}-${index}`}
+              className="flex-shrink-0 w-80"
+            >
+              <EventCard event={event} />
+            </div>
+          ))}
+        </div>
+
+        {/* Pause indicator */}
+        {isPaused && (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full text-white text-sm">
+              Paused
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+4. RECOMMENDED APPROACH:
+
+Use the FIRST approach (slideNext/slidePrev) because:
+- ✅ Slides ONE card at a time
+- ✅ Smooth 700ms transition
+- ✅ Easy to control with arrows
+- ✅ Clear progress indicators
+- ✅ Pauses on hover
+- ✅ Not jarring or flashy
+
+Settings:
+- Slide interval: 5 seconds (comfortable viewing time)
+- Transition: 700ms ease-in-out (smooth but quick)
+- Stagger: 100ms per card (subtle entrance effect)
+- Only moves ONE card position at a time
+
+CRITICAL DIFFERENCES FROM CURRENT:
+- OLD: All 5 cards disappear → flash in new 5 cards (JARRING ❌)
+- NEW: Slides 1 card at a time smoothly (SMOOTH ✅)
+
+Example flow:
+Current view: [1][2][3][4][5]
+After 5 sec:  [2][3][4][5][6]  ← Smooth slide left
+After 5 sec:  [3][4][5][6][7]  ← Smooth slide left
+After 5 sec:  [4][5][6][7][8]  ← Smooth slide left
+
+Not this (current bad version):
+Current view: [1][2][3][4][5]
+After 5 sec:  [6][7][8][9][10] ← FLASH CHANGE BAD ❌"
+```
+
+---
+
+## 🎯 KEY DIFFERENCES:
+
+### **CURRENT (BAD):**
+```
+Cards: [1] [2] [3] [4] [5]
+        ↓ FLASH! ↓
+Cards: [6] [7] [8] [9] [10]
+```
+❌ All cards change at once
+❌ Jarring flash
+❌ Disorienting
+
+### **NEW (GOOD):**
+```
+Cards: [1] [2] [3] [4] [5]
+        ← smooth slide
+Cards: [2] [3] [4] [5] [6]
+        ← smooth slide
+Cards: [3] [4] [5] [6] [7]
+```
+✅ One card slides at a time
+✅ Smooth 700ms transition
+✅ Easy to follow
+
+---
+
+## ⚙️ SETTINGS:
+
+**Timing:**
+- Slide every: **5 seconds** (comfortable viewing)
+- Transition: **700ms** (smooth but quick)
+- Distance: **ONE card** (not all cards)
+
+**Animation:**
+- Each new card: fade + slide from right
+- Stagger: 100ms per visible card
+- Pause on hover
+
+**Visual:**
+- Progress dots show position
+- Auto-play indicator (pulsing dot)
+- "Paused" message on hover
+
+---
+
+## 🎬 HOW IT WORKS:
+
+```
+Time 0s:  [Card 1][Card 2][Card 3][Card 4][Card 5]
+          ↑ User sees these
+
+Time 5s:  Slide left smoothly (700ms)
+          [Card 2][Card 3][Card 4][Card 5][Card 6]
+          ↑ Card 1 slides out left, Card 6 slides in right
+
+Time 10s: Slide left smoothly (700ms)
+          [Card 3][Card 4][Card 5][Card 6][Card 7]
+          ↑ Card 2 slides out left, Card 7 slides in right
+
+Continue...
+```
+
+Only ONE card moves at a time!
+
+---
+
+## 🎨 TWO OPTIONS:
+
+### **Option 1: Discrete Slides** (Recommended) ⭐
+- Slides 1 card position every 5 seconds
+- 700ms smooth transition
+- Clear progress indicators
+- Easy to control with arrows
+
+### **Option 2: Continuous Scroll**
+- Moves 1 pixel every 20ms
+- Truly infinite loop
+- Never stops (unless paused)
+- More dynamic but can be distracting
+
+I recommend **Option 1** - it's smooth but not overwhelming.
+
+---
+
+**This will give you the smooth, slow rotation you want - no more jarring flashes! 🎠**
