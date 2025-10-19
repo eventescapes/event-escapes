@@ -6,7 +6,7 @@ import { insertBookingSchema, insertBookingItemSchema } from "@shared/schema";
 import { getSupabaseConfig } from "./supabase-config";
 import { z } from "zod";
 import { ServerEnv, assertSecretsReady } from "./env";
-import { fetchTicketmasterEvents, fetchTicketmasterEventsMultiRegion } from "./ticketmaster";
+import { fetchTicketmasterEvents, fetchTicketmasterEventsMultiRegion, fetchTicketmasterEventsWithClassifications } from "./ticketmaster";
 
 // Initialize Stripe only if the secret key is available
 let stripe: Stripe | null = null;
@@ -98,8 +98,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         res.json(response.events);
       } else {
-        // Otherwise, fetch from all regions with classifications
-        const { fetchTicketmasterEventsWithClassifications } = await import('./ticketmaster');
+        // Otherwise, fetch from all regions with ALL classifications
+        // This will make 16 API calls (4 regions × 4 classifications)
         const regions = ['US', 'CA', 'GB', 'AU'];
         
         const events = await fetchTicketmasterEventsWithClassifications(regions, {
