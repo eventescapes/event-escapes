@@ -1,0 +1,266 @@
+# 🎨 Event Cards - Text Contrast & Readability Fix
+
+## 🚨 PROBLEM:
+White text on light backgrounds (like the Palace of Dreams card with golden/cream background) is impossible to read.
+
+## ✅ SOLUTION:
+Add a dark gradient overlay to ALL event card images to ensure text is always readable.
+
+---
+
+## 🚀 REPLIT AGENT PROMPT
+
+```
+"Fix text readability on event cards:
+
+PROBLEM: White text is hard to read on light-colored event images (like Palace of Dreams with golden background).
+
+SOLUTION:
+
+1. ADD DARK GRADIENT OVERLAY:
+   Update the EventCard component image section:
+   
+   ```tsx
+   <div className="relative h-64 overflow-hidden">
+     {/* Event Image */}
+     <img 
+       src={event.images?.[0]?.url} 
+       alt={event.name}
+       className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
+     />
+     
+     {/* CRITICAL: Dark gradient overlay for text readability */}
+     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-black/20" />
+     
+     {/* Alternative: Stronger overlay if still hard to read */}
+     {/* <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent" /> */}
+   </div>
+   ```
+
+2. ADD TEXT SHADOWS:
+   Make all text on cards have drop shadows for extra readability:
+   
+   ```tsx
+   {/* Event Title */}
+   <h3 className="text-xl font-bold text-white mb-2 line-clamp-2 drop-shadow-lg" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.8)' }}>
+     {event.name}
+   </h3>
+   
+   {/* Date */}
+   <div className="text-white drop-shadow-md" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+     {formatDate(event.dates?.start?.localDate)}
+   </div>
+   
+   {/* Venue */}
+   <div className="text-white drop-shadow-md" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+     {event._embedded?.venues?.[0]?.name}
+   </div>
+   ```
+
+3. ENSURE BADGES HAVE SOLID BACKGROUNDS:
+   
+   ```tsx
+   {/* Category Badge */}
+   <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg">
+     {event.classifications?.[0]?.segment?.name}
+   </span>
+   
+   {/* Earn $20 Badge */}
+   <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-xl">
+     💰 Earn $20
+   </div>
+   ```
+
+4. ADD BACKDROP BLUR TO TEXT AREAS (Optional):
+   For even better readability, add backdrop blur:
+   
+   ```tsx
+   {/* Text content area */}
+   <div className="absolute inset-x-0 bottom-0 p-4 bg-black/60 backdrop-blur-sm">
+     <h3 className="text-xl font-bold text-white">
+       {event.name}
+     </h3>
+     <p className="text-gray-200 text-sm">
+       {formatDate(event.dates?.start?.localDate)}
+     </p>
+   </div>
+   ```
+
+5. COMPLETE UPDATED CARD COMPONENT:
+
+```tsx
+function EventCard({ event }) {
+  const [showModal, setShowModal] = useState(false);
+  
+  const lowestPrice = event.priceRanges?.[0]?.min;
+
+  return (
+    <>
+      <div className="bg-gray-900 rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 group">
+        {/* Image Section with Dark Overlay */}
+        <div className="relative h-64 overflow-hidden">
+          <img 
+            src={event.images?.[0]?.url} 
+            alt={event.name}
+            className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
+          />
+          
+          {/* CRITICAL FIX: Strong dark gradient for text readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/30" />
+          
+          {/* Earn $20 Badge - Top Right */}
+          <div className="absolute top-3 right-3 z-10">
+            <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-xl">
+              💰 Earn $20
+            </div>
+          </div>
+
+          {/* Category Badge - Bottom Left */}
+          <div className="absolute bottom-3 left-3 z-10">
+            <span className="bg-purple-600/90 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg">
+              {event.classifications?.[0]?.segment?.name || 'Event'}
+            </span>
+          </div>
+          
+          {/* Event Title - Overlay on Image */}
+          <div className="absolute inset-x-0 bottom-0 p-5 z-10">
+            <h3 
+              className="text-2xl font-bold text-white mb-2 line-clamp-2 leading-tight"
+              style={{ textShadow: '0 2px 12px rgba(0,0,0,0.9), 0 4px 24px rgba(0,0,0,0.6)' }}
+            >
+              {event.name}
+            </h3>
+            
+            {/* Date & Venue */}
+            <div className="space-y-1">
+              <div 
+                className="flex items-center gap-2 text-white text-sm"
+                style={{ textShadow: '0 1px 8px rgba(0,0,0,0.8)' }}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="font-medium">{formatDate(event.dates?.start?.localDate)}</span>
+              </div>
+              
+              <div 
+                className="flex items-center gap-2 text-white/90 text-sm"
+                style={{ textShadow: '0 1px 8px rgba(0,0,0,0.8)' }}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                </svg>
+                <span className="line-clamp-1">{event._embedded?.venues?.[0]?.name}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Section - Dark Background */}
+        <div className="p-5 bg-gray-900">
+          {/* Price */}
+          {lowestPrice && (
+            <div className="mb-4 p-3 bg-gray-800/50 backdrop-blur-sm rounded-lg border border-gray-700">
+              <p className="text-xs text-gray-400">From</p>
+              <p className="text-2xl font-bold text-white">${lowestPrice.toFixed(2)}</p>
+            </div>
+          )}
+
+          {/* CTA Button */}
+          <button
+            onClick={() => setShowModal(true)}
+            className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-4 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-2xl"
+          >
+            <div className="flex items-center justify-center gap-2">
+              <span>Check Ticketmaster</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {showModal && (
+        <RewardsModal event={event} onClose={() => setShowModal(false)} />
+      )}
+    </>
+  );
+}
+```
+
+6. ADD GLOBAL TEXT SHADOW UTILITY (Optional):
+   
+   Add to your Tailwind config or global CSS:
+   
+   ```css
+   .text-shadow-strong {
+     text-shadow: 0 2px 12px rgba(0,0,0,0.9), 0 4px 24px rgba(0,0,0,0.6);
+   }
+   
+   .text-shadow-medium {
+     text-shadow: 0 1px 8px rgba(0,0,0,0.8);
+   }
+   
+   .text-shadow-light {
+     text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+   }
+   ```
+   
+   Then use in components:
+   ```tsx
+   <h3 className="text-white text-shadow-strong">
+     {event.name}
+   </h3>
+   ```
+
+CRITICAL: The dark gradient overlay from-black/95 via-black/60 to-black/30 ensures text is ALWAYS readable regardless of image colors. This is the key fix."
+```
+
+---
+
+## 🎨 VISUAL COMPARISON:
+
+### **Before (Hard to Read):**
+```
+┌─────────────────────┐
+│ 🌅 Light Background │  ← Golden/cream color
+│                     │
+│  Palace of Dreams  │  ← White text (invisible!)
+│  Guided Tours      │  ← White text (invisible!)
+└─────────────────────┘
+```
+
+### **After (Easy to Read):**
+```
+┌─────────────────────┐
+│ 🌅 Light Background │  ← Original image
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │  ← Dark gradient overlay
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │
+│  Palace of Dreams  │  ← White text WITH shadow (readable!)
+│  Guided Tours      │  ← White text WITH shadow (readable!)
+└─────────────────────┘
+```
+
+---
+
+## ✅ KEY CHANGES:
+
+1. **Dark Gradient Overlay:** `from-black/95 via-black/60 to-black/30`
+2. **Text Shadows:** `text-shadow: 0 2px 12px rgba(0,0,0,0.9)`
+3. **Solid Badge Backgrounds:** Ensure badges have opaque backgrounds
+4. **Optional Backdrop Blur:** Extra readability boost
+
+---
+
+## 🎯 WHAT THIS FIXES:
+
+✅ Text readable on ALL backgrounds (light or dark)  
+✅ Maintains visual appeal  
+✅ Hover effects still work  
+✅ Professional look  
+✅ Consistent across all cards  
+
+---
+
+**Give this to Replit Agent to fix the text readability issue! 🎨**
