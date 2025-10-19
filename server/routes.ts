@@ -6,6 +6,7 @@ import { insertBookingSchema, insertBookingItemSchema } from "@shared/schema";
 import { getSupabaseConfig } from "./supabase-config";
 import { z } from "zod";
 import { ServerEnv, assertSecretsReady } from "./env";
+import { fetchTicketmasterEvents, fetchTicketmasterEventsMultiRegion } from "./ticketmaster";
 
 // Initialize Stripe only if the secret key is available
 let stripe: Stripe | null = null;
@@ -95,6 +96,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(event);
     } catch (error: any) {
       res.status(500).json({ message: "Error fetching Ticketmaster event: " + error.message });
+    }
+  });
+
+  // TEST: Fetch live events from Ticketmaster Discovery API
+  app.get("/api/test/ticketmaster-live", async (req, res) => {
+    try {
+      console.log('\n🧪 TESTING TICKETMASTER API INTEGRATION...\n');
+      
+      const { region, regions } = req.query;
+      
+      // Calculate date range (7 days to 4 months from now)
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() + 7);
+      
+      const endDate = new Date();
+      endDate.setMonth(endDate.getMonth() + 4);
+      
+      // Format dates for Ticketmaster API (YYYY-MM-DDTHH:mm:ssZ without milliseconds)
+      const startDateTime = startDate.toISOString().split('.')[0] + 'Z';
+      const endDateTime = endDate.toISOString().split('.')[0] + 'Z';
+      
+      let result;
+      
+      if (regions) {
+        // Test multiple regions
+        const regionList = (regions as string).split(',');
+        console.log('📍 Testing multiple regions:', regionList);
+        
+        const events = await fetchTicketmasterEventsMultiRegion(regionList, {
+          startDateTime,
+          endDateTime,
+          size: 20
+        });
+        
+        result = {
+          success: true,
+          totalEvents: events.length,
+          events,
+          dateRange: { startDateTime, endDateTime }
+        };
+      } else {
+        // Test single region (default US)
+        const countryCode = (region as string) || 'US';
+        console.log('📍 Testing single region:', countryCode);
+        
+        const response = await fetchTicketmasterEvents({
+          countryCode,
+          startDateTime,
+          endDateTime,
+          size: 20
+        });
+        
+        result = {
+          success: true,
+          region: countryCode,
+          totalEvents: response.totalEvents,
+          totalPages: response.totalPages,
+          eventsReturned: response.events.length,
+          events: response.events,
+          dateRange: { startDateTime, endDateTime }
+        };
+      }
+      
+      console.log('\n✅ TEST COMPLETED SUCCESSFULLY\n');
+      res.json(result);
+    } catch (error: any) {
+      console.error('\n❌ TEST FAILED:', error.message, '\n');
+      res.status(500).json({ 
+        success: false,
+        error: error.message,
+        stack: error.stack
+      });
     }
   });
 
