@@ -11,9 +11,17 @@ interface PointsRedemptionWidgetProps {
   bookingType: 'hotel' | 'flight' | 'package';
   onPointsApplied: (points: number, discount: number) => void;
   userEmail?: string;
+  appliedPoints?: number;
+  onRemovePoints?: () => void;
 }
 
-export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail }: PointsRedemptionWidgetProps) {
+export function PointsRedemptionWidget({ 
+  bookingType, 
+  onPointsApplied, 
+  userEmail, 
+  appliedPoints = 0,
+  onRemovePoints 
+}: PointsRedemptionWidgetProps) {
   const [pointsBalance, setPointsBalance] = useState<number | null>(null);
   const [pointsToRedeem, setPointsToRedeem] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -94,10 +102,10 @@ export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail
       return;
     }
 
-    if (points < 500) {
+    if (points < 1000) {
       toast({
         title: "Minimum Redemption",
-        description: "Minimum 500 points ($5) required for redemption",
+        description: "Minimum 1,000 points ($10) required for redemption",
         variant: "destructive"
       });
       return;
@@ -112,10 +120,10 @@ export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail
       return;
     }
 
-    if (bookingType !== 'hotel') {
+    if (bookingType !== 'hotel' && bookingType !== 'package') {
       toast({
-        title: "Hotel Bookings Only",
-        description: "Points can only be redeemed on hotel bookings",
+        title: "Hotels & Packages Only",
+        description: "Points can only be redeemed on hotel or package bookings",
         variant: "destructive"
       });
       return;
@@ -174,7 +182,7 @@ export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail
     );
   }
 
-  if (pointsBalance === null || pointsBalance < 500) {
+  if (pointsBalance === null || pointsBalance < 1000) {
     return (
       <Card className="p-4 bg-slate-50 dark:bg-slate-800" data-testid="card-no-points">
         <div className="flex items-start gap-3">
@@ -182,7 +190,7 @@ export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail
           <div>
             <div className="font-semibold mb-1">Event Escapes Rewards</div>
             <p className="text-sm text-muted-foreground">
-              You have {pointsBalance?.toLocaleString() || 0} points. Earn more points to redeem!
+              You have {pointsBalance?.toLocaleString() || 0} points. {pointsBalance && pointsBalance > 0 ? 'Minimum 1,000 points required to redeem.' : 'Earn more points to redeem!'}
             </p>
           </div>
         </div>
@@ -191,6 +199,39 @@ export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail
   }
 
   const availableValue = (pointsBalance / 100).toFixed(2);
+
+  // Show applied points state
+  if (appliedPoints > 0) {
+    return (
+      <Card className="p-6 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20" data-testid="card-points-applied">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold flex items-center gap-2 text-green-900 dark:text-green-100">
+              <Gift className="h-5 w-5 text-green-600" />
+              Points Applied
+            </h3>
+            {onRemovePoints && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onRemovePoints}
+                className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                data-testid="button-remove-points"
+              >
+                Remove
+              </Button>
+            )}
+          </div>
+          <div className="text-2xl font-bold text-green-900 dark:text-green-100" data-testid="text-applied-points">
+            -{appliedPoints.toLocaleString()} points (-${(appliedPoints / 100).toFixed(2)})
+          </div>
+          <p className="text-sm text-green-700 dark:text-green-300">
+            Your discount has been applied to the total
+          </p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className="p-6 border-purple-200 dark:border-purple-800" data-testid="card-points-redemption">
@@ -208,16 +249,16 @@ export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail
           </div>
         </div>
 
-        {bookingType !== 'hotel' && (
+        {bookingType !== 'hotel' && bookingType !== 'package' && (
           <div className="flex items-start gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
             <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
             <p className="text-sm text-yellow-800 dark:text-yellow-200">
-              Points can only be redeemed on <strong>hotel bookings</strong>. Not available for flights or packages.
+              Points can only be redeemed on <strong>hotel or package bookings</strong>. Not available for flights.
             </p>
           </div>
         )}
 
-        {bookingType === 'hotel' && (
+        {(bookingType === 'hotel' || bookingType === 'package') && (
           <>
             <div className="space-y-2">
               <Label htmlFor="points-input">Points to Redeem (100 points = $1)</Label>
@@ -225,12 +266,12 @@ export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail
                 <Input
                   id="points-input"
                   type="number"
-                  min="500"
+                  min="1000"
                   max={pointsBalance}
                   step="100"
                   value={pointsToRedeem}
                   onChange={(e) => setPointsToRedeem(e.target.value)}
-                  placeholder="Enter points (min. 500)"
+                  placeholder="Enter points (min. 1,000)"
                   data-testid="input-points"
                 />
                 <Button
@@ -242,7 +283,7 @@ export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail
                   Max
                 </Button>
               </div>
-              {pointsToRedeem && parseInt(pointsToRedeem, 10) >= 500 && (
+              {pointsToRedeem && parseInt(pointsToRedeem, 10) >= 1000 && (
                 <p className="text-sm text-green-600 dark:text-green-400" data-testid="discount-amount">
                   Discount: -${(parseInt(pointsToRedeem, 10) / 100).toFixed(2)}
                 </p>
@@ -252,7 +293,7 @@ export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail
             <Button
               type="button"
               onClick={handleApplyPoints}
-              disabled={applying || !pointsToRedeem || parseInt(pointsToRedeem, 10) < 500}
+              disabled={applying || !pointsToRedeem || parseInt(pointsToRedeem, 10) < 1000}
               className="w-full bg-purple-600 hover:bg-purple-700"
               data-testid="button-apply-points"
             >
@@ -260,7 +301,7 @@ export function PointsRedemptionWidget({ bookingType, onPointsApplied, userEmail
             </Button>
 
             <p className="text-xs text-muted-foreground text-center">
-              Minimum redemption: 500 points ($5)
+              Minimum redemption: 1,000 points ($10)
             </p>
           </>
         )}

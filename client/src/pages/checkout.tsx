@@ -16,6 +16,8 @@ import { formatCurrency } from "@/lib/utils";
 import { Calendar, Bed, Plane, Music, CreditCard, Bitcoin, Shield, Star, CheckCircle, User, Mail, Phone, Lock, Gift } from "lucide-react";
 import { z } from "zod";
 import { PromoCodeInput } from "@/components/PromoCodeInput";
+import { PointsRedemptionWidget } from "@/components/PointsRedemptionWidget";
+import { redeemPoints } from "@/lib/rewards";
 // Make sure to call `loadStripe` outside of a component's render to avoid
 // recreating the `Stripe` object on every render.
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
@@ -40,21 +42,30 @@ const guestInfoSchema = z.object({
 type GuestInfo = z.infer<typeof guestInfoSchema>;
 
 // Helper function to format cart data for display
-const getCartDisplayData = (cart: any, cartTotal: number, promoDiscount: number = 0) => {
+const getCartDisplayData = (cart: any, cartTotal: number, promoDiscount: number = 0, pointsDiscount: number = 0) => {
   const subtotal = cartTotal;
   const taxes = Math.round(subtotal * 0.1); // 10% tax
-  const total = Math.max(0, subtotal + taxes - promoDiscount); // Apply promo discount to final total
+  const total = Math.max(0, subtotal + taxes - promoDiscount - pointsDiscount); // Apply both promo and points discounts
 
   return {
     items: cart.items,
     subtotal,
     taxes,
     promoDiscount,
+    pointsDiscount,
     total,
   };
 };
 
-const CheckoutForm = ({ cartData }: { cartData: ReturnType<typeof getCartDisplayData> }) => {
+const CheckoutForm = ({ 
+  cartData, 
+  appliedPoints, 
+  userEmail 
+}: { 
+  cartData: ReturnType<typeof getCartDisplayData>;
+  appliedPoints?: number;
+  userEmail?: string;
+}) => {
   // Conditionally use Stripe hooks only when Elements provider is available
   let stripe, elements;
   try {
@@ -154,7 +165,7 @@ const CheckoutForm = ({ cartData }: { cartData: ReturnType<typeof getCartDisplay
             }
           }
 
-          await apiRequest("POST", "/api/bookings", {
+          const bookingResult: any = await apiRequest("POST", "/api/bookings", {
             guestEmail: data.email,
             guestName: `${data.firstName} ${data.lastName}`,
             guestPhone: data.phone,
@@ -163,6 +174,37 @@ const CheckoutForm = ({ cartData }: { cartData: ReturnType<typeof getCartDisplay
             flightData,
             selectedSeats: booking.selectedSeats || {}
           });
+
+          // Redeem points if any were applied
+          if (appliedPoints && appliedPoints > 0) {
+            const bookingRef = bookingResult?.id || `booking-${Date.now()}`;
+            const emailToUse = userEmail || data.email;
+            
+            console.log('💎 Redeeming points after successful payment:', {
+              points: appliedPoints,
+              email: emailToUse,
+              bookingRef
+            });
+            
+            const redemptionResult = await redeemPoints({
+              userEmail: emailToUse,
+              points: appliedPoints,
+              bookingReference: bookingRef,
+              description: `Redeemed on booking ${bookingRef}`
+            });
+
+            if (!redemptionResult.success) {
+              console.error('❌ Points redemption failed:', redemptionResult.error);
+              // Don't fail the booking, just log the error
+              toast({
+                title: "Points Redemption Failed",
+                description: "Your booking was successful but we couldn't redeem your points. Please contact support.",
+                variant: "destructive"
+              });
+            } else {
+              console.log('✅ Points redeemed successfully');
+            }
+          }
 
           setLocation("/confirmation");
         }
@@ -423,6 +465,8 @@ export default function Checkout() {
   const { toast } = useToast();
   const [promoDiscount, setPromoDiscount] = useState(0);
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountAmount: number; promoCodeId: string } | null>(null);
+  const [pointsDiscount, setPointsDiscount] = useState(0);
+  const [appliedPoints, setAppliedPoints] = useState(0);
 
   // Redirect to cart if no items
   useEffect(() => {
@@ -437,7 +481,27 @@ export default function Checkout() {
     }
   }, [getCartItemCount, navigate, toast]);
 
-  const cartData = getCartDisplayData(cart, getCartTotal(), promoDiscount);
+  // Determine booking type from cart items
+  // Points can only be redeemed on hotels and packages that INCLUDE hotels
+  const getBookingType = (): 'hotel' | 'flight' | 'package' => {
+    const hasHotel = cart.items.some((item: any) => item.type === 'hotel');
+    const hasFlight = cart.items.some((item: any) => item.type === 'flight');
+    const hasEvent = cart.items.some((item: any) => item.type === 'event');
+    
+    // Package ONLY if it includes a hotel + something else
+    if (hasHotel && (hasFlight || hasEvent)) {
+      return 'package';
+    }
+    // Hotel only
+    if (hasHotel) {
+      return 'hotel';
+    }
+    // Flight or event without hotel (not eligible for points)
+    return 'flight';
+  };
+
+  const bookingType = getBookingType();
+  const cartData = getCartDisplayData(cart, getCartTotal(), promoDiscount, pointsDiscount);
   const [clientSecret, setClientSecret] = useState("");
   const [stripeAvailable, setStripeAvailable] = useState(!!stripePromise);
 
@@ -453,6 +517,24 @@ export default function Checkout() {
       setPromoDiscount(0);
       setAppliedPromo(null);
     }
+  };
+
+  const handlePointsApplied = (points: number, discount: number) => {
+    setAppliedPoints(points);
+    setPointsDiscount(discount);
+    toast({
+      title: "Points Applied!",
+      description: `${points.toLocaleString()} points redeemed (-$${discount.toFixed(2)})`,
+    });
+  };
+
+  const handleRemovePoints = () => {
+    setAppliedPoints(0);
+    setPointsDiscount(0);
+    toast({
+      title: "Points Removed",
+      description: "Points have been removed from your booking",
+    });
   };
 
   useEffect(() => {
@@ -508,7 +590,11 @@ export default function Checkout() {
               </div>
             </div>
           </div>
-          <CheckoutForm cartData={cartData} />
+          <CheckoutForm 
+            cartData={cartData} 
+            appliedPoints={appliedPoints}
+            userEmail={localStorage.getItem('userEmail') || undefined}
+          />
         </div>
       </div>
     );
@@ -551,10 +637,18 @@ export default function Checkout() {
           <div className="lg:col-span-2">
             {stripePromise !== null && clientSecret ? (
               <Elements stripe={stripePromise} options={{ clientSecret }}>
-                <CheckoutForm cartData={cartData} />
+                <CheckoutForm 
+                  cartData={cartData} 
+                  appliedPoints={appliedPoints}
+                  userEmail={localStorage.getItem('userEmail') || undefined}
+                />
               </Elements>
             ) : (
-              <CheckoutForm cartData={cartData} />
+              <CheckoutForm 
+                cartData={cartData} 
+                appliedPoints={appliedPoints}
+                userEmail={localStorage.getItem('userEmail') || undefined}
+              />
             )}
           </div>
 
@@ -653,6 +747,16 @@ export default function Checkout() {
                 />
               </div>
 
+              {/* Points Redemption Widget */}
+              <div className="mb-6">
+                <PointsRedemptionWidget
+                  bookingType={bookingType}
+                  onPointsApplied={handlePointsApplied}
+                  appliedPoints={appliedPoints}
+                  onRemovePoints={handleRemovePoints}
+                />
+              </div>
+
               {/* Cart Total */}
               <div className="glass p-6 rounded-xl">
                 <div className="space-y-3 mb-4">
@@ -668,6 +772,12 @@ export default function Checkout() {
                     <div className="flex justify-between items-center font-accent">
                       <span className="text-green-600 dark:text-green-400">Promo Discount</span>
                       <span className="font-medium text-green-600 dark:text-green-400" data-testid="text-promo-discount">-{formatCurrency(promoDiscount)}</span>
+                    </div>
+                  )}
+                  {pointsDiscount > 0 && (
+                    <div className="flex justify-between items-center font-accent">
+                      <span className="text-purple-600 dark:text-purple-400">Points Discount</span>
+                      <span className="font-medium text-purple-600 dark:text-purple-400" data-testid="text-points-discount">-{formatCurrency(pointsDiscount)}</span>
                     </div>
                   )}
                 </div>
