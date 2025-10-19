@@ -417,6 +417,7 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
 }) {
   const [selectedEvent, setSelectedEvent] = useState<TicketmasterEvent | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
   const cardsPerPage = 10; // Show 10 cards at a time (2 rows × 5 cards)
   
   const totalPages = Math.ceil(events.length / cardsPerPage);
@@ -425,16 +426,16 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
     (currentPage + 1) * cardsPerPage
   );
 
-  // Auto-advance page every 8 seconds
+  // Auto-advance page every 4 seconds (faster, more noticeable)
   useEffect(() => {
-    if (events.length === 0) return;
+    if (events.length === 0 || isHovered) return;
     
     const interval = setInterval(() => {
       setCurrentPage((prev) => (prev + 1) % totalPages);
-    }, 8000);
+    }, 4000);
 
     return () => clearInterval(interval);
-  }, [totalPages, events.length]);
+  }, [totalPages, events.length, isHovered]);
 
   const goToPage = (direction: 'prev' | 'next') => {
     if (direction === 'prev') {
@@ -450,7 +451,11 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
 
   return (
     <>
-      <div className="mb-12">
+      <div 
+        className="mb-12"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <span className="text-3xl">{icon}</span>
@@ -495,8 +500,11 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
           {currentEvents.map((event, index) => (
             <div 
               key={event.id}
-              className="animate-fadeIn"
-              style={{ animationDelay: `${index * 50}ms` }}
+              className="animate-zoomIn"
+              style={{ 
+                animationDelay: `${index * 100}ms`,
+                animationFillMode: 'both'
+              }}
             >
               <EventCard 
                 event={event} 
