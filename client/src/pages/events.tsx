@@ -115,8 +115,8 @@ function EventCard({ event, onClick, showRewardsBadge = true }: EventCardProps) 
             data-testid={`event-image-${event.id}`}
           />
           
-          {/* Gradient Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+          {/* Gradient Overlay - Strong dark gradient for text readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/30" />
           
           {/* Category Badge - Top Right */}
           <div className="absolute top-3 right-3">
@@ -144,20 +144,36 @@ function EventCard({ event, onClick, showRewardsBadge = true }: EventCardProps) 
           
           {/* Event Info Overlay - Bottom */}
           <div className="absolute bottom-0 left-0 right-0 p-5">
-            <h3 className="text-white font-bold text-xl mb-3 line-clamp-2 group-hover:text-purple-300 transition-colors duration-300" data-testid={`event-name-${event.id}`}>
+            <h3 
+              className="text-white font-bold text-xl mb-3 line-clamp-2 group-hover:text-purple-300 transition-colors duration-300" 
+              style={{ textShadow: '0 2px 12px rgba(0,0,0,0.9), 0 4px 24px rgba(0,0,0,0.6)' }}
+              data-testid={`event-name-${event.id}`}
+            >
               {event.name}
             </h3>
             
             <div className="space-y-2 text-white/90 text-sm">
-              <div className="flex items-center gap-2" data-testid={`event-date-${event.id}`}>
+              <div 
+                className="flex items-center gap-2" 
+                style={{ textShadow: '0 1px 8px rgba(0,0,0,0.8)' }}
+                data-testid={`event-date-${event.id}`}
+              >
                 <span className="text-base">📅</span>
                 <span className="font-medium">{formatDate(event.event_start_date)}</span>
               </div>
-              <div className="flex items-center gap-2" data-testid={`event-location-${event.id}`}>
+              <div 
+                className="flex items-center gap-2" 
+                style={{ textShadow: '0 1px 8px rgba(0,0,0,0.8)' }}
+                data-testid={`event-location-${event.id}`}
+              >
                 <span className="text-base">{getCountryFlag(event.venue_country_code)}</span>
                 <span className="font-medium">{event.venue_city}</span>
               </div>
-              <div className="flex items-center gap-2" data-testid={`event-venue-${event.id}`}>
+              <div 
+                className="flex items-center gap-2" 
+                style={{ textShadow: '0 1px 8px rgba(0,0,0,0.8)' }}
+                data-testid={`event-venue-${event.id}`}
+              >
                 <span className="text-base">🏟️</span>
                 <span className="line-clamp-1 font-medium">{event.venue_name}</span>
               </div>
