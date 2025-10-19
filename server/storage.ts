@@ -293,6 +293,8 @@ export class DatabaseStorage implements IStorage {
     country?: string;
     segment?: string;
     isMajorEvent?: boolean;
+    startDate?: Date;
+    endDate?: Date;
     limit?: number;
   }): Promise<TicketmasterEvent[]> {
     const conditions = [];
@@ -309,8 +311,17 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(ticketmasterEvents.is_major_event, filters.isMajorEvent));
     }
     
-    // Filter for future events only
-    conditions.push(gte(ticketmasterEvents.event_start_date, new Date()));
+    // Date range filtering
+    if (filters?.startDate) {
+      conditions.push(gte(ticketmasterEvents.event_start_date, filters.startDate));
+    } else {
+      // Default: Filter for future events only
+      conditions.push(gte(ticketmasterEvents.event_start_date, new Date()));
+    }
+    
+    if (filters?.endDate) {
+      conditions.push(lte(ticketmasterEvents.event_start_date, filters.endDate));
+    }
     
     let query = db.select().from(ticketmasterEvents);
     

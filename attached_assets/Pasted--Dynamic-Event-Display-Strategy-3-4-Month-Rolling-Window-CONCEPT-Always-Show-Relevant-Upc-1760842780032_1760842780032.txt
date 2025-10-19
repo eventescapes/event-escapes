@@ -1,0 +1,352 @@
+# 🎯 Dynamic Event Display Strategy - 3-4 Month Rolling Window
+
+## CONCEPT: Always Show Relevant Upcoming Events
+
+### **Time Window Rules:**
+
+**Display Events:**
+- ✅ Start Date: Today (or next week to avoid sold out)
+- ✅ End Date: 3-4 months from today
+- ✅ Auto-updates daily (rolling window)
+- ✅ Never shows past events
+
+**Example (Today is October 19, 2025):**
+- Show events from: October 26, 2025 → February 19, 2026
+- Next month shows: November 19, 2025 → March 19, 2026
+- And so on... (always rolling forward)
+
+---
+
+## 🌍 REGION-BASED DYNAMIC CAROUSELS
+
+### **Strategy: Netflix-Style Regional + Category Mix**
+
+Instead of static regions, make it dynamic and smart:
+
+```
+EventEscapes Events Page
+
+🎉 LAUNCH CELEBRATION - Earn $20 Hotel Credit on Every Event Ticket!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ HAPPENING SOON (Next 30 Days)                              [View All →]
+   🇺🇸 🇨🇦 🇬🇧 🇦🇺 Mixed regions, sorted by date
+   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
+   │NFL Game │ │Beyoncé  │ │F1 London│ │NBA Final│ │Concert  │ │Boxing   │
+   │Oct 20   │ │Oct 25   │ │Oct 28   │ │Nov 1    │ │Nov 5    │ │Nov 8    │
+   │New York │ │LA       │ │Wembley  │ │Miami    │ │Toronto  │ │Vegas    │
+   └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘
+
+🏈 SPORTS - USA & CANADA (Oct-Jan)                           [View All →]
+   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
+   │ NFL     │ │ NBA     │ │ NHL     │ │ MLB     │ │ UFC     │
+   │ Cowboys │ │Lakers   │ │Maple Lfs│ │World Sr │ │300      │
+   │ Nov 15  │ │Dec 1    │ │Dec 20   │ │Nov 1    │ │Jan 10   │
+   └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘
+
+🎵 MUSIC & CONCERTS - USA & CANADA (Oct-Jan)                 [View All →]
+   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
+   │Taylor   │ │Drake    │ │Weeknd   │ │Coldplay │
+   │Swift    │ │Tour     │ │Stadium  │ │World    │
+   │Dec 5    │ │Nov 20   │ │Jan 15   │ │Dec 10   │
+   └─────────┘ └─────────┘ └─────────┘ └─────────┘
+
+🇬🇧 UK PREMIER EVENTS (Oct-Jan)                              [View All →]
+   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
+   │Premier  │ │Ed       │ │Rugby    │ │West End │
+   │League   │ │Sheeran  │ │Six Nat. │ │Hamilton │
+   │Nov 2    │ │Nov 10   │ │Dec 15   │ │Jan 5    │
+   └─────────┘ └─────────┘ └─────────┘ └─────────┘
+
+🇦🇺 AUSTRALIA EVENTS (Oct-Jan)                               [View All →]
+   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
+   │Sydney   │ │Melb F1  │ │Cricket  │ │Aus Open │
+   │NYE      │ │Grand Prix│ │Ashes   │ │Tennis   │
+   │Dec 31   │ │Nov 24   │ │Dec 10   │ │Jan 15   │
+   └─────────┘ └─────────┘ └─────────┘ └─────────┘
+
+🏆 CHAMPIONSHIP & FINALS (Oct-Jan)                           [View All →]
+   All regions, major championship events only
+   
+🎭 ARTS & THEATER (Oct-Jan)                                  [View All →]
+   All regions, theater and performing arts
+```
+
+---
+
+## 🔧 IMPLEMENTATION: Ticketmaster API Call
+
+### **Dynamic Date Range Calculation**
+
+```javascript
+// Calculate rolling 3-4 month window
+const today = new Date()
+const startDate = new Date()
+startDate.setDate(today.getDate() + 7) // Start 1 week from now
+
+const endDate = new Date()
+endDate.setMonth(today.getMonth() + 4) // 4 months out
+
+const startDateStr = startDate.toISOString().split('T')[0] // YYYY-MM-DD
+const endDateStr = endDate.toISOString().split('T')[0]
+
+// Fetch events from ALL your affiliate regions
+const regions = [
+  { code: 'US', name: 'United States', priority: 1 },
+  { code: 'CA', name: 'Canada', priority: 2 },
+  { code: 'GB', name: 'United Kingdom', priority: 3 },
+  { code: 'AU', name: 'Australia', priority: 4 }
+]
+
+// API call with date range
+const fetchEvents = async () => {
+  const allEvents = []
+  
+  for (const region of regions) {
+    const url = `https://app.ticketmaster.com/discovery/v2/events.json?` +
+      `apikey=${TICKETMASTER_API_KEY}` +
+      `&countryCode=${region.code}` +
+      `&startDateTime=${startDateStr}T00:00:00Z` +
+      `&endDateTime=${endDateStr}T23:59:59Z` +
+      `&size=50` + // 50 events per region
+      `&sort=date,asc`
+    
+    const response = await fetch(url)
+    const data = await response.json()
+    
+    if (data._embedded?.events) {
+      // Add region info to each event
+      const eventsWithRegion = data._embedded.events.map(event => ({
+        ...event,
+        region: region.name,
+        regionCode: region.code,
+        regionPriority: region.priority
+      }))
+      
+      allEvents.push(...eventsWithRegion)
+    }
+  }
+  
+  return allEvents
+}
+```
+
+---
+
+## 📊 DYNAMIC CATEGORIZATION LOGIC
+
+### **Smart Grouping Algorithm**
+
+```javascript
+const categorizeEvents = (events) => {
+  const categories = {}
+  
+  // 1. HAPPENING SOON (Next 30 days, all regions)
+  const thirtyDaysOut = new Date()
+  thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30)
+  
+  categories.happeningSoon = events
+    .filter(e => new Date(e.dates.start.dateTime) <= thirtyDaysOut)
+    .sort((a, b) => new Date(a.dates.start.dateTime) - new Date(b.dates.start.dateTime))
+    .slice(0, 20) // Top 20 soonest
+  
+  // 2. SPORTS BY REGION (US/CA combined since you have affiliate)
+  categories.sportsUSCA = events
+    .filter(e => 
+      (e.regionCode === 'US' || e.regionCode === 'CA') &&
+      e.classifications?.[0]?.segment?.name === 'Sports'
+    )
+    .sort((a, b) => new Date(a.dates.start.dateTime) - new Date(b.dates.start.dateTime))
+    .slice(0, 30)
+  
+  // 3. MUSIC BY REGION (US/CA)
+  categories.musicUSCA = events
+    .filter(e => 
+      (e.regionCode === 'US' || e.regionCode === 'CA') &&
+      e.classifications?.[0]?.segment?.name === 'Music'
+    )
+    .sort((a, b) => new Date(a.dates.start.dateTime) - new Date(b.dates.start.dateTime))
+    .slice(0, 30)
+  
+  // 4. UK EVENTS (All types)
+  categories.ukEvents = events
+    .filter(e => e.regionCode === 'GB')
+    .sort((a, b) => new Date(a.dates.start.dateTime) - new Date(b.dates.start.dateTime))
+    .slice(0, 30)
+  
+  // 5. AUSTRALIA EVENTS (All types)
+  categories.auEvents = events
+    .filter(e => e.regionCode === 'AU')
+    .sort((a, b) => new Date(a.dates.start.dateTime) - new Date(b.dates.start.dateTime))
+    .slice(0, 30)
+  
+  // 6. CHAMPIONSHIP/FINALS (All regions, filter by name keywords)
+  const championshipKeywords = ['final', 'championship', 'cup', 'bowl', 'series', 'grand prix', 'playoffs']
+  categories.championships = events
+    .filter(e => {
+      const name = e.name.toLowerCase()
+      return championshipKeywords.some(keyword => name.includes(keyword))
+    })
+    .sort((a, b) => new Date(a.dates.start.dateTime) - new Date(b.dates.start.dateTime))
+    .slice(0, 20)
+  
+  // 7. ARTS & THEATER (All regions)
+  categories.arts = events
+    .filter(e => 
+      e.classifications?.[0]?.segment?.name === 'Arts & Theatre' ||
+      e.classifications?.[0]?.segment?.name === 'Arts'
+    )
+    .sort((a, b) => new Date(a.dates.start.dateTime) - new Date(b.dates.start.dateTime))
+    .slice(0, 20)
+  
+  // Only return categories that have events
+  return Object.fromEntries(
+    Object.entries(categories).filter(([key, events]) => events.length >= 4)
+  )
+}
+```
+
+---
+
+## 🎨 CAROUSEL COMPONENT STRUCTURE
+
+```javascript
+const EventCarousel = ({ title, icon, events, viewAllLink }) => {
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          {icon} {title}
+        </h2>
+        <a href={viewAllLink} className="text-purple-600 hover:text-purple-700">
+          View All ({events.length}) →
+        </a>
+      </div>
+      
+      <div className="relative">
+        {/* Left Arrow */}
+        <button className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white p-2 rounded-full shadow-lg">
+          ←
+        </button>
+        
+        {/* Scrollable Container */}
+        <div className="overflow-x-auto scrollbar-hide flex gap-4 px-12">
+          {events.map(event => (
+            <EventCard 
+              key={event.id} 
+              event={event}
+              showRewardsBadge={true}
+            />
+          ))}
+        </div>
+        
+        {/* Right Arrow */}
+        <button className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white p-2 rounded-full shadow-lg">
+          →
+        </button>
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+## 📋 REPLIT AGENT PROMPT
+
+### **Complete Implementation Prompt:**
+
+```
+"Redesign the events page with dynamic 3-4 month rolling window and Netflix-style carousels:
+
+DATE RANGE LOGIC:
+1. Calculate date range dynamically:
+   - Start: 7 days from today (to avoid sold-out events)
+   - End: 4 months from today
+   - This creates a rolling 3-4 month window
+   - Auto-updates daily
+
+2. Ticketmaster API calls:
+   - Fetch events from: US, CA, GB, AU (our affiliate regions)
+   - Use startDateTime and endDateTime parameters
+   - Fetch 50 events per region (200 total)
+   - Sort by date ascending
+
+DYNAMIC CATEGORIZATION:
+1. Group events into carousels:
+   - ⚡ Happening Soon (next 30 days, all regions)
+   - 🏈 Sports - USA & Canada (our primary affiliate)
+   - 🎵 Music & Concerts - USA & Canada
+   - 🇬🇧 UK Premier Events (all types)
+   - 🇦🇺 Australia Events (all types)
+   - 🏆 Championships & Finals (all regions)
+   - 🎭 Arts & Theater (all regions)
+
+2. Only show carousels that have 4+ events
+3. Sort events by date within each carousel
+4. Use Ticketmaster API classifications for categorization
+
+CAROUSEL DESIGN:
+1. Each carousel shows 4-6 cards at once (responsive)
+2. Horizontal scroll with left/right arrow buttons
+3. Smooth scrolling animation
+4. "View All" link showing total count
+5. Cards show: image, event name, date, venue, city, country flag
+6. "Get Tickets + Earn $20" button on each card
+
+DATE DISPLAY:
+- Show relative dates: "In 5 days", "Next week", "In 2 months"
+- Include actual date: "Nov 15, 2025"
+- Show time if available
+
+CURRENT ISSUES TO FIX:
+- Only 6 events showing (need 100-200)
+- Static country groups (need dynamic categories)
+- Only 2 cards per row (need 4-6)
+- No scrolling (need horizontal scroll)
+- No date filtering (need 3-4 month window)
+
+Use the code examples from the DYNAMIC_EVENTS_STRATEGY.md file."
+```
+
+---
+
+## ✅ EXPECTED RESULTS
+
+### **After Implementation:**
+
+**Events Shown:**
+- 100-200 total events
+- Majority from US/Canada (your affiliate regions)
+- All within next 3-4 months
+- Auto-updated daily
+
+**Page Layout:**
+- 5-8 dynamic carousels
+- Each with 10-30 events
+- 4-6 visible cards per carousel
+- Horizontal scrolling
+- Clean, Netflix-style design
+
+**User Experience:**
+- Easy to browse by category
+- See what's happening soon
+- Filter by region/type naturally
+- All events are bookable (not too far out)
+- Rewards badge on every event
+
+---
+
+## 🎯 BENEFITS OF THIS APPROACH
+
+1. ✅ **Always Relevant** - Rolling window keeps content fresh
+2. ✅ **User-Friendly** - 3-4 months is perfect booking window
+3. ✅ **Dynamic** - Auto-categorizes based on actual events
+4. ✅ **Scalable** - Works for any region you add affiliate to
+5. ✅ **Conversion-Focused** - Shows events people can actually book NOW
+6. ✅ **Netflix UX** - Familiar, intuitive browsing experience
+
+---
+
+**This is the RIGHT strategy! Want me to create the complete Replit Agent prompt to implement this?**
