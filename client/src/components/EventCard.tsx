@@ -3,8 +3,7 @@ type EventCardProps = {
   dateLabel: string;
   venueLabel?: string;
   imageUrl: string;
-  ctaHref: string;
-  ctaText?: string;
+  onBook: () => void;
 
   // Strictly from Ticketmaster API:
   priceFrom?: number;          // e.g. priceRanges[0].min
@@ -32,8 +31,7 @@ export default function EventCard({
   dateLabel,
   venueLabel,
   imageUrl,
-  ctaHref,
-  ctaText = "Get Tickets & Earn $20",
+  onBook,
   priceFrom,
   currencyCode,
   formattedPriceText,
@@ -77,15 +75,14 @@ export default function EventCard({
 
         <div className="mt-auto" />
 
-        <a
-          href={ctaHref}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          type="button"
+          onClick={onBook}
           className="mt-4 inline-flex w-full items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold bg-fuchsia-600 text-white hover:bg-fuchsia-500 focus:outline-none focus:ring-2 focus:ring-fuchsia-400/60 transition-colors"
-          data-testid={`button-get-tickets-${title}`}
+          data-testid={`button-book-tickets-${title}`}
         >
-          {ctaText}
-        </a>
+          Book Tickets & Earn $20
+        </button>
       </div>
     </article>
   );
