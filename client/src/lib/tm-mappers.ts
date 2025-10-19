@@ -30,7 +30,7 @@ export function mapTMEventToCard(e: TMEvent) {
     dateLabel,
     venueLabel,
     imageUrl: img,
-    ctaHref: e.url ?? "#",
+    url: e.url ?? "#",
     priceFrom,
     currencyCode,
     // If TM ever provides a ready-to-render price string, add it here as formattedPriceText.

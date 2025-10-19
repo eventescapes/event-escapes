@@ -3,9 +3,11 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ChevronLeft, ChevronRight, X, MapPin, Calendar } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { UserInfoModal } from '@/components/UserInfoModal';
+import LeadModal from '@/components/LeadModal';
 import EventCard from '@/components/EventCard';
 import { mapTMEventToCard } from '@/lib/tm-mappers';
+import { ensureSupabaseInit } from '@/lib/supabase';
+import { useToast } from '@/hooks/use-toast';
 
 interface TicketmasterEvent {
   id: string;
@@ -31,9 +33,7 @@ interface TicketmasterEvent {
   filter_reason?: string;
 }
 
-function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClose: () => void }) {
-  const [showUserInfoModal, setShowUserInfoModal] = useState(false);
-  
+function NetflixStyleModal({ event, onClose, onBook }: { event: TicketmasterEvent; onClose: () => void; onBook: (url: string, title: string) => void }) {
   const getEventImage = () => {
     try {
       if (!event.images) return 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=1200&auto=format&fit=crop';
@@ -66,8 +66,7 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
   };
 
   const handleBookTickets = () => {
-    // Open user info modal first - it will handle the redirect after submission
-    setShowUserInfoModal(true);
+    onBook(event.url, event.name);
   };
 
   const dateTime = formatDateTime(event.event_start_date);
@@ -132,7 +131,7 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
                 className="w-full rounded-xl bg-fuchsia-600 text-white font-semibold py-3 text-center hover:bg-fuchsia-500 transition-colors"
                 data-testid="button-book-tickets-modal"
               >
-                Book Tickets
+                Book Tickets & Earn $20
               </button>
             </div>
 
@@ -210,22 +209,16 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
           </div>
         </ScrollArea>
       </DialogContent>
-      {showUserInfoModal && (
-        <UserInfoModal
-          open={showUserInfoModal}
-          onClose={() => setShowUserInfoModal(false)}
-          event={event}
-        />
-      )}
     </Dialog>
   );
 }
 
-function HorizontalScroller({ title, events, icon, viewAllCount }: { 
+function HorizontalScroller({ title, events, icon, viewAllCount, onBook }: { 
   title: string; 
   events: TicketmasterEvent[]; 
   icon: string;
   viewAllCount?: number;
+  onBook: (url: string, title: string) => void;
 }) {
   const [selectedEvent, setSelectedEvent] = useState<TicketmasterEvent | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -345,8 +338,11 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
             const cardProps = mapTMEventToCard(tmEvent);
             
             return (
-              <div key={event.id} onClick={() => setSelectedEvent(event)}>
-                <EventCard {...cardProps} />
+              <div key={event.id}>
+                <EventCard 
+                  {...cardProps} 
+                  onBook={() => onBook(cardProps.url, cardProps.title)}
+                />
               </div>
             );
           })}
@@ -354,7 +350,11 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
       </div>
 
       {selectedEvent && (
-        <NetflixStyleModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+        <NetflixStyleModal 
+          event={selectedEvent} 
+          onClose={() => setSelectedEvent(null)}
+          onBook={onBook}
+        />
       )}
     </>
   );
@@ -402,6 +402,12 @@ export default function Events() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Lead modal state
+  const [leadOpen, setLeadOpen] = useState(false);
+  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+  const [pendingTitle, setPendingTitle] = useState<string | undefined>();
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchEvents();
@@ -542,8 +548,84 @@ export default function Events() {
   const isLaunchPeriod = new Date() < new Date('2026-06-30');
   const rewardAmount = isLaunchPeriod ? 20 : 10;
 
+  function handleBook(url: string, title?: string) {
+    // Store the URL and open the modal - do NOT navigate yet
+    setPendingUrl(url);
+    setPendingTitle(title);
+    setLeadOpen(true);
+  }
+
+  async function handleLeadSubmit(lead: { name: string; email: string }) {
+    try {
+      // Get Supabase client for affiliate tracking
+      const { supabase, isSupabaseConfigured } = await ensureSupabaseInit();
+      
+      if (isSupabaseConfigured && supabase && pendingUrl) {
+        // Generate unique click ID
+        const clickId = `${pendingTitle}_${lead.email.toLowerCase().trim()}_${Date.now()}`;
+        
+        // Build affiliate URL
+        const cleanUrl = pendingUrl.split('?')[0];
+        const affiliateUrl = `${cleanUrl}?afflky=6581273`;
+        
+        // Save to affiliate_clicks table
+        await supabase
+          .from('affiliate_clicks')
+          .insert({
+            click_id: clickId,
+            event_id: pendingUrl.split('/').pop() || '',
+            event_name: pendingTitle || '',
+            user_email: lead.email.toLowerCase().trim(),
+            user_name: lead.name.trim(),
+            affiliate_id: '6581273',
+            ticketmaster_url: affiliateUrl,
+            clicked_at: new Date().toISOString()
+          });
+
+        // Initialize customer rewards
+        await supabase
+          .from('customer_rewards')
+          .upsert({
+            user_email: lead.email.toLowerCase().trim(),
+            user_name: lead.name.trim(),
+            points_balance: 0,
+            campaign_type: isLaunchPeriod ? 'launch' : 'evergreen'
+          }, { 
+            onConflict: 'user_email',
+            ignoreDuplicates: true 
+          });
+
+        // Open Ticketmaster in new tab
+        window.open(affiliateUrl, '_blank', 'noopener,noreferrer');
+      } else if (pendingUrl) {
+        // Fallback if Supabase not configured
+        window.open(pendingUrl, '_blank', 'noopener,noreferrer');
+      }
+
+      // Show success toast
+      toast({
+        title: "🎉 Opening Ticketmaster!",
+        description: `You'll earn $${rewardAmount} hotel credit when you complete your purchase!`,
+        duration: 5000
+      });
+    } catch (error) {
+      console.error('❌ Error processing lead:', error);
+      // Still open Ticketmaster even if tracking fails
+      if (pendingUrl) {
+        window.open(pendingUrl, '_blank', 'noopener,noreferrer');
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900 dark:from-black dark:via-gray-900 dark:to-black">
+      <LeadModal
+        open={leadOpen}
+        onClose={() => setLeadOpen(false)}
+        onSubmit={handleLeadSubmit}
+        eventTitle={pendingTitle}
+      />
+
       <div className="container mx-auto px-4 py-8">
         {/* Hero Section with Rewards */}
         <div className="bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white py-8 px-6 rounded-2xl mb-8 shadow-2xl">
@@ -594,6 +676,7 @@ export default function Events() {
                 events={categories.happeningSoon}
                 icon="⚡"
                 viewAllCount={categories.happeningSoon.length}
+                onBook={handleBook}
               />
             )}
             
@@ -603,6 +686,7 @@ export default function Events() {
                 events={categories.sportsUSCA}
                 icon="🏈"
                 viewAllCount={categories.sportsUSCA.length}
+                onBook={handleBook}
               />
             )}
             
@@ -612,6 +696,7 @@ export default function Events() {
                 events={categories.musicUSCA}
                 icon="🎵"
                 viewAllCount={categories.musicUSCA.length}
+                onBook={handleBook}
               />
             )}
             
@@ -621,6 +706,7 @@ export default function Events() {
                 events={categories.ukEvents}
                 icon="🇬🇧"
                 viewAllCount={categories.ukEvents.length}
+                onBook={handleBook}
               />
             )}
             
@@ -630,6 +716,7 @@ export default function Events() {
                 events={categories.auEvents}
                 icon="🇦🇺"
                 viewAllCount={categories.auEvents.length}
+                onBook={handleBook}
               />
             )}
             
@@ -639,6 +726,7 @@ export default function Events() {
                 events={categories.championships}
                 icon="🏆"
                 viewAllCount={categories.championships.length}
+                onBook={handleBook}
               />
             )}
             
@@ -648,6 +736,7 @@ export default function Events() {
                 events={categories.arts}
                 icon="🎭"
                 viewAllCount={categories.arts.length}
+                onBook={handleBook}
               />
             )}
           </>
