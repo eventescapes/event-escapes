@@ -400,17 +400,38 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
   viewAllCount?: number;
 }) {
   const [selectedEvent, setSelectedEvent] = useState<TicketmasterEvent | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
-      const scrollAmount = 320;
+      const scrollAmount = 400;
       scrollRef.current.scrollBy({
         left: direction === 'left' ? -scrollAmount : scrollAmount,
         behavior: 'smooth'
       });
     }
   };
+
+  // Auto-scroll every 5 seconds
+  useEffect(() => {
+    if (isPaused || !scrollRef.current || events.length === 0) return;
+
+    const interval = setInterval(() => {
+      if (scrollRef.current) {
+        const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+        
+        // If at end, scroll back to start
+        if (scrollLeft >= scrollWidth - clientWidth - 10) {
+          scrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+        } else {
+          scrollRef.current.scrollBy({ left: 400, behavior: 'smooth' });
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [isPaused, events.length]);
 
   if (events.length === 0) {
     return null;
@@ -453,6 +474,8 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
         </div>
         <div 
           ref={scrollRef}
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
           className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory pb-4"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
