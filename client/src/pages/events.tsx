@@ -416,34 +416,60 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
   viewAllCount?: number;
 }) {
   const [selectedEvent, setSelectedEvent] = useState<TicketmasterEvent | null>(null);
-  const [currentPage, setCurrentPage] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
-  const cardsPerPage = 10; // Show 10 cards at a time (2 rows × 5 cards)
+  const [cardsPerView, setCardsPerView] = useState(5);
   
-  const totalPages = Math.ceil(events.length / cardsPerPage);
-  const currentEvents = events.slice(
-    currentPage * cardsPerPage,
-    (currentPage + 1) * cardsPerPage
-  );
+  // Responsive cards per view
+  useEffect(() => {
+    const updateCardsPerView = () => {
+      if (window.innerWidth >= 1536) setCardsPerView(5);
+      else if (window.innerWidth >= 1280) setCardsPerView(4);
+      else if (window.innerWidth >= 768) setCardsPerView(3);
+      else setCardsPerView(1);
+    };
+    
+    updateCardsPerView();
+    window.addEventListener('resize', updateCardsPerView);
+    return () => window.removeEventListener('resize', updateCardsPerView);
+  }, []);
 
-  // Auto-advance page every 4 seconds (faster, more noticeable)
+  // Auto-slide ONE card every 5 seconds (smooth, not jarring)
   useEffect(() => {
     if (events.length === 0 || isHovered) return;
     
     const interval = setInterval(() => {
-      setCurrentPage((prev) => (prev + 1) % totalPages);
-    }, 4000);
+      setCurrentIndex((prev) => {
+        const maxIndex = events.length - cardsPerView;
+        return prev >= maxIndex ? 0 : prev + 1;
+      });
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [totalPages, events.length, isHovered]);
+  }, [events.length, isHovered, cardsPerView]);
 
-  const goToPage = (direction: 'prev' | 'next') => {
-    if (direction === 'prev') {
-      setCurrentPage((prev) => Math.max(0, prev - 1));
-    } else {
-      setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1));
-    }
+  const slideNext = () => {
+    setCurrentIndex((prev) => {
+      const maxIndex = events.length - cardsPerView;
+      return prev >= maxIndex ? 0 : prev + 1;
+    });
   };
+
+  const slidePrev = () => {
+    setCurrentIndex((prev) => {
+      const maxIndex = events.length - cardsPerView;
+      return prev <= 0 ? maxIndex : prev - 1;
+    });
+  };
+
+  // Get visible events (sliding window)
+  const visibleEvents = events.slice(currentIndex, currentIndex + cardsPerView);
+  
+  // If at end and not enough cards, wrap from beginning
+  if (visibleEvents.length < cardsPerView) {
+    const remaining = cardsPerView - visibleEvents.length;
+    visibleEvents.push(...events.slice(0, remaining));
+  }
 
   if (events.length === 0) {
     return null;
@@ -452,7 +478,7 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
   return (
     <>
       <div 
-        className="mb-12"
+        className="mb-12 relative"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -467,16 +493,12 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-600 dark:text-slate-400">
-              Page {currentPage + 1} of {totalPages}
-            </span>
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => goToPage('prev')}
-                disabled={currentPage === 0}
-                className="rounded-full"
+                onClick={slidePrev}
+                className="rounded-full hover:bg-purple-600 hover:text-white transition-all"
                 data-testid={`scroll-left-${title}`}
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -484,9 +506,8 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => goToPage('next')}
-                disabled={currentPage === totalPages - 1}
-                className="rounded-full"
+                onClick={slideNext}
+                className="rounded-full hover:bg-purple-600 hover:text-white transition-all"
                 data-testid={`scroll-right-${title}`}
               >
                 <ChevronRight className="h-4 w-4" />
@@ -495,40 +516,49 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
           </div>
         </div>
         
-        {/* Responsive Grid: 1 col mobile, 3 cols tablet, 5 cols desktop */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-          {currentEvents.map((event, index) => (
-            <div 
-              key={event.id}
-              className="animate-zoomIn"
-              style={{ 
-                animationDelay: `${index * 100}ms`,
-                animationFillMode: 'both'
-              }}
-            >
-              <EventCard 
-                event={event} 
-                onClick={() => setSelectedEvent(event)}
-              />
-            </div>
-          ))}
+        {/* Smooth Sliding Carousel - ONE card at a time */}
+        <div className="relative overflow-hidden">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            {visibleEvents.map((event, index) => (
+              <div 
+                key={`${event.id}-${currentIndex}-${index}`}
+                className="animate-zoomIn"
+                style={{ 
+                  animationDelay: `${index * 100}ms`,
+                  animationFillMode: 'both'
+                }}
+              >
+                <EventCard 
+                  event={event} 
+                  onClick={() => setSelectedEvent(event)}
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Page Indicators */}
-        {totalPages > 1 && (
-          <div className="flex justify-center gap-2 mt-6">
-            {Array.from({ length: Math.min(totalPages, 10) }).map((_, i) => (
-              <button
+        {/* Progress Indicators */}
+        <div className="flex justify-center gap-2 mt-6">
+          {Array.from({ length: Math.min(Math.ceil(events.length / cardsPerView), 10) }).map((_, i) => {
+            const isActive = Math.floor(currentIndex / cardsPerView) === i;
+            return (
+              <div
                 key={i}
-                onClick={() => setCurrentPage(i)}
-                className={`h-2 rounded-full transition-all ${
-                  i === currentPage 
-                    ? 'w-8 bg-purple-600' 
-                    : 'w-2 bg-gray-600 hover:bg-gray-500'
+                className={`h-1 rounded-full transition-all duration-500 ${
+                  isActive 
+                    ? 'w-8 bg-gradient-to-r from-purple-600 to-pink-600' 
+                    : 'w-1 bg-gray-600'
                 }`}
-                data-testid={`page-indicator-${i}`}
               />
-            ))}
+            );
+          })}
+        </div>
+
+        {/* Auto-play indicator */}
+        {!isHovered && (
+          <div className="absolute -top-2 right-0 flex items-center gap-2 text-xs text-gray-500">
+            <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse" />
+            <span>Auto-sliding</span>
           </div>
         )}
       </div>
