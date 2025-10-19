@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, X, MapPin, Calendar, ExternalLink, Package } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, MapPin, Calendar } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { UserInfoModal } from '@/components/UserInfoModal';
@@ -65,11 +65,8 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
     };
   };
 
-  const handlePackageBooking = () => {
-    window.location.href = `/packages/build?event=${event.id}&venue_lat=${event.venue_latitude}&venue_lng=${event.venue_longitude}&venue_name=${encodeURIComponent(event.venue_name)}`;
-  };
-
-  const handleTicketPurchase = () => {
+  const handleBookTickets = () => {
+    // Open user info modal first - it will handle the redirect after submission
     setShowUserInfoModal(true);
   };
 
@@ -79,10 +76,10 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black text-white border-none" data-testid="event-modal">
+      <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black text-white border-none z-50" data-testid="event-modal">
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 z-50 bg-black/50 hover:bg-black/70 rounded-full p-2 transition-colors"
+          className="absolute top-4 right-4 z-[60] bg-black/50 hover:bg-black/70 rounded-full p-2 transition-colors"
           data-testid="button-close-modal"
         >
           <X className="h-6 w-6" />
@@ -128,32 +125,15 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
 
           {/* Content */}
           <div className="p-8 bg-gradient-to-b from-black to-slate-900">
-            {/* Action Buttons */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-              <Button
-                onClick={handlePackageBooking}
-                className="h-16 text-lg bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
-                data-testid="button-book-package-modal"
+            {/* Action Button - Centered */}
+            <div className="mb-8 max-w-md mx-auto">
+              <button
+                onClick={handleBookTickets}
+                className="w-full rounded-xl bg-fuchsia-600 text-white font-semibold py-3 text-center hover:bg-fuchsia-500 transition-colors"
+                data-testid="button-book-tickets-modal"
               >
-                <Package className="mr-3 h-6 w-6" />
-                <div className="text-left">
-                  <div className="font-bold">Book Complete Package</div>
-                  <div className="text-xs text-white/80">Flights + Hotels + Tickets</div>
-                </div>
-              </Button>
-
-              <Button
-                onClick={handleTicketPurchase}
-                variant="outline"
-                className="h-16 text-lg border-white/30 hover:bg-white/10"
-                data-testid="button-buy-tickets-modal"
-              >
-                <ExternalLink className="mr-3 h-6 w-6" />
-                <div className="text-left">
-                  <div className="font-bold">Get Tickets on Ticketmaster</div>
-                  <div className="text-xs text-white/60">Official tickets</div>
-                </div>
-              </Button>
+                Book Tickets
+              </button>
             </div>
 
             {/* Event Details */}
