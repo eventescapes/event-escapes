@@ -15,6 +15,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatCurrency } from "@/lib/utils";
 import { Calendar, Bed, Plane, Music, CreditCard, Bitcoin, Shield, Star, CheckCircle, User, Mail, Phone, Lock, Gift } from "lucide-react";
 import { z } from "zod";
+import { PromoCodeInput } from "@/components/PromoCodeInput";
 // Make sure to call `loadStripe` outside of a component's render to avoid
 // recreating the `Stripe` object on every render.
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
@@ -39,15 +40,16 @@ const guestInfoSchema = z.object({
 type GuestInfo = z.infer<typeof guestInfoSchema>;
 
 // Helper function to format cart data for display
-const getCartDisplayData = (cart: any, cartTotal: number) => {
+const getCartDisplayData = (cart: any, cartTotal: number, promoDiscount: number = 0) => {
   const subtotal = cartTotal;
   const taxes = Math.round(subtotal * 0.1); // 10% tax
-  const total = subtotal + taxes;
+  const total = Math.max(0, subtotal + taxes - promoDiscount); // Apply promo discount to final total
 
   return {
     items: cart.items,
     subtotal,
     taxes,
+    promoDiscount,
     total,
   };
 };
@@ -419,6 +421,8 @@ export default function Checkout() {
   const [, navigate] = useLocation();
   const { cart, getCartTotal, getCartItemCount } = useBooking();
   const { toast } = useToast();
+  const [promoDiscount, setPromoDiscount] = useState(0);
+  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountAmount: number; promoCodeId: string } | null>(null);
 
   // Redirect to cart if no items
   useEffect(() => {
@@ -433,9 +437,23 @@ export default function Checkout() {
     }
   }, [getCartItemCount, navigate, toast]);
 
-  const cartData = getCartDisplayData(cart, getCartTotal());
+  const cartData = getCartDisplayData(cart, getCartTotal(), promoDiscount);
   const [clientSecret, setClientSecret] = useState("");
   const [stripeAvailable, setStripeAvailable] = useState(!!stripePromise);
+
+  const handlePromoApplied = (promo: { code: string; discountAmount: number; promoCodeId: string } | null) => {
+    if (promo) {
+      setPromoDiscount(promo.discountAmount);
+      setAppliedPromo(promo);
+      toast({
+        title: "Promo Code Applied!",
+        description: `You saved $${promo.discountAmount.toFixed(2)} with code ${promo.code}`,
+      });
+    } else {
+      setPromoDiscount(0);
+      setAppliedPromo(null);
+    }
+  };
 
   useEffect(() => {
     // Only create PaymentIntent if Stripe is available and cart has items
@@ -626,6 +644,15 @@ export default function Checkout() {
                 </div>
               ))}
 
+              {/* Promo Code Input */}
+              <div className="mb-6">
+                <PromoCodeInput
+                  bookingType="hotel"
+                  bookingAmount={cartData.subtotal + cartData.taxes}
+                  onPromoApplied={handlePromoApplied}
+                />
+              </div>
+
               {/* Cart Total */}
               <div className="glass p-6 rounded-xl">
                 <div className="space-y-3 mb-4">
@@ -637,6 +664,12 @@ export default function Checkout() {
                     <span className="text-muted-foreground">Taxes & Fees</span>
                     <span className="font-medium text-primary" data-testid="text-taxes">{formatCurrency(cartData.taxes)}</span>
                   </div>
+                  {promoDiscount > 0 && (
+                    <div className="flex justify-between items-center font-accent">
+                      <span className="text-green-600 dark:text-green-400">Promo Discount</span>
+                      <span className="font-medium text-green-600 dark:text-green-400" data-testid="text-promo-discount">-{formatCurrency(promoDiscount)}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="border-t border-accent/20 pt-4">
                   <div className="flex justify-between items-center">
