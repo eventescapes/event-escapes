@@ -72,12 +72,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { country, startDate, endDate, limit } = req.query;
       
-      // Calculate date range (7 days to 4 months from now)
+      // Calculate date range (7 days to 6 months from now for more events)
       const defaultStartDate = new Date();
       defaultStartDate.setDate(defaultStartDate.getDate() + 7);
       
       const defaultEndDate = new Date();
-      defaultEndDate.setMonth(defaultEndDate.getMonth() + 4);
+      defaultEndDate.setMonth(defaultEndDate.getMonth() + 6); // Extended to 6 months
       
       // Format dates for Ticketmaster API (YYYY-MM-DDTHH:mm:ssZ without milliseconds)
       const startDateTime = startDate 
@@ -87,14 +87,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? new Date(endDate as string).toISOString().split('.')[0] + 'Z'
         : defaultEndDate.toISOString().split('.')[0] + 'Z';
       
-      const response = await fetchTicketmasterEvents({
-        countryCode: country as string,
-        startDateTime,
-        endDateTime,
-        size: limit ? parseInt(limit as string) : 50
-      });
-      
-      res.json(response.events);
+      // If a specific country is requested, fetch for that country
+      if (country) {
+        const response = await fetchTicketmasterEvents({
+          countryCode: country as string,
+          startDateTime,
+          endDateTime,
+          size: limit ? parseInt(limit as string) : 200 // Increased from 50 to 200
+        });
+        
+        res.json(response.events);
+      } else {
+        // Otherwise, fetch from all regions with classifications
+        const { fetchTicketmasterEventsWithClassifications } = await import('./ticketmaster');
+        const regions = ['US', 'CA', 'GB', 'AU'];
+        
+        const events = await fetchTicketmasterEventsWithClassifications(regions, {
+          startDateTime,
+          endDateTime,
+          size: 200 // 200 events per classification per region
+        });
+        
+        res.json(events);
+      }
     } catch (error: any) {
       console.error('Error fetching live Ticketmaster events:', error);
       res.status(500).json({ message: "Error fetching live Ticketmaster events: " + error.message });

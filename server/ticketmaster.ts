@@ -61,6 +61,7 @@ export interface TicketmasterFetchOptions {
   size?: number;
   page?: number;
   classificationName?: string;
+  classificationId?: string;
   sort?: string;
 }
 
@@ -96,6 +97,10 @@ export async function fetchTicketmasterEvents(
 
   if (options.classificationName) {
     params.append('classificationName', options.classificationName);
+  }
+
+  if (options.classificationId) {
+    params.append('classificationId', options.classificationId);
   }
 
   if (options.page !== undefined) {
@@ -221,5 +226,88 @@ export async function fetchTicketmasterEventsMultiRegion(
 
   console.log('📊 Total events from all regions:', allEvents.length);
 
+  return allEvents;
+}
+
+/**
+ * Ticketmaster Classification IDs
+ */
+const CLASSIFICATIONS = [
+  { id: 'KZFzniwnSyZfZ7v7nJ', name: 'Music' },
+  { id: 'KZFzniwnSyZfZ7v7nE', name: 'Sports' },
+  { id: 'KZFzniwnSyZfZ7v7na', name: 'Arts & Theatre' },
+  { id: 'KZFzniwnSyZfZ7v7n1', name: 'Family' }
+];
+
+/**
+ * Helper to delay execution (for rate limiting)
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Fetch events with classification IDs across multiple regions
+ * Implements rate limiting to avoid Ticketmaster's 5 requests/second limit
+ */
+export async function fetchTicketmasterEventsWithClassifications(
+  regions: string[],
+  options: Omit<TicketmasterFetchOptions, 'countryCode' | 'classificationId'> = {}
+): Promise<TicketmasterEvent[]> {
+  console.log('🚀 Starting comprehensive event fetch...');
+  console.log(`📍 Regions: ${regions.join(', ')}`);
+  console.log(`📊 Classifications: ${CLASSIFICATIONS.map(c => c.name).join(', ')}`);
+  
+  const allEvents: TicketmasterEvent[] = [];
+  const eventIds = new Set<string>(); // Track unique event IDs
+  
+  // Fetch sequentially to respect rate limits (5 requests/second max)
+  // We'll do one request every 250ms to stay safe
+  for (const region of regions) {
+    for (const classification of CLASSIFICATIONS) {
+      try {
+        console.log(`🎯 Fetching ${classification.name} events for ${region}...`);
+        
+        const result = await fetchTicketmasterEvents({
+          ...options,
+          countryCode: region,
+          classificationId: classification.id
+        });
+        
+        // Only add unique events (avoid duplicates)
+        let newEventsCount = 0;
+        for (const event of result.events) {
+          if (!eventIds.has(event.id)) {
+            eventIds.add(event.id);
+            allEvents.push(event);
+            newEventsCount++;
+          }
+        }
+        
+        console.log(`✅ ${region} / ${classification.name}: ${result.events.length} events (${newEventsCount} new)`);
+        
+        // Rate limiting: wait 250ms between requests (4 requests/second)
+        await delay(250);
+      } catch (error: any) {
+        console.error(`❌ ${region} / ${classification.name}: ${error.message}`);
+        // Continue with other requests even if one fails
+      }
+    }
+  }
+  
+  console.log(`\n🎉 TOTAL UNIQUE EVENTS FETCHED: ${allEvents.length}`);
+  console.log(`📦 Breakdown by segment:`);
+  
+  // Log breakdown
+  const segmentCounts: Record<string, number> = {};
+  allEvents.forEach(event => {
+    const segment = event.segment || 'Other';
+    segmentCounts[segment] = (segmentCounts[segment] || 0) + 1;
+  });
+  
+  Object.entries(segmentCounts).forEach(([segment, count]) => {
+    console.log(`   - ${segment}: ${count} events`);
+  });
+  
   return allEvents;
 }
