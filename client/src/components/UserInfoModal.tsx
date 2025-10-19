@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { createClient } from '@supabase/supabase-js';
+import { ensureSupabaseInit } from '@/lib/supabase';
 
 interface UserInfoModalProps {
   open: boolean;
@@ -47,15 +47,12 @@ export function UserInfoModal({ open, onClose, event }: UserInfoModalProps) {
     try {
       console.log('🎫 Preparing Ticketmaster redirect with rewards tracking...');
       
-      // Get Supabase config from server
-      const configResponse = await fetch('/api/config/supabase');
-      const config = await configResponse.json();
+      // Get Supabase singleton client
+      const { supabase, isSupabaseConfigured } = await ensureSupabaseInit();
       
-      if (!config.isConfigured) {
+      if (!isSupabaseConfigured || !supabase) {
         throw new Error('Supabase not configured');
       }
-
-      const supabase = createClient(config.url, config.anonKey);
       
       // Generate unique click ID
       const clickId = `${event.id}_${email.toLowerCase().trim()}_${Date.now()}`;
@@ -142,6 +139,9 @@ export function UserInfoModal({ open, onClose, event }: UserInfoModalProps) {
           <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-purple-700 bg-clip-text text-transparent">
             🎉 Unlock Rewards!
           </DialogTitle>
+          <DialogDescription>
+            Complete your purchase on Ticketmaster to earn your hotel credit.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4 py-4">
