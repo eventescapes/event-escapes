@@ -52,7 +52,9 @@ Preferred communication style: Simple, everyday language.
 - **Launch Campaign**: $20 hotel credit per event ticket purchase (active until June 30, 2026)
 - **Evergreen Program**: $10 hotel credit per event ticket (begins July 1, 2026)
 - **Points System**: Hotels 2pts/$1, Flights 1pt/$1, Packages 3pts/$1
-- **Redemption**: 100 points = $1, hotel bookings only, 500 point minimum
+- **Redemption**: 100 points = $1, minimum 1,000 points ($10) required
+- **Eligibility**: Hotels and packages (with hotel component) only - flight-only and event-only bookings excluded
+- **Checkout Integration**: Real-time discount preview, combined with promo codes, automatic Supabase redemption after payment
 - **Tier System**: Member (1x), Preferred (1.2x), Elite (1.5x) multipliers based on annual spend
 - **Affiliate Integration**: Ticketmaster affiliate tracking with automatic credit awarding via webhooks
 
@@ -60,6 +62,10 @@ Preferred communication style: Simple, everyday language.
 - **Flight Booking**: Duffel API integration through Supabase Edge Functions for flight search and booking
 - **Hotel Search**: Supabase Edge Functions for hotel availability and booking
 - **Event Tickets**: Ticketmaster API with affiliate tracking (ID: 6581273), webhook-based reward processing
+  - **Dynamic Event Display**: Netflix-style carousels with 3-4 month rolling window (7 days to 4 months from today)
+  - **Smart Categorization**: Events automatically organized into categories (Happening Soon, Sports US/CA, Music US/CA, UK Events, AU Events, Championships, Arts & Theater)
+  - **Adaptive UI**: Only shows categories with 4+ events, fetches 50 events per region (200 total)
+  - **Enhanced UX**: Relative date formatting, country flags, rewards badges, horizontal scrolling carousels
 - **Maps and Location**: Geographic coordinate storage for venues and distance calculations
 - **Email**: Prepared for confirmation and booking management emails
 
