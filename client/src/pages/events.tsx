@@ -540,68 +540,39 @@ export default function Events() {
   }, []);
 
   const fetchEvents = async () => {
-    console.log('🎫 Fetching Ticketmaster events with 3-4 month rolling window...');
+    console.log('🎫 Fetching comprehensive Ticketmaster events (6 months, all classifications)...');
     setLoading(true);
     setError(null);
 
     try {
-      // Calculate rolling 3-4 month window
-      const today = new Date();
-      const startDate = new Date();
-      startDate.setDate(today.getDate() + 7); // Start 1 week from now
+      // Fetch ALL events from all regions with all classifications
+      // The backend will handle: US, CA, GB, AU × Music, Sports, Arts, Family
+      console.log('🚀 Making comprehensive API call to fetch events...');
       
-      const endDate = new Date();
-      endDate.setMonth(today.getMonth() + 4); // 4 months out
+      const response = await fetch('/api/ticketmaster-events/live');
+
+      if (!response.ok) {
+        console.error('❌ Failed to fetch events:', response.status);
+        throw new Error(`Failed to fetch events: ${response.status}`);
+      }
+
+      const events = await response.json();
+      console.log(`✅ Received ${events.length} unique events from Ticketmaster!`);
       
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
+      // Normalize event dates
+      const normalizedEvents = events.map((event: TicketmasterEvent) => ({
+        ...event,
+        event_start_date: typeof event.event_start_date === 'string' 
+          ? event.event_start_date 
+          : new Date(event.event_start_date).toISOString()
+      }));
+
+      setAllEvents(normalizedEvents);
       
-      console.log('📅 Date range:', { startDateStr, endDateStr });
-
-      // Fetch events from all regions with date range
-      const regions = [
-        { code: 'US', priority: 1 },
-        { code: 'CA', priority: 2 },
-        { code: 'GB', priority: 3 },
-        { code: 'AU', priority: 4 }
-      ];
-
-      const fetchFromRegion = async (regionCode: string, priority: number) => {
-        console.log(`🔍 Fetching ${regionCode} events from LIVE API...`);
-        
-        const response = await fetch(
-          `/api/ticketmaster-events/live?country=${regionCode}&startDate=${startDateStr}&endDate=${endDateStr}&limit=50`
-        );
-
-        if (!response.ok) {
-          console.error(`❌ Failed to fetch ${regionCode} events:`, response.status);
-          return [];
-        }
-
-        const events = await response.json();
-        console.log(`✅ ${regionCode} events:`, events.length);
-        
-        // Add region metadata to each event
-        return events.map((event: TicketmasterEvent) => ({
-          ...event,
-          regionPriority: priority,
-          event_start_date: typeof event.event_start_date === 'string' 
-            ? event.event_start_date 
-            : new Date(event.event_start_date).toISOString()
-        }));
-      };
-
-      const eventResults = await Promise.all(
-        regions.map(r => fetchFromRegion(r.code, r.priority))
-      );
-
-      const combinedEvents = eventResults.flat();
-      setAllEvents(combinedEvents);
-      
-      console.log('📊 Total events loaded:', combinedEvents.length);
+      console.log('📊 Total events loaded:', normalizedEvents.length);
 
       // Categorize events dynamically
-      categorizeEvents(combinedEvents);
+      categorizeEvents(normalizedEvents);
     } catch (err: any) {
       console.error('❌ Error fetching events:', err);
       setError(err.message || 'Failed to load events');
