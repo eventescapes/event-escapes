@@ -69,12 +69,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Ticketmaster Events
   app.get("/api/ticketmaster-events", async (req, res) => {
     try {
-      const { country, segment, isMajorEvent, limit } = req.query;
+      const { country, segment, isMajorEvent, startDate, endDate, limit } = req.query;
       
       const filters: any = {};
       if (country) filters.country = country as string;
       if (segment) filters.segment = segment as string;
       if (isMajorEvent !== undefined) filters.isMajorEvent = isMajorEvent === 'true';
+      if (startDate) filters.startDate = new Date(startDate as string);
+      if (endDate) filters.endDate = new Date(endDate as string);
       if (limit) filters.limit = parseInt(limit as string);
       
       const events = await storage.getTicketmasterEvents(filters);

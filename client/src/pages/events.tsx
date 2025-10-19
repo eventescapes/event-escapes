@@ -35,9 +35,10 @@ interface TicketmasterEvent {
 interface EventCardProps {
   event: TicketmasterEvent;
   onClick: () => void;
+  showRewardsBadge?: boolean;
 }
 
-function EventCard({ event, onClick }: EventCardProps) {
+function EventCard({ event, onClick, showRewardsBadge = true }: EventCardProps) {
   const getEventImage = () => {
     try {
       if (!event.images) return 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&auto=format&fit=crop';
@@ -55,12 +56,27 @@ function EventCard({ event, onClick }: EventCardProps) {
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
+    const now = new Date();
+    const diffTime = Math.abs(date.getTime() - now.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    const formattedDate = date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric', 
       year: 'numeric',
       weekday: 'short'
     });
+    
+    // Add relative time
+    if (diffDays <= 7) {
+      return `In ${diffDays} days • ${formattedDate}`;
+    } else if (diffDays <= 30) {
+      const weeks = Math.floor(diffDays / 7);
+      return `In ${weeks} week${weeks > 1 ? 's' : ''} • ${formattedDate}`;
+    } else {
+      const months = Math.floor(diffDays / 30);
+      return `In ${months} month${months > 1 ? 's' : ''} • ${formattedDate}`;
+    }
   };
 
   const formatPrice = () => {
@@ -69,6 +85,19 @@ function EventCard({ event, onClick }: EventCardProps) {
     }
     return 'Check Ticketmaster';
   };
+
+  const getCountryFlag = (countryCode: string) => {
+    const flags: Record<string, string> = {
+      'US': '🇺🇸',
+      'GB': '🇬🇧',
+      'CA': '🇨🇦',
+      'AU': '🇦🇺'
+    };
+    return flags[countryCode] || '🌍';
+  };
+
+  const isLaunchPeriod = new Date() < new Date('2026-06-30');
+  const rewardAmount = isLaunchPeriod ? 20 : 10;
 
   return (
     <div 
@@ -83,16 +112,28 @@ function EventCard({ event, onClick }: EventCardProps) {
           className="w-full h-[400px] object-cover"
           data-testid={`event-image-${event.id}`}
         />
-        <div className="absolute top-3 right-3">
+        <div className="absolute top-3 right-3 flex gap-2">
           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
             event.segment === 'Music' 
               ? 'bg-purple-500 text-white' 
-              : 'bg-blue-500 text-white'
+              : event.segment === 'Sports'
+              ? 'bg-blue-500 text-white'
+              : 'bg-pink-500 text-white'
           }`}
           data-testid={`event-segment-${event.id}`}>
             {event.segment}
           </span>
         </div>
+        
+        {showRewardsBadge && (
+          <div className="absolute top-3 left-3">
+            <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-black px-3 py-1 rounded-full text-xs font-bold shadow-lg"
+              data-testid="rewards-badge">
+              Earn ${rewardAmount} Credit
+            </div>
+          </div>
+        )}
+        
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4">
           <h3 className="text-white font-bold text-lg mb-2 line-clamp-2" data-testid={`event-name-${event.id}`}>
             {event.name}
@@ -100,10 +141,10 @@ function EventCard({ event, onClick }: EventCardProps) {
           <div className="space-y-1 text-white/90 text-sm">
             <div className="flex items-center gap-2" data-testid={`event-date-${event.id}`}>
               <span>📅</span>
-              <span>{formatDate(event.event_start_date)}</span>
+              <span className="text-xs">{formatDate(event.event_start_date)}</span>
             </div>
             <div className="flex items-center gap-2" data-testid={`event-location-${event.id}`}>
-              <span>📍</span>
+              <span>{getCountryFlag(event.venue_country_code)}</span>
               <span>{event.venue_city}</span>
             </div>
             <div className="flex items-center gap-2" data-testid={`event-venue-${event.id}`}>
@@ -332,7 +373,12 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
   );
 }
 
-function HorizontalScroller({ title, events, icon }: { title: string; events: TicketmasterEvent[]; icon: string }) {
+function HorizontalScroller({ title, events, icon, viewAllCount }: { 
+  title: string; 
+  events: TicketmasterEvent[]; 
+  icon: string;
+  viewAllCount?: number;
+}) {
   const [selectedEvent, setSelectedEvent] = useState<TicketmasterEvent | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -347,18 +393,7 @@ function HorizontalScroller({ title, events, icon }: { title: string; events: Ti
   };
 
   if (events.length === 0) {
-    return (
-      <div className="mb-12">
-        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2" data-testid={`section-title-${title}`}>
-          <span>{icon}</span> {title}
-        </h2>
-        <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-8 text-center">
-          <p className="text-slate-600 dark:text-slate-400" data-testid="empty-state">
-            No major events found in this region yet
-          </p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -368,25 +403,32 @@ function HorizontalScroller({ title, events, icon }: { title: string; events: Ti
           <h2 className="text-2xl font-bold flex items-center gap-2" data-testid={`section-title-${title}`}>
             <span>{icon}</span> {title}
           </h2>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => scroll('left')}
-              className="rounded-full"
-              data-testid={`scroll-left-${title}`}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => scroll('right')}
-              className="rounded-full"
-              data-testid={`scroll-right-${title}`}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center gap-3">
+            {viewAllCount && (
+              <span className="text-sm text-slate-600 dark:text-slate-400">
+                {viewAllCount} events
+              </span>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => scroll('left')}
+                className="rounded-full"
+                data-testid={`scroll-left-${title}`}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => scroll('right')}
+                className="rounded-full"
+                data-testid={`scroll-right-${title}`}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
         <div 
@@ -426,11 +468,27 @@ function LoadingSkeleton() {
   );
 }
 
+interface EventCategories {
+  happeningSoon: TicketmasterEvent[];
+  sportsUSCA: TicketmasterEvent[];
+  musicUSCA: TicketmasterEvent[];
+  ukEvents: TicketmasterEvent[];
+  auEvents: TicketmasterEvent[];
+  championships: TicketmasterEvent[];
+  arts: TicketmasterEvent[];
+}
+
 export default function Events() {
-  const [usEvents, setUsEvents] = useState<TicketmasterEvent[]>([]);
-  const [gbEvents, setGbEvents] = useState<TicketmasterEvent[]>([]);
-  const [caEvents, setCaEvents] = useState<TicketmasterEvent[]>([]);
-  const [auEvents, setAuEvents] = useState<TicketmasterEvent[]>([]);
+  const [allEvents, setAllEvents] = useState<TicketmasterEvent[]>([]);
+  const [categories, setCategories] = useState<EventCategories>({
+    happeningSoon: [],
+    sportsUSCA: [],
+    musicUSCA: [],
+    ukEvents: [],
+    auEvents: [],
+    championships: [],
+    arts: []
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -439,95 +497,65 @@ export default function Events() {
   }, []);
 
   const fetchEvents = async () => {
-    console.log('🎫 Fetching Ticketmaster events from Supabase...');
+    console.log('🎫 Fetching Ticketmaster events with 3-4 month rolling window...');
     setLoading(true);
     setError(null);
 
     try {
-      // Get Supabase config
-      const configResponse = await fetch('/api/config/supabase');
-      const config = await configResponse.json();
+      // Calculate rolling 3-4 month window
+      const today = new Date();
+      const startDate = new Date();
+      startDate.setDate(today.getDate() + 7); // Start 1 week from now
       
-      if (!config.url || !config.anonKey) {
-        console.warn('⚠️ Supabase not configured, trying local API...');
-        // Fallback to local API
-        const fetchFromLocal = async (country: string) => {
-          const response = await fetch(`/api/ticketmaster-events?country=${country}&isMajorEvent=true&limit=20`);
-          if (response.ok) {
-            return await response.json();
-          }
-          return [];
-        };
+      const endDate = new Date();
+      endDate.setMonth(today.getMonth() + 4); // 4 months out
+      
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      console.log('📅 Date range:', { startDateStr, endDateStr });
 
-        const [us, gb, ca, au] = await Promise.all([
-          fetchFromLocal('US'),
-          fetchFromLocal('GB'),
-          fetchFromLocal('CA'),
-          fetchFromLocal('AU')
-        ]);
+      // Fetch events from all regions with date range
+      const regions = [
+        { code: 'US', priority: 1 },
+        { code: 'CA', priority: 2 },
+        { code: 'GB', priority: 3 },
+        { code: 'AU', priority: 4 }
+      ];
 
-        setUsEvents(us);
-        setGbEvents(gb);
-        setCaEvents(ca);
-        setAuEvents(au);
-        return;
-      }
-
-      const fetchCountry = async (country: string) => {
-        console.log(`🔍 Fetching ${country} events from Supabase...`);
+      const fetchFromRegion = async (regionCode: string, priority: number) => {
+        console.log(`🔍 Fetching ${regionCode} events...`);
         
-        // Call Supabase edge function directly
-        const url = `${config.url}/functions/v1/search-ticketmaster-events?country=${country}&page_size=20&is_major_event=true`;
-        
-        const response = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${config.anonKey}`,
-            'apikey': config.anonKey,
-            'Content-Type': 'application/json'
-          }
-        });
+        const response = await fetch(
+          `/api/ticketmaster-events?country=${regionCode}&startDate=${startDateStr}&endDate=${endDateStr}&limit=50`
+        );
 
         if (!response.ok) {
-          console.error(`❌ Failed to fetch ${country} events:`, response.status, await response.text());
+          console.error(`❌ Failed to fetch ${regionCode} events:`, response.status);
           return [];
         }
 
-        const data = await response.json();
-        console.log(`📦 ${country} raw response:`, data);
+        const events = await response.json();
+        console.log(`✅ ${regionCode} events:`, events.length);
         
-        // Handle different response formats
-        let events = [];
-        if (Array.isArray(data)) {
-          events = data;
-        } else if (data && Array.isArray(data.events)) {
-          events = data.events;
-        } else if (data && data.data && Array.isArray(data.data)) {
-          events = data.data;
-        }
-        
-        console.log(`✅ ${country} events:`, events.length);
-        return events;
+        // Add region metadata to each event
+        return events.map((event: TicketmasterEvent) => ({
+          ...event,
+          regionPriority: priority
+        }));
       };
 
-      const [us, gb, ca, au] = await Promise.all([
-        fetchCountry('US'),
-        fetchCountry('GB'),
-        fetchCountry('CA'),
-        fetchCountry('AU')
-      ]);
+      const eventResults = await Promise.all(
+        regions.map(r => fetchFromRegion(r.code, r.priority))
+      );
 
-      setUsEvents(us);
-      setGbEvents(gb);
-      setCaEvents(ca);
-      setAuEvents(au);
+      const combinedEvents = eventResults.flat();
+      setAllEvents(combinedEvents);
       
-      console.log('📊 Total events loaded:', {
-        US: us.length,
-        GB: gb.length,
-        CA: ca.length,
-        AU: au.length,
-        total: us.length + gb.length + ca.length + au.length
-      });
+      console.log('📊 Total events loaded:', combinedEvents.length);
+
+      // Categorize events dynamically
+      categorizeEvents(combinedEvents);
     } catch (err: any) {
       console.error('❌ Error fetching events:', err);
       setError(err.message || 'Failed to load events');
@@ -535,6 +563,91 @@ export default function Events() {
       setLoading(false);
     }
   };
+
+  const categorizeEvents = (events: TicketmasterEvent[]) => {
+    const newCategories: EventCategories = {
+      happeningSoon: [],
+      sportsUSCA: [],
+      musicUSCA: [],
+      ukEvents: [],
+      auEvents: [],
+      championships: [],
+      arts: []
+    };
+
+    const thirtyDaysOut = new Date();
+    thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
+
+    // 1. HAPPENING SOON (Next 30 days, all regions)
+    newCategories.happeningSoon = events
+      .filter(e => new Date(e.event_start_date) <= thirtyDaysOut)
+      .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
+      .slice(0, 20);
+
+    // 2. SPORTS BY REGION (US/CA combined)
+    newCategories.sportsUSCA = events
+      .filter(e => 
+        (e.venue_country_code === 'US' || e.venue_country_code === 'CA') &&
+        e.segment === 'Sports'
+      )
+      .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
+      .slice(0, 30);
+
+    // 3. MUSIC BY REGION (US/CA)
+    newCategories.musicUSCA = events
+      .filter(e => 
+        (e.venue_country_code === 'US' || e.venue_country_code === 'CA') &&
+        e.segment === 'Music'
+      )
+      .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
+      .slice(0, 30);
+
+    // 4. UK EVENTS (All types)
+    newCategories.ukEvents = events
+      .filter(e => e.venue_country_code === 'GB')
+      .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
+      .slice(0, 30);
+
+    // 5. AUSTRALIA EVENTS (All types)
+    newCategories.auEvents = events
+      .filter(e => e.venue_country_code === 'AU')
+      .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
+      .slice(0, 30);
+
+    // 6. CHAMPIONSHIPS/FINALS (All regions, filter by keywords)
+    const championshipKeywords = ['final', 'championship', 'cup', 'bowl', 'series', 'grand prix', 'playoff', 'world'];
+    newCategories.championships = events
+      .filter(e => {
+        const name = e.name.toLowerCase();
+        return championshipKeywords.some(keyword => name.includes(keyword));
+      })
+      .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
+      .slice(0, 20);
+
+    // 7. ARTS & THEATER (All regions)
+    newCategories.arts = events
+      .filter(e => 
+        e.segment === 'Arts & Theatre' ||
+        e.segment === 'Arts'
+      )
+      .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
+      .slice(0, 20);
+
+    setCategories(newCategories);
+    
+    console.log('📂 Categories:', {
+      happeningSoon: newCategories.happeningSoon.length,
+      sportsUSCA: newCategories.sportsUSCA.length,
+      musicUSCA: newCategories.musicUSCA.length,
+      ukEvents: newCategories.ukEvents.length,
+      auEvents: newCategories.auEvents.length,
+      championships: newCategories.championships.length,
+      arts: newCategories.arts.length
+    });
+  };
+
+  const isLaunchPeriod = new Date() < new Date('2026-06-30');
+  const rewardAmount = isLaunchPeriod ? 20 : 10;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
@@ -597,50 +710,45 @@ export default function Events() {
       {/* Events Content */}
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12">
         {/* Rewards Banner */}
-        {(() => {
-          const isLaunchPeriod = new Date() < new Date('2026-06-30');
-          
-          if (isLaunchPeriod) {
-            return (
-              <div 
-                className="rounded-xl p-6 text-center mb-8 shadow-lg"
-                style={{ 
-                  background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-                  color: '#000000'
-                }}
-                data-testid="banner-launch-celebration"
-              >
-                <h2 className="text-3xl font-bold mb-2">🎉 LAUNCH CELEBRATION 🎉</h2>
-                <p className="text-xl font-bold mb-1">Book Event Tickets → Earn $20 Hotel Credit</p>
-                <p className="text-sm opacity-90 mb-2">Limited Time: Launch Special Through June 2026</p>
-                <p className="text-sm opacity-80">Plus earn points on every booking: Hotels 2pts/$1 • Flights 1pt/$1 • Packages 3pts/$1</p>
-              </div>
-            );
-          } else {
-            return (
-              <div 
-                className="rounded-xl p-6 text-center mb-8 shadow-lg"
-                style={{ 
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white'
-                }}
-                data-testid="banner-evergreen-rewards"
-              >
-                <h2 className="text-2xl font-bold mb-2">💎 Event Escapes Rewards</h2>
-                <p className="text-lg mb-1">Book Event Tickets → Earn $10 Hotel Credit</p>
-                <p className="text-sm opacity-90">Plus earn points on every booking: Hotels 2pts/$1 • Flights 1pt/$1 • Packages 3pts/$1</p>
-              </div>
-            );
-          }
-        })()}
-        
+        {isLaunchPeriod ? (
+          <div 
+            className="rounded-xl p-6 text-center mb-8 shadow-lg"
+            style={{ 
+              background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+              color: '#000000'
+            }}
+            data-testid="banner-launch-celebration"
+          >
+            <h2 className="text-3xl font-bold mb-2">🎉 LAUNCH CELEBRATION 🎉</h2>
+            <p className="text-xl font-bold mb-1">Book Event Tickets → Earn ${rewardAmount} Hotel Credit</p>
+            <p className="text-sm opacity-90 mb-2">Limited Time: Launch Special Through June 2026</p>
+            <p className="text-xs opacity-75">Plus, earn points on all bookings with Event Escapes Rewards!</p>
+          </div>
+        ) : (
+          <div 
+            className="rounded-xl p-6 text-center mb-8 shadow-lg"
+            style={{ 
+              background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+              color: '#ffffff'
+            }}
+            data-testid="banner-rewards-program"
+          >
+            <h2 className="text-2xl font-bold mb-2">Event Escapes Rewards</h2>
+            <p className="text-lg mb-1">Earn ${rewardAmount} hotel credit on every event ticket purchase!</p>
+            <p className="text-sm opacity-90">Plus, collect points on hotels, flights, and packages</p>
+          </div>
+        )}
+
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 mb-8" data-testid="error-message">
-            <p className="text-red-800 dark:text-red-200">
-              Unable to load events. Please try again. {error}
-            </p>
-            <Button onClick={fetchEvents} className="mt-4" data-testid="button-retry">
-              Retry
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center mb-8">
+            <p className="text-red-700 dark:text-red-300 font-semibold">{error}</p>
+            <Button 
+              onClick={fetchEvents} 
+              className="mt-4"
+              variant="outline"
+              data-testid="button-retry"
+            >
+              Try Again
             </Button>
           </div>
         )}
@@ -650,14 +758,77 @@ export default function Events() {
             <LoadingSkeleton />
             <LoadingSkeleton />
             <LoadingSkeleton />
-            <LoadingSkeleton />
           </>
+        ) : allEvents.length === 0 ? (
+          <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-12 text-center">
+            <p className="text-xl text-slate-600 dark:text-slate-400 mb-4">No events found</p>
+            <p className="text-sm text-slate-500 dark:text-slate-500">Try adjusting your filters or check back later</p>
+          </div>
         ) : (
           <>
-            <HorizontalScroller title="United States Events" events={usEvents} icon="🇺🇸" />
-            <HorizontalScroller title="United Kingdom Events" events={gbEvents} icon="🇬🇧" />
-            <HorizontalScroller title="Canada Events" events={caEvents} icon="🇨🇦" />
-            <HorizontalScroller title="Australia Events" events={auEvents} icon="🇦🇺" />
+            {/* Dynamic Carousels - Only show categories with 4+ events */}
+            {categories.happeningSoon.length >= 4 && (
+              <HorizontalScroller 
+                title="Happening Soon" 
+                events={categories.happeningSoon} 
+                icon="⚡"
+                viewAllCount={categories.happeningSoon.length}
+              />
+            )}
+
+            {categories.sportsUSCA.length >= 4 && (
+              <HorizontalScroller 
+                title="Sports - USA & Canada" 
+                events={categories.sportsUSCA} 
+                icon="🏈"
+                viewAllCount={categories.sportsUSCA.length}
+              />
+            )}
+
+            {categories.musicUSCA.length >= 4 && (
+              <HorizontalScroller 
+                title="Music & Concerts - USA & Canada" 
+                events={categories.musicUSCA} 
+                icon="🎵"
+                viewAllCount={categories.musicUSCA.length}
+              />
+            )}
+
+            {categories.ukEvents.length >= 4 && (
+              <HorizontalScroller 
+                title="UK Premier Events" 
+                events={categories.ukEvents} 
+                icon="🇬🇧"
+                viewAllCount={categories.ukEvents.length}
+              />
+            )}
+
+            {categories.auEvents.length >= 4 && (
+              <HorizontalScroller 
+                title="Australia Events" 
+                events={categories.auEvents} 
+                icon="🇦🇺"
+                viewAllCount={categories.auEvents.length}
+              />
+            )}
+
+            {categories.championships.length >= 4 && (
+              <HorizontalScroller 
+                title="Championships & Finals" 
+                events={categories.championships} 
+                icon="🏆"
+                viewAllCount={categories.championships.length}
+              />
+            )}
+
+            {categories.arts.length >= 4 && (
+              <HorizontalScroller 
+                title="Arts & Theater" 
+                events={categories.arts} 
+                icon="🎭"
+                viewAllCount={categories.arts.length}
+              />
+            )}
           </>
         )}
       </div>
