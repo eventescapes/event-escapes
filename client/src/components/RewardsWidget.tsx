@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Award } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { ensureSupabaseInit } from '@/lib/supabase';
 
 export function RewardsWidget() {
   const [pointsBalance, setPointsBalance] = useState<number | null>(null);
@@ -21,15 +21,13 @@ export function RewardsWidget() {
 
   const fetchPoints = async (email: string) => {
     try {
-      const configResponse = await fetch('/api/config/supabase');
-      const config = await configResponse.json();
+      // Get Supabase singleton client
+      const { supabase, isSupabaseConfigured } = await ensureSupabaseInit();
       
-      if (!config.isConfigured) {
+      if (!isSupabaseConfigured || !supabase) {
         setLoading(false);
         return;
       }
-
-      const supabase = createClient(config.url, config.anonKey);
       
       const { data, error } = await supabase
         .from('customer_rewards')
