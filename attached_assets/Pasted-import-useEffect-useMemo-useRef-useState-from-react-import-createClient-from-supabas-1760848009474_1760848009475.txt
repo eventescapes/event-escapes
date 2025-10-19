@@ -1,0 +1,246 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL!,
+  import.meta.env.VITE_SUPABASE_ANON_KEY!
+);
+
+type EventCard = {
+  id: string;
+  tm_id: string;
+  name: string;
+  segment: "music" | "sports" | string;
+  genre: string | null;
+  starts_at: string; // ISO
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  image_url: string | null;
+  tm_url: string;
+  // These fields exist on `events` but not in the view by default—optional:
+  // price_min?: number | null;
+};
+
+const COUNTRIES = ["US", "CA", "AU", "GB"] as const;
+const FOUR_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 4;
+
+function formatDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return iso.split("T")[0];
+  }
+}
+
+async function fetchEvents(segment: "music" | "sports") {
+  const now = new Date();
+  const future = new Date(now.getTime() + FOUR_MONTHS_MS);
+
+  // Pull everything we need (next 4 months, specific segment and countries)
+  const { data, error } = await supabase
+    .from("events") // use events to get price_min; or switch to event_cards and remove price sorting if your view lacks prices
+    .select(
+      "id, tm_id, name, segment, genre, starts_at, city, state, country, image_url, tm_url, price_min"
+    )
+    .in("country", COUNTRIES)
+    .eq("segment", segment)
+    .gte("starts_at", now.toISOString())
+    .lte("starts_at", future.toISOString())
+    .order("price_min", { ascending: true, nullsFirst: true }) // true = lowest first
+    .limit(100);
+
+  if (error) throw error;
+
+  // Stable “price from $$”: if price_min is null, float to end but still show card
+  const sorted = (data ?? []).sort((a: any, b: any) => {
+    const av = a.price_min ?? Number.POSITIVE_INFINITY;
+    const bv = b.price_min ?? Number.POSITIVE_INFINITY;
+    if (av !== bv) return av - bv;
+    // secondary sort by soonest date
+    return new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime();
+  });
+
+  return sorted as (EventCard & { price_min?: number | null })[];
+}
+
+function Rail({
+  title,
+  items,
+  autoScrollMs = 6000, // slow + comfy
+}: {
+  title: string;
+  items: (EventCard & { price_min?: number | null })[];
+  autoScrollMs?: number;
+}) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+
+  // slow auto-scroll; pauses on hover/focus
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    let paused = false;
+    const stop = () => (paused = true);
+    const start = () => (paused = false);
+
+    el.addEventListener("mouseenter", stop);
+    el.addEventListener("mouseleave", start);
+    el.addEventListener("focusin", stop);
+    el.addEventListener("focusout", start);
+
+    const tick = () => {
+      if (!el || paused) return;
+      const next = el.scrollLeft + el.clientWidth; // advance one viewport
+      el.scrollTo({ left: next, behavior: "smooth" });
+
+      // if near end, loop back gently
+      if (next + 20 >= el.scrollWidth) {
+        setTimeout(() => el.scrollTo({ left: 0, behavior: "smooth" }), 400);
+      }
+    };
+
+    const id = setInterval(tick, autoScrollMs);
+    return () => {
+      clearInterval(id);
+      el.removeEventListener("mouseenter", stop);
+      el.removeEventListener("mouseleave", start);
+      el.removeEventListener("focusin", stop);
+      el.removeEventListener("focusout", start);
+    };
+  }, [autoScrollMs]);
+
+  return (
+    <section className="mb-10">
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="text-2xl font-semibold text-white">{title}</h2>
+      </div>
+
+      <div
+        ref={scrollerRef}
+        className="flex gap-4 overflow-x-auto scroll-smooth snap-x snap-mandatory pb-3 [-ms-overflow-style:none] [scrollbar-width:none]"
+        style={{ scrollBehavior: "smooth" }}
+      >
+        {/* hide scrollbar cross-browser */}
+        <style>{`
+          div::-webkit-scrollbar { display: none; }
+        `}</style>
+
+        {items.map((ev) => (
+          <Card
+            key={ev.id}
+            className="min-w-[280px] max-w-[280px] bg-[#0e0f1a] border border-white/10 rounded-2xl text-white snap-start hover:shadow-lg transition-all"
+          >
+            <CardContent className="p-3">
+              <div className="h-40 w-full overflow-hidden rounded-xl bg-black/20">
+                <img
+                  src={ev.image_url || "/placeholder.jpg"}
+                  alt={ev.name}
+                  className="h-40 w-full object-cover"
+                  loading="lazy"
+                />
+              </div>
+              <div className="mt-3">
+                <h3 className="text-base font-medium line-clamp-2">{ev.name}</h3>
+                <p className="text-sm text-white/70 mt-1">
+                  {(ev.city || "—")}{ev.state ? `, ${ev.state}` : ""} • {formatDate(ev.starts_at)}
+                </p>
+
+                {typeof ev.price_min === "number" ? (
+                  <p className="text-emerald-400 mt-2 font-semibold">
+                    From ${Math.round(ev.price_min)}
+                  </p>
+                ) : (
+                  <p className="text-white/60 mt-2 text-sm">See ticket options</p>
+                )}
+
+                <Button
+                  className="mt-3 w-full rounded-xl"
+                  onClick={() => window.open(ev.tm_url, "_blank", "noopener")}
+                >
+                  View Tickets →
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export default function EventsRailsPage() {
+  const [segment, setSegment] = useState<"music" | "sports">("music");
+  const [music, setMusic] = useState<(EventCard & { price_min?: number | null })[]>([]);
+  const [sports, setSports] = useState<(EventCard & { price_min?: number | null })[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // fetch both rails
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      const [m, s] = await Promise.all([fetchEvents("music"), fetchEvents("sports")]);
+      if (!alive) return;
+      setMusic(m);
+      setSports(s);
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // slow auto-switch between rails
+  useEffect(() => {
+    const id = setInterval(
+      () => setSegment((prev) => (prev === "music" ? "sports" : "music")),
+      15000 // 15s feels calm
+    );
+    return () => clearInterval(id);
+  }, []);
+
+  const active = useMemo(
+    () => (segment === "music" ? music : sports),
+    [segment, music, sports]
+  );
+
+  return (
+    <div className="px-4 md:px-8 py-6">
+      <div className="flex items-center gap-2 mb-2">
+        <button
+          className={`px-3 py-1.5 rounded-full text-sm ${
+            segment === "music" ? "bg-white text-black" : "bg-white/10 text-white"
+          }`}
+          onClick={() => setSegment("music")}
+        >
+          Music (next 4 months)
+        </button>
+        <button
+          className={`px-3 py-1.5 rounded-full text-sm ${
+            segment === "sports" ? "bg-white text-black" : "bg-white/10 text-white"
+          }`}
+          onClick={() => setSegment("sports")}
+        >
+          Sports (next 4 months)
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-white/70">Loading live Ticketmaster events…</p>
+      ) : (
+        <Rail
+          title={segment === "music" ? "🎵 Upcoming Music" : "🏟️ Upcoming Sports"}
+          items={active}
+          autoScrollMs={6000} // slow + smooth
+        />
+      )}
+    </div>
+  );
+}

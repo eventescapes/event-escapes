@@ -1,0 +1,43 @@
+You are updating the Event Escapes frontend to use live Ticketmaster data and a new event page layout.
+
+1. Create a new React component file called `EventsRailsPage.tsx` inside `/components` (or update the existing `/pages/events.tsx` if one already exists).
+
+2. Paste in the full React code below and ensure it compiles with the existing project setup (Next.js + Tailwind + shadcn/ui). 
+   - The code queries the Supabase `events` table directly.
+   - It filters events from today up to 4 months ahead.
+   - It orders by `price_min` ascending (showing lowest ticket prices first).
+   - It dynamically switches between “music” and “sports” events every 15 seconds.
+   - It shows actual Ticketmaster event images and real ticket prices.
+   - The event cards auto-scroll slowly (6 seconds per viewport scroll) with smooth motion and pause on hover.
+
+3. Ensure Supabase environment variables are already configured:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+
+4. Add this code:
+
+----- CODE BELOW -----
+[paste the full EventsRailsPage.tsx code from ChatGPT here]
+----- END CODE -----
+
+5. Confirm the following visual requirements:
+   - Remove “Book & Earn Rewards” and “Get Tickets & Earn $20” from all cards.
+   - Show a clean card with:
+       • Event image from Ticketmaster  
+       • Event name  
+       • City + date  
+       • “From $XXX” if `price_min` exists  
+       • Button: “View Tickets →”
+   - Each card should use the color palette already used on Event Escapes (dark navy background with white text, soft shadows, rounded corners).
+
+6. Set auto-scroll to be smooth and calm (not too fast).
+   - Auto-scroll interval = 6000ms per viewport.
+   - Rail switches (music ↔ sports) every 15000ms.
+
+7. Test the page by visiting `/events` or wherever the component is mounted.
+   - Verify that real Ticketmaster data (images and prices) appear dynamically from Supabase.
+   - Confirm that clicking a card opens the Ticketmaster URL in a new tab.
+
+8. Once tested, clean up console logs and ensure responsiveness works on both mobile and desktop.
+
+After successful build, output: “✅ Events page updated — using live Ticketmaster data, smooth auto-scroll, and real prices.”
