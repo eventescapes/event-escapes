@@ -524,10 +524,10 @@ export default function Events() {
       ];
 
       const fetchFromRegion = async (regionCode: string, priority: number) => {
-        console.log(`🔍 Fetching ${regionCode} events...`);
+        console.log(`🔍 Fetching ${regionCode} events from LIVE API...`);
         
         const response = await fetch(
-          `/api/ticketmaster-events?country=${regionCode}&startDate=${startDateStr}&endDate=${endDateStr}&limit=50`
+          `/api/ticketmaster-events/live?country=${regionCode}&startDate=${startDateStr}&endDate=${endDateStr}&limit=50`
         );
 
         if (!response.ok) {
@@ -541,7 +541,10 @@ export default function Events() {
         // Add region metadata to each event
         return events.map((event: TicketmasterEvent) => ({
           ...event,
-          regionPriority: priority
+          regionPriority: priority,
+          event_start_date: typeof event.event_start_date === 'string' 
+            ? event.event_start_date 
+            : new Date(event.event_start_date).toISOString()
         }));
       };
 

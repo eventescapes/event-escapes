@@ -67,7 +67,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Ticketmaster Events
+  // Ticketmaster Events (LIVE from API) - Must be BEFORE :id route
+  app.get("/api/ticketmaster-events/live", async (req, res) => {
+    try {
+      const { country, startDate, endDate, limit } = req.query;
+      
+      // Calculate date range (7 days to 4 months from now)
+      const defaultStartDate = new Date();
+      defaultStartDate.setDate(defaultStartDate.getDate() + 7);
+      
+      const defaultEndDate = new Date();
+      defaultEndDate.setMonth(defaultEndDate.getMonth() + 4);
+      
+      // Format dates for Ticketmaster API (YYYY-MM-DDTHH:mm:ssZ without milliseconds)
+      const startDateTime = startDate 
+        ? new Date(startDate as string).toISOString().split('.')[0] + 'Z'
+        : defaultStartDate.toISOString().split('.')[0] + 'Z';
+      const endDateTime = endDate 
+        ? new Date(endDate as string).toISOString().split('.')[0] + 'Z'
+        : defaultEndDate.toISOString().split('.')[0] + 'Z';
+      
+      const response = await fetchTicketmasterEvents({
+        countryCode: country as string,
+        startDateTime,
+        endDateTime,
+        size: limit ? parseInt(limit as string) : 50
+      });
+      
+      res.json(response.events);
+    } catch (error: any) {
+      console.error('Error fetching live Ticketmaster events:', error);
+      res.status(500).json({ message: "Error fetching live Ticketmaster events: " + error.message });
+    }
+  });
+
+  // Ticketmaster Events (from database - legacy)
   app.get("/api/ticketmaster-events", async (req, res) => {
     try {
       const { country, segment, isMajorEvent, startDate, endDate, limit } = req.query;
