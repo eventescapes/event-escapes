@@ -1,0 +1,392 @@
+# 🎬 Event Cards - Smooth Auto-Rotation with Zoom Effect
+
+## 🎯 GOAL:
+Create a smooth, Netflix-style carousel that:
+- Auto-rotates cards every 3-4 seconds
+- Smooth slide animation
+- Each card zooms in slightly as it enters view
+- Pause on hover
+- Faster, more noticeable transitions
+
+---
+
+## 🚀 REPLIT AGENT PROMPT
+
+```
+"Make the event carousels auto-rotate smoothly with zoom effects:
+
+REQUIREMENTS:
+
+1. SMOOTH AUTO-ROTATION:
+   - Auto-advance every 4 seconds (faster than current)
+   - Smooth slide transition (not jump)
+   - Each new set of cards slides in from right
+   - Continuous loop (goes back to start after end)
+
+2. ZOOM-IN EFFECT:
+   - Cards scale up slightly (1.05x) when entering view
+   - Fade in animation
+   - Stagger animation (each card slightly delayed)
+
+3. IMPLEMENTATION:
+
+Replace the current EventCarousel with this new component:
+
+```tsx
+import { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+function EventCarousel({ title, events, icon }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const [cardsPerView, setCardsPerView] = useState(5);
+  
+  // Calculate cards per view based on screen size
+  useEffect(() => {
+    const updateCardsPerView = () => {
+      if (window.innerWidth >= 1536) setCardsPerView(5); // xl
+      else if (window.innerWidth >= 1280) setCardsPerView(4); // lg
+      else if (window.innerWidth >= 768) setCardsPerView(3); // md
+      else setCardsPerView(1); // mobile
+    };
+    
+    updateCardsPerView();
+    window.addEventListener('resize', updateCardsPerView);
+    return () => window.removeEventListener('resize', updateCardsPerView);
+  }, []);
+
+  const totalPages = Math.ceil(events.length / cardsPerView);
+
+  // Auto-advance every 4 seconds
+  useEffect(() => {
+    if (isHovered) return;
+
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % totalPages);
+    }, 4000); // 4 seconds - faster than before
+
+    return () => clearInterval(interval);
+  }, [totalPages, isHovered]);
+
+  const goToPage = (index) => {
+    setCurrentIndex(index);
+  };
+
+  const nextPage = () => {
+    setCurrentIndex((prev) => (prev + 1) % totalPages);
+  };
+
+  const prevPage = () => {
+    setCurrentIndex((prev) => (prev - 1 + totalPages) % totalPages);
+  };
+
+  const currentEvents = events.slice(
+    currentIndex * cardsPerView,
+    (currentIndex + 1) * cardsPerView
+  );
+
+  return (
+    <div 
+      className="mb-16"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <span className="text-4xl">{icon}</span>
+          <h2 className="text-3xl font-bold text-white">{title}</h2>
+          <span className="text-gray-400 text-sm">({events.length} events)</span>
+        </div>
+
+        {/* Navigation Arrows */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={prevPage}
+            className="p-3 rounded-full bg-gray-800/90 hover:bg-gray-700 transition-all duration-300 hover:scale-110 backdrop-blur-sm"
+            aria-label="Previous"
+          >
+            <ChevronLeft className="w-5 h-5 text-white" />
+          </button>
+          
+          <span className="text-gray-400 text-sm font-medium">
+            {currentIndex + 1} / {totalPages}
+          </span>
+          
+          <button
+            onClick={nextPage}
+            className="p-3 rounded-full bg-gray-800/90 hover:bg-gray-700 transition-all duration-300 hover:scale-110 backdrop-blur-sm"
+            aria-label="Next"
+          >
+            <ChevronRight className="w-5 h-5 text-white" />
+          </button>
+        </div>
+      </div>
+
+      {/* Cards Container */}
+      <div className="relative overflow-hidden">
+        <div 
+          className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 transition-all duration-700 ease-out"
+          style={{
+            transform: `translateX(0)`,
+          }}
+        >
+          {currentEvents.map((event, index) => (
+            <div
+              key={event.id}
+              className="animate-zoomIn"
+              style={{
+                animationDelay: `${index * 100}ms`,
+                animationFillMode: 'both'
+              }}
+            >
+              <EventCard event={event} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Page Indicators */}
+      <div className="flex justify-center gap-2 mt-6">
+        {Array.from({ length: totalPages }).map((_, i) => (
+          <button
+            key={i}
+            onClick={() => goToPage(i)}
+            className={`h-2 rounded-full transition-all duration-300 ${
+              i === currentIndex 
+                ? 'w-8 bg-gradient-to-r from-purple-600 to-pink-600' 
+                : 'w-2 bg-gray-600 hover:bg-gray-500'
+            }`}
+            aria-label={`Go to page ${i + 1}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+4. ADD ZOOM-IN ANIMATION CSS:
+
+Add this to your global CSS or Tailwind config:
+
+```css
+@keyframes zoomIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-zoomIn {
+  animation: zoomIn 0.6s ease-out;
+}
+
+/* Hover effect for cards */
+.event-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.event-card:hover {
+  transform: scale(1.05) translateY(-8px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+```
+
+5. UPDATE EVENT CARD with hover zoom:
+
+```tsx
+function EventCard({ event }) {
+  const [showModal, setShowModal] = useState(false);
+  const lowestPrice = event.priceRanges?.[0]?.min;
+
+  return (
+    <>
+      <div className="event-card bg-gray-900 rounded-2xl overflow-hidden shadow-xl cursor-pointer">
+        {/* Rest of card content... */}
+      </div>
+
+      {showModal && (
+        <RewardsModal event={event} onClose={() => setShowModal(false)} />
+      )}
+    </>
+  );
+}
+```
+
+6. ALTERNATIVE: CONTINUOUS SLIDE EFFECT (Netflix-style):
+
+If you want a true continuous sliding carousel:
+
+```tsx
+function ContinuousCarousel({ title, events, icon }) {
+  const [offset, setOffset] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const containerRef = useRef(null);
+
+  // Duplicate events for infinite loop effect
+  const duplicatedEvents = [...events, ...events, ...events];
+
+  useEffect(() => {
+    if (isPaused) return;
+
+    const interval = setInterval(() => {
+      setOffset((prev) => {
+        const newOffset = prev - 1;
+        const cardWidth = 320; // w-80 = 320px
+        const totalWidth = events.length * cardWidth;
+        
+        // Reset when we've scrolled through one full set
+        if (Math.abs(newOffset) >= totalWidth) {
+          return 0;
+        }
+        return newOffset;
+      });
+    }, 30); // Smooth 30fps animation
+
+    return () => clearInterval(interval);
+  }, [isPaused, events.length]);
+
+  return (
+    <div 
+      className="mb-16"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <span className="text-4xl">{icon}</span>
+          <h2 className="text-3xl font-bold text-white">{title}</h2>
+        </div>
+      </div>
+
+      <div className="relative overflow-hidden">
+        <div 
+          ref={containerRef}
+          className="flex gap-6 transition-transform duration-300 ease-linear"
+          style={{
+            transform: `translateX(${offset}px)`,
+          }}
+        >
+          {duplicatedEvents.map((event, index) => (
+            <div
+              key={`${event.id}-${index}`}
+              className="flex-shrink-0 w-80 transform hover:scale-105 transition-transform duration-300"
+            >
+              <EventCard event={event} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+7. RECOMMENDED SETTINGS:
+
+For best effect, use these timings:
+- Auto-advance: 4 seconds (faster than current)
+- Animation duration: 0.7 seconds (smooth transition)
+- Zoom animation: 0.6 seconds (subtle entry)
+- Hover zoom: 1.05x scale (not too much)
+- Stagger delay: 100ms per card
+
+CRITICAL: This creates a much more dynamic, engaging carousel that users will actually notice is moving. The zoom-in effect adds a premium feel like Netflix or Apple TV+."
+```
+
+---
+
+## 🎬 ANIMATION BREAKDOWN:
+
+### **Current (Slow/Unnoticeable):**
+```
+Card 1 → Card 2 → Card 3
+(7 seconds wait... barely visible change)
+```
+
+### **New (Smooth & Noticeable):**
+```
+Card 1 [zoom in ↗️]
+Card 2 [zoom in ↗️] (100ms delay)
+Card 3 [zoom in ↗️] (200ms delay)
+Card 4 [zoom in ↗️] (300ms delay)
+Card 5 [zoom in ↗️] (400ms delay)
+
+(4 seconds) → Next set slides in with zoom
+```
+
+---
+
+## 🎯 TWO OPTIONS:
+
+### **Option 1: Page-Based (Recommended)** ⭐
+- Shows 5 cards at a time
+- Entire page transitions every 4 seconds
+- Each card zooms in with stagger
+- Clean, organized
+- Page indicators at bottom
+
+### **Option 2: Continuous Slide (Netflix-style)**
+- Cards slide continuously from right to left
+- Smooth, never-ending motion
+- More dynamic but can be distracting
+- No page indicators needed
+
+---
+
+## 🎨 VISUAL EFFECT:
+
+```
+Before Animation:
+┌─────┬─────┬─────┬─────┬─────┐
+│  ▢  │  ▢  │  ▢  │  ▢  │  ▢  │  (scale: 0.95, opacity: 0)
+└─────┴─────┴─────┴─────┴─────┘
+
+During Animation (staggered):
+┌─────┬─────┬─────┬─────┬─────┐
+│  █  │  ▓  │  ▒  │  ░  │  ▢  │  (zoom in, fade in)
+└─────┴─────┴─────┴─────┴─────┘
+
+After Animation:
+┌─────┬─────┬─────┬─────┬─────┐
+│  █  │  █  │  █  │  █  │  █  │  (scale: 1.0, opacity: 1)
+└─────┴─────┴─────┴─────┴─────┘
+
+On Hover:
+┌─────┬─────┬─────┬─────┬─────┐
+│  █  │  ▲  │  █  │  █  │  █  │  (hovered card zooms to 1.05x)
+└─────┴─────┴─────┴─────┴─────┘
+```
+
+---
+
+## ⚙️ RECOMMENDED SETTINGS:
+
+**Timing:**
+- Auto-advance: **4 seconds** (fast enough to notice)
+- Transition: **700ms** (smooth but quick)
+- Zoom-in: **600ms** (subtle premium feel)
+- Stagger: **100ms** per card
+
+**Zoom Levels:**
+- Entry zoom: **0.95 → 1.0** (subtle)
+- Hover zoom: **1.0 → 1.05** (noticeable but not jarring)
+
+---
+
+## 📁 Complete Guide:
+
+[View the complete implementation](computer:///mnt/user-data/outputs/SMOOTH_CAROUSEL_WITH_ZOOM.md)
+
+---
+
+**Which style do you prefer?**
+1. **Page-based with zoom** (cleaner, recommended)
+2. **Continuous slide** (more dynamic, Netflix-style)
+
+Let me know and I'll give you the exact prompt for Replit Agent! 🎬
