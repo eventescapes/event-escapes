@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Search, ChevronLeft, ChevronRight, ExternalLink, Package, X, MapPin, Calendar, DollarSign, Info } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, ExternalLink, X, MapPin, Calendar, DollarSign, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UserInfoModal } from '@/components/UserInfoModal';
@@ -105,55 +105,78 @@ function EventCard({ event, onClick, showRewardsBadge = true }: EventCardProps) 
       onClick={onClick}
       data-testid={`event-card-${event.id}`}
     >
-      <div className="relative overflow-hidden rounded-xl transform transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl">
-        <img 
-          src={getEventImage()} 
-          alt={event.name}
-          className="w-full h-[400px] object-cover"
-          data-testid={`event-image-${event.id}`}
-        />
-        <div className="absolute top-3 right-3 flex gap-2">
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-            event.segment === 'Music' 
-              ? 'bg-purple-500 text-white' 
-              : event.segment === 'Sports'
-              ? 'bg-blue-500 text-white'
-              : 'bg-pink-500 text-white'
-          }`}
-          data-testid={`event-segment-${event.id}`}>
-            {event.segment}
-          </span>
-        </div>
-        
-        {showRewardsBadge && (
-          <div className="absolute top-3 left-3">
-            <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-black px-3 py-1 rounded-full text-xs font-bold shadow-lg"
-              data-testid="rewards-badge">
-              Earn ${rewardAmount} Credit
+      <div className="relative overflow-hidden rounded-2xl transform transition-all duration-500 group-hover:scale-[1.03] group-hover:shadow-2xl group-hover:shadow-purple-500/20 bg-gradient-to-b from-slate-900 to-black border border-slate-800 group-hover:border-purple-500/50">
+        {/* Image Section */}
+        <div className="relative h-[400px] overflow-hidden">
+          <img 
+            src={getEventImage()} 
+            alt={event.name}
+            className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
+            data-testid={`event-image-${event.id}`}
+          />
+          
+          {/* Gradient Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+          
+          {/* Category Badge - Top Right */}
+          <div className="absolute top-3 right-3">
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-sm ${
+              event.segment === 'Music' 
+                ? 'bg-purple-500/90 text-white' 
+                : event.segment === 'Sports'
+                ? 'bg-blue-500/90 text-white'
+                : 'bg-pink-500/90 text-white'
+            }`}
+            data-testid={`event-segment-${event.id}`}>
+              {event.segment}
+            </span>
+          </div>
+          
+          {/* Rewards Badge - Top Left */}
+          {showRewardsBadge && (
+            <div className="absolute top-3 left-3">
+              <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-black px-3 py-1.5 rounded-full text-xs font-bold shadow-lg animate-pulse"
+                data-testid="rewards-badge">
+                🎉 Earn ${rewardAmount}
+              </div>
+            </div>
+          )}
+          
+          {/* Event Info Overlay - Bottom */}
+          <div className="absolute bottom-0 left-0 right-0 p-5">
+            <h3 className="text-white font-bold text-xl mb-3 line-clamp-2 group-hover:text-purple-300 transition-colors duration-300" data-testid={`event-name-${event.id}`}>
+              {event.name}
+            </h3>
+            
+            <div className="space-y-2 text-white/90 text-sm">
+              <div className="flex items-center gap-2" data-testid={`event-date-${event.id}`}>
+                <span className="text-base">📅</span>
+                <span className="font-medium">{formatDate(event.event_start_date)}</span>
+              </div>
+              <div className="flex items-center gap-2" data-testid={`event-location-${event.id}`}>
+                <span className="text-base">{getCountryFlag(event.venue_country_code)}</span>
+                <span className="font-medium">{event.venue_city}</span>
+              </div>
+              <div className="flex items-center gap-2" data-testid={`event-venue-${event.id}`}>
+                <span className="text-base">🏟️</span>
+                <span className="line-clamp-1 font-medium">{event.venue_name}</span>
+              </div>
             </div>
           </div>
-        )}
-        
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4">
-          <h3 className="text-white font-bold text-lg mb-2 line-clamp-2" data-testid={`event-name-${event.id}`}>
-            {event.name}
-          </h3>
-          <div className="space-y-1 text-white/90 text-sm">
-            <div className="flex items-center gap-2" data-testid={`event-date-${event.id}`}>
-              <span>📅</span>
-              <span className="text-xs">{formatDate(event.event_start_date)}</span>
+        </div>
+
+        {/* Price Section - Below Image */}
+        <div className="p-4 bg-gradient-to-b from-slate-900 to-black border-t border-slate-800">
+          <div className="flex items-center justify-between" data-testid={`event-price-${event.id}`}>
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-green-400" />
+              <div>
+                <div className="text-xs text-slate-400">Starting from</div>
+                <div className="text-lg font-bold text-white">{formatPrice()}</div>
+              </div>
             </div>
-            <div className="flex items-center gap-2" data-testid={`event-location-${event.id}`}>
-              <span>{getCountryFlag(event.venue_country_code)}</span>
-              <span>{event.venue_city}</span>
-            </div>
-            <div className="flex items-center gap-2" data-testid={`event-venue-${event.id}`}>
-              <span>🏟️</span>
-              <span className="line-clamp-1">{event.venue_name}</span>
-            </div>
-            <div className="flex items-center gap-2" data-testid={`event-price-${event.id}`}>
-              <span>💰</span>
-              <span>{formatPrice()}</span>
+            <div className="bg-purple-600/20 border border-purple-500/50 rounded-lg px-3 py-2">
+              <div className="text-xs text-purple-300 font-semibold">Click for Details</div>
             </div>
           </div>
         </div>
@@ -194,10 +217,6 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
         minute: '2-digit'
       })
     };
-  };
-
-  const handlePackageBooking = () => {
-    window.location.href = `/packages/build?event=${event.id}&venue_lat=${event.venue_latitude}&venue_lng=${event.venue_longitude}&venue_name=${encodeURIComponent(event.venue_name)}`;
   };
 
   const handleTicketPurchase = () => {
@@ -257,33 +276,34 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
 
           {/* Content */}
           <div className="p-8 bg-gradient-to-b from-black to-slate-900">
-            {/* Action Buttons */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-              <Button
-                onClick={handlePackageBooking}
-                className="h-16 text-lg bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
-                data-testid="button-book-package-modal"
-              >
-                <Package className="mr-3 h-6 w-6" />
-                <div className="text-left">
-                  <div className="font-bold">Book Complete Package</div>
-                  <div className="text-xs text-white/80">Flights + Hotels + Tickets</div>
+            {/* Reward Callout Banner */}
+            <div className="mb-6 p-6 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-2xl">
+              <div className="flex items-center gap-4">
+                <div className="flex-shrink-0 w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center">
+                  <span className="text-3xl">🎉</span>
                 </div>
-              </Button>
-
-              <Button
-                onClick={handleTicketPurchase}
-                variant="outline"
-                className="h-16 text-lg border-white/30 hover:bg-white/10"
-                data-testid="button-buy-tickets-modal"
-              >
-                <ExternalLink className="mr-3 h-6 w-6" />
-                <div className="text-left">
-                  <div className="font-bold">Get Tickets on Ticketmaster</div>
-                  <div className="text-xs text-white/60">Official tickets</div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-white mb-1">Earn $20 Hotel Credit!</h3>
+                  <p className="text-white/80 text-sm">Book this event and get $20 towards your hotel stay through our Event Escapes Rewards program.</p>
                 </div>
-              </Button>
+              </div>
             </div>
+
+            {/* Single CTA Button */}
+            <Button
+              onClick={handleTicketPurchase}
+              className="w-full h-20 text-xl bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 hover:from-purple-700 hover:via-pink-700 hover:to-purple-700 shadow-2xl hover:shadow-purple-500/50 transform hover:scale-[1.02] transition-all duration-300 mb-8 relative overflow-hidden group"
+              data-testid="button-book-now-earn"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+              <div className="relative flex items-center justify-center gap-3">
+                <ExternalLink className="h-6 w-6" />
+                <div className="text-center">
+                  <div className="font-bold">Book Now & Earn $20</div>
+                  <div className="text-xs text-white/90">Get your tickets on Ticketmaster</div>
+                </div>
+              </div>
+            </Button>
 
             {/* Event Details */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
