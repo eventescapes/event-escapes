@@ -1,0 +1,635 @@
+# 🔧 IMMEDIATE FIXES - Event Escapes
+
+## 🚨 Priority 1: Fix Console Errors
+
+### Error 1: DialogContent Accessibility Issue
+**Error:** `DialogContent requires a DialogTitle`
+
+**Fix in UserInfoModal.tsx/jsx:**
+
+```jsx
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+
+export default function UserInfoModal({ isOpen, onClose, eventData }) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          {/* ADD THIS - DialogTitle is required for accessibility */}
+          <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            🎉 Unlock Rewards!
+          </DialogTitle>
+          <DialogDescription>
+            Complete your purchase on Ticketmaster to earn your hotel credit.
+          </DialogDescription>
+        </DialogHeader>
+        
+        {/* Rest of your modal content */}
+      </DialogContent>
+    </Dialog>
+  )
+}
+```
+
+---
+
+### Error 2: Multiple Supabase Client Instances
+**Warning:** `Multiple GoTrueClient instances detected`
+
+**Create: lib/supabase.js (create this file ONCE)**
+
+```javascript
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+// Single instance - export this everywhere
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+```
+
+**Then in ALL other files, import it:**
+
+```javascript
+// ❌ WRONG - Don't do this
+import { createClient } from '@supabase/supabase-js'
+const supabase = createClient(url, key)
+
+// ✅ CORRECT - Do this instead
+import { supabase } from '@/lib/supabase'
+```
+
+---
+
+### Error 3: Failed to Load Resource (401/503 errors)
+**Error:** `Failed to load resource: jxrrhsgffnzeijszbecq.../affiliate_clicks:1`
+
+**This is RLS (Row Level Security) issue. Run this in Supabase SQL Editor:**
+
+```sql
+-- Fix affiliate_clicks RLS policies
+ALTER TABLE affiliate_clicks ENABLE ROW LEVEL SECURITY;
+
+-- Drop old policies
+DROP POLICY IF EXISTS "Allow anonymous inserts on affiliate_clicks" ON affiliate_clicks;
+
+-- Allow anonymous inserts (for tracking clicks)
+CREATE POLICY "Enable insert for anon users"
+ON affiliate_clicks FOR INSERT
+TO anon
+WITH CHECK (true);
+
+-- Allow anonymous reads (so user can see their clicks)
+CREATE POLICY "Enable read for anon users"
+ON affiliate_clicks FOR SELECT
+TO anon
+USING (true);
+
+-- Service role can do everything
+CREATE POLICY "Enable all for service role"
+ON affiliate_clicks FOR ALL
+TO service_role
+USING (true);
+```
+
+---
+
+### Error 4: Error Saving Click / Error Processing Request
+
+**Fix in UserInfoModal - Add proper error handling:**
+
+```jsx
+const handleSubmit = async (e) => {
+  e.preventDefault()
+  setError(null)
+  setIsSubmitting(true)
+
+  try {
+    const cleanEmail = formData.email.toLowerCase().trim()
+    const timestamp = Date.now()
+    const clickId = `${eventData.id}_${cleanEmail}_${timestamp}`
+
+    // 1. Insert affiliate click
+    const { data: clickData, error: clickError } = await supabase
+      .from('affiliate_clicks')
+      .insert({
+        click_id: clickId,
+        event_id: eventData.id,
+        event_name: eventData.name,
+        event_date: eventData.date,
+        event_venue: eventData.venue || 'TBD',
+        user_email: cleanEmail,
+        user_name: formData.name,
+        affiliate_id: '6581273',
+        ticketmaster_url: eventData.url,
+        purchase_completed: false
+      })
+      .select()
+      .single()
+
+    if (clickError) {
+      console.error('Click error:', clickError)
+      throw new Error('Failed to save tracking. Please try again.')
+    }
+
+    // 2. Check/create customer_rewards
+    const { data: rewardData, error: rewardCheckError } = await supabase
+      .from('customer_rewards')
+      .select('user_email')
+      .eq('user_email', cleanEmail)
+      .maybeSingle()
+
+    if (!rewardData && !rewardCheckError) {
+      // Create new customer
+      const { error: insertError } = await supabase
+        .from('customer_rewards')
+        .insert({
+          user_email: cleanEmail,
+          user_name: formData.name,
+          points_balance: 0,
+          total_points_earned: 0,
+          total_points_redeemed: 0,
+          tier: 'member',
+          annual_spend: 0,
+          lifetime_spend: 0,
+          tier_multiplier: 1.0,
+          campaign_type: 'launch',
+          joined_during_launch: true
+        })
+
+      if (insertError) {
+        console.error('Rewards insert error:', insertError)
+      }
+    }
+
+    // 3. Build clean Ticketmaster URL
+    const tmUrl = new URL(eventData.url)
+    tmUrl.search = '' // Clear all params
+    tmUrl.searchParams.set('afflky', '6581273')
+    
+    // 4. Open in new tab
+    window.open(tmUrl.toString(), '_blank', 'noopener,noreferrer')
+    
+    // 5. Close modal
+    onClose()
+    
+    // Show success message
+    console.log('✅ Tracking saved, redirecting to Ticketmaster...')
+    
+  } catch (err) {
+    console.error('❌ Error:', err)
+    setError(err.message || 'Something went wrong. Please try again.')
+  } finally {
+    setIsSubmitting(false)
+  }
+}
+```
+
+---
+
+## 🎟️ Priority 2: Promo Codes (One-Time Use)
+
+### Step 1: Create Promo Codes Table
+
+**Run in Supabase SQL Editor:**
+
+```sql
+-- Create promo_codes table
+CREATE TABLE IF NOT EXISTS promo_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code VARCHAR(50) UNIQUE NOT NULL,
+  description TEXT,
+  discount_type VARCHAR(20) NOT NULL CHECK (discount_type IN ('percentage', 'fixed')),
+  discount_value DECIMAL(10, 2) NOT NULL,
+  min_purchase_amount DECIMAL(10, 2) DEFAULT 0,
+  max_discount_amount DECIMAL(10, 2),
+  valid_from TIMESTAMPTZ DEFAULT NOW(),
+  valid_until TIMESTAMPTZ,
+  active BOOLEAN DEFAULT true,
+  one_time_use BOOLEAN DEFAULT true,
+  applicable_to VARCHAR(20)[] DEFAULT ARRAY['hotel', 'flight', 'package'],
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create usage tracking table
+CREATE TABLE IF NOT EXISTS promo_code_usage (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  promo_code_id UUID REFERENCES promo_codes(id) ON DELETE CASCADE,
+  user_email VARCHAR(255) NOT NULL,
+  booking_reference VARCHAR(100),
+  booking_type VARCHAR(20),
+  booking_amount DECIMAL(10, 2),
+  discount_amount DECIMAL(10, 2),
+  used_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(promo_code_id, user_email) -- Ensures one-time use per user
+);
+
+-- Insert sample promo codes
+INSERT INTO promo_codes (code, description, discount_type, discount_value, min_purchase_amount, valid_until, applicable_to) VALUES
+  ('WELCOME20', 'Welcome - $20 off first booking', 'fixed', 20.00, 100.00, '2026-12-31', ARRAY['hotel', 'package']),
+  ('SUMMER15', 'Summer Sale - 15% off', 'percentage', 15.00, 200.00, '2026-08-31', ARRAY['hotel']),
+  ('LAUNCH50', 'Launch Special - $50 off', 'fixed', 50.00, 500.00, '2026-06-30', ARRAY['hotel', 'package']);
+
+-- Enable RLS
+ALTER TABLE promo_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE promo_code_usage ENABLE ROW LEVEL SECURITY;
+
+-- Allow anyone to read active promo codes
+CREATE POLICY "Anyone can read active promo codes"
+ON promo_codes FOR SELECT
+TO anon
+USING (active = true);
+
+-- Allow anyone to check their usage
+CREATE POLICY "Users can read own usage"
+ON promo_code_usage FOR SELECT
+TO anon
+USING (true);
+
+-- Service role can manage everything
+CREATE POLICY "Service role manages promo codes"
+ON promo_codes FOR ALL TO service_role USING (true);
+
+CREATE POLICY "Service role manages usage"
+ON promo_code_usage FOR ALL TO service_role USING (true);
+```
+
+### Step 2: Create Validation Function
+
+```sql
+-- Function to validate and apply promo code
+CREATE OR REPLACE FUNCTION validate_and_apply_promo(
+  p_code VARCHAR,
+  p_user_email VARCHAR,
+  p_booking_type VARCHAR,
+  p_booking_amount DECIMAL
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_promo promo_codes%ROWTYPE;
+  v_discount_amount DECIMAL(10, 2);
+  v_already_used BOOLEAN;
+BEGIN
+  -- Find active promo code
+  SELECT * INTO v_promo
+  FROM promo_codes
+  WHERE UPPER(code) = UPPER(p_code)
+    AND active = true
+    AND (valid_from IS NULL OR valid_from <= NOW())
+    AND (valid_until IS NULL OR valid_until >= NOW())
+    AND p_booking_type = ANY(applicable_to);
+  
+  IF NOT FOUND THEN
+    RETURN json_build_object(
+      'valid', false,
+      'error', 'Invalid or expired promo code'
+    );
+  END IF;
+  
+  -- Check minimum purchase
+  IF p_booking_amount < v_promo.min_purchase_amount THEN
+    RETURN json_build_object(
+      'valid', false,
+      'error', format('Minimum purchase of $%.2f required', v_promo.min_purchase_amount)
+    );
+  END IF;
+  
+  -- Check if user already used this code (ONE-TIME USE CHECK)
+  SELECT EXISTS(
+    SELECT 1 FROM promo_code_usage
+    WHERE promo_code_id = v_promo.id
+    AND user_email = LOWER(p_user_email)
+  ) INTO v_already_used;
+  
+  IF v_already_used AND v_promo.one_time_use THEN
+    RETURN json_build_object(
+      'valid', false,
+      'error', 'You have already used this promo code'
+    );
+  END IF;
+  
+  -- Calculate discount
+  IF v_promo.discount_type = 'percentage' THEN
+    v_discount_amount := p_booking_amount * (v_promo.discount_value / 100);
+    IF v_promo.max_discount_amount IS NOT NULL THEN
+      v_discount_amount := LEAST(v_discount_amount, v_promo.max_discount_amount);
+    END IF;
+  ELSE
+    v_discount_amount := v_promo.discount_value;
+  END IF;
+  
+  -- Return valid result
+  RETURN json_build_object(
+    'valid', true,
+    'promo_code_id', v_promo.id,
+    'code', v_promo.code,
+    'description', v_promo.description,
+    'discount_amount', v_discount_amount,
+    'discount_type', v_promo.discount_type
+  );
+END;
+$$;
+
+-- Function to record promo code usage
+CREATE OR REPLACE FUNCTION record_promo_usage(
+  p_promo_code_id UUID,
+  p_user_email VARCHAR,
+  p_booking_reference VARCHAR,
+  p_booking_type VARCHAR,
+  p_booking_amount DECIMAL,
+  p_discount_amount DECIMAL
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  INSERT INTO promo_code_usage (
+    promo_code_id,
+    user_email,
+    booking_reference,
+    booking_type,
+    booking_amount,
+    discount_amount
+  ) VALUES (
+    p_promo_code_id,
+    LOWER(p_user_email),
+    p_booking_reference,
+    p_booking_type,
+    p_booking_amount,
+    p_discount_amount
+  );
+  
+  RETURN json_build_object('success', true);
+EXCEPTION
+  WHEN unique_violation THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'Promo code already used'
+    );
+END;
+$$;
+```
+
+### Step 3: Frontend - Promo Code Component
+
+**Create: components/PromoCodeInput.jsx**
+
+```jsx
+import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+
+export default function PromoCodeInput({ 
+  bookingType, 
+  bookingAmount, 
+  onPromoApplied 
+}) {
+  const [promoCode, setPromoCode] = useState('')
+  const [isValidating, setIsValidating] = useState(false)
+  const [error, setError] = useState(null)
+  const [appliedPromo, setAppliedPromo] = useState(null)
+
+  const validatePromo = async () => {
+    if (!promoCode.trim()) {
+      setError('Please enter a promo code')
+      return
+    }
+
+    setIsValidating(true)
+    setError(null)
+
+    try {
+      const userEmail = localStorage.getItem('userEmail') || 'guest@example.com'
+
+      const { data, error: rpcError } = await supabase
+        .rpc('validate_and_apply_promo', {
+          p_code: promoCode.toUpperCase(),
+          p_user_email: userEmail,
+          p_booking_type: bookingType,
+          p_booking_amount: bookingAmount
+        })
+
+      if (rpcError) throw rpcError
+
+      const result = typeof data === 'string' ? JSON.parse(data) : data
+
+      if (!result.valid) {
+        setError(result.error)
+        return
+      }
+
+      // Success!
+      setAppliedPromo({
+        code: result.code,
+        description: result.description,
+        discountAmount: result.discount_amount,
+        promoCodeId: result.promo_code_id
+      })
+
+      // Notify parent component
+      onPromoApplied({
+        code: result.code,
+        discountAmount: result.discount_amount,
+        promoCodeId: result.promo_code_id
+      })
+
+      setError(null)
+    } catch (err) {
+      console.error('Promo validation error:', err)
+      setError('Failed to validate promo code')
+    } finally {
+      setIsValidating(false)
+    }
+  }
+
+  const removePromo = () => {
+    setAppliedPromo(null)
+    setPromoCode('')
+    onPromoApplied(null)
+  }
+
+  if (appliedPromo) {
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="font-semibold text-green-900">
+              ✅ Promo Applied: {appliedPromo.code}
+            </p>
+            <p className="text-sm text-green-700">{appliedPromo.description}</p>
+            <p className="text-lg font-bold text-green-900 mt-1">
+              -${appliedPromo.discountAmount.toFixed(2)}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={removePromo}
+            className="text-red-600 hover:text-red-700"
+          >
+            Remove
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="font-semibold text-gray-900">Promo Code</label>
+      <div className="flex gap-2">
+        <Input
+          type="text"
+          placeholder="Enter code"
+          value={promoCode}
+          onChange={(e) => {
+            setPromoCode(e.target.value.toUpperCase())
+            setError(null)
+          }}
+          className="flex-1"
+          disabled={isValidating}
+        />
+        <Button
+          onClick={validatePromo}
+          disabled={isValidating || !promoCode.trim()}
+          className="bg-purple-600 hover:bg-purple-700"
+        >
+          {isValidating ? 'Checking...' : 'Apply'}
+        </Button>
+      </div>
+      {error && (
+        <p className="text-sm text-red-600">{error}</p>
+      )}
+    </div>
+  )
+}
+```
+
+### Step 4: Use Promo Code in Checkout
+
+```jsx
+// In your checkout page
+import PromoCodeInput from '@/components/PromoCodeInput'
+
+export default function CheckoutPage() {
+  const [promoDiscount, setPromoDiscount] = useState(0)
+  const [appliedPromo, setAppliedPromo] = useState(null)
+  
+  const bookingTotal = 500 // Your booking amount
+  const finalTotal = bookingTotal - promoDiscount
+
+  const handlePromoApplied = (promo) => {
+    if (promo) {
+      setPromoDiscount(promo.discountAmount)
+      setAppliedPromo(promo)
+    } else {
+      setPromoDiscount(0)
+      setAppliedPromo(null)
+    }
+  }
+
+  const handlePayment = async () => {
+    // If promo was used, record it
+    if (appliedPromo) {
+      const userEmail = localStorage.getItem('userEmail')
+      const bookingRef = `BK${Date.now()}`
+      
+      await supabase.rpc('record_promo_usage', {
+        p_promo_code_id: appliedPromo.promoCodeId,
+        p_user_email: userEmail,
+        p_booking_reference: bookingRef,
+        p_booking_type: 'hotel', // or flight/package
+        p_booking_amount: bookingTotal,
+        p_discount_amount: promoDiscount
+      })
+    }
+    
+    // Proceed to payment...
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-6">Checkout</h1>
+      
+      {/* Booking Summary */}
+      <div className="bg-white rounded-lg shadow p-6 mb-4">
+        <h2 className="text-xl font-semibold mb-4">Order Summary</h2>
+        <div className="space-y-2">
+          <div className="flex justify-between">
+            <span>Subtotal</span>
+            <span>${bookingTotal.toFixed(2)}</span>
+          </div>
+          {promoDiscount > 0 && (
+            <div className="flex justify-between text-green-600">
+              <span>Promo Discount</span>
+              <span>-${promoDiscount.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="border-t pt-2 flex justify-between text-xl font-bold">
+            <span>Total</span>
+            <span>${finalTotal.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Promo Code Input */}
+      <div className="bg-white rounded-lg shadow p-6 mb-4">
+        <PromoCodeInput
+          bookingType="hotel"
+          bookingAmount={bookingTotal}
+          onPromoApplied={handlePromoApplied}
+        />
+      </div>
+
+      {/* Payment Button */}
+      <Button
+        onClick={handlePayment}
+        className="w-full bg-purple-600 hover:bg-purple-700 py-6 text-lg"
+      >
+        Proceed to Payment - ${finalTotal.toFixed(2)}
+      </Button>
+    </div>
+  )
+}
+```
+
+---
+
+## ✅ Quick Checklist
+
+### Immediate (Do Now):
+- [ ] Add DialogTitle to UserInfoModal
+- [ ] Create lib/supabase.js with single client
+- [ ] Update all imports to use single client
+- [ ] Run RLS SQL fixes in Supabase
+- [ ] Test affiliate click saving
+
+### Promo Codes:
+- [ ] Run promo_codes table SQL
+- [ ] Run validation functions SQL
+- [ ] Create PromoCodeInput component
+- [ ] Add to checkout page
+- [ ] Test one-time use enforcement
+
+### Testing:
+- [ ] Modal opens without errors
+- [ ] Affiliate click saves to database
+- [ ] Ticketmaster redirect works
+- [ ] Promo code validation works
+- [ ] Promo code one-time use enforced
+- [ ] Promo discount applies correctly
+
+---
+
+**That's it! Focus on these fixes only. Everything else is already built.**
