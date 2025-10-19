@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Search, ChevronLeft, ChevronRight, ExternalLink, Package, X, MapPin, Calendar, DollarSign, Info } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, MapPin, Calendar, ExternalLink, Package } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
 import { UserInfoModal } from '@/components/UserInfoModal';
 
 interface TicketmasterEvent {
@@ -18,8 +16,8 @@ interface TicketmasterEvent {
   venue_address?: string;
   venue_latitude: number;
   venue_longitude: number;
-  price_min?: number;
-  price_max?: number;
+  price_min?: string;
+  price_max?: string;
   currency?: string;
   segment: string;
   genre?: string;
@@ -35,10 +33,11 @@ interface TicketmasterEvent {
 interface EventCardProps {
   event: TicketmasterEvent;
   onClick: () => void;
-  showRewardsBadge?: boolean;
 }
 
-function EventCard({ event, onClick, showRewardsBadge = true }: EventCardProps) {
+function EventCard({ event, onClick }: EventCardProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
   const getEventImage = () => {
     try {
       if (!event.images) return 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&auto=format&fit=crop';
@@ -56,34 +55,20 @@ function EventCard({ event, onClick, showRewardsBadge = true }: EventCardProps) 
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    const now = new Date();
-    const diffTime = Math.abs(date.getTime() - now.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    const formattedDate = date.toLocaleDateString('en-US', { 
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'short',
       month: 'short', 
-      day: 'numeric', 
-      year: 'numeric',
-      weekday: 'short'
+      day: 'numeric',
+      year: 'numeric'
     });
-    
-    // Add relative time
-    if (diffDays <= 7) {
-      return `In ${diffDays} days • ${formattedDate}`;
-    } else if (diffDays <= 30) {
-      const weeks = Math.floor(diffDays / 7);
-      return `In ${weeks} week${weeks > 1 ? 's' : ''} • ${formattedDate}`;
-    } else {
-      const months = Math.floor(diffDays / 30);
-      return `In ${months} month${months > 1 ? 's' : ''} • ${formattedDate}`;
-    }
   };
 
-  const formatPrice = () => {
-    if (event.price_min && event.price_max) {
-      return `${event.currency || 'USD'} ${event.price_min} - ${event.price_max}`;
-    }
-    return 'Check Ticketmaster';
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const getCountryFlag = (countryCode: string) => {
@@ -96,65 +81,163 @@ function EventCard({ event, onClick, showRewardsBadge = true }: EventCardProps) 
     return flags[countryCode] || '🌍';
   };
 
+  const lowestPrice = event.price_min ? parseFloat(event.price_min) : null;
+  const maxPrice = event.price_max ? parseFloat(event.price_max) : null;
   const isLaunchPeriod = new Date() < new Date('2026-06-30');
   const rewardAmount = isLaunchPeriod ? 20 : 10;
 
   return (
     <div 
-      className="min-w-[300px] flex-shrink-0 cursor-pointer group snap-start"
+      className="relative group cursor-pointer rounded-2xl overflow-hidden bg-gray-900 dark:bg-gray-800 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       onClick={onClick}
       data-testid={`event-card-${event.id}`}
     >
-      <div className="relative overflow-hidden rounded-xl transform transition-all duration-300 group-hover:scale-105 group-hover:shadow-2xl">
+      {/* Rewards Badge - Top Right */}
+      <div className="absolute top-3 right-3 z-20">
+        <div className="bg-gradient-to-r from-amber-400 to-orange-500 text-white px-4 py-2 rounded-full text-sm font-bold shadow-xl animate-pulse flex items-center gap-1"
+          data-testid="rewards-badge">
+          <span>🎉</span>
+          <span>Earn ${rewardAmount}</span>
+        </div>
+      </div>
+
+      {/* Event Image */}
+      <div className="relative h-64 overflow-hidden">
         <img 
           src={getEventImage()} 
           alt={event.name}
-          className="w-full h-[400px] object-cover"
+          className={`w-full h-full object-cover transition-transform duration-500 ${
+            isHovered ? 'scale-110' : 'scale-100'
+          }`}
           data-testid={`event-image-${event.id}`}
         />
-        <div className="absolute top-3 right-3 flex gap-2">
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+        
+        {/* Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+        
+        {/* Category Badge - Bottom Left of Image */}
+        <div className="absolute bottom-3 left-3">
+          <span className={`backdrop-blur-sm text-white px-3 py-1 rounded-full text-xs font-semibold ${
             event.segment === 'Music' 
-              ? 'bg-purple-500 text-white' 
+              ? 'bg-purple-600/90' 
               : event.segment === 'Sports'
-              ? 'bg-blue-500 text-white'
-              : 'bg-pink-500 text-white'
+              ? 'bg-blue-600/90'
+              : 'bg-pink-600/90'
           }`}
           data-testid={`event-segment-${event.id}`}>
             {event.segment}
           </span>
         </div>
-        
-        {showRewardsBadge && (
-          <div className="absolute top-3 left-3">
-            <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-black px-3 py-1 rounded-full text-xs font-bold shadow-lg"
-              data-testid="rewards-badge">
-              Earn ${rewardAmount} Credit
+      </div>
+
+      {/* Event Details */}
+      <div className="p-5">
+        {/* Event Name */}
+        <h3 className="text-xl font-bold text-white dark:text-white mb-2 line-clamp-2 group-hover:text-purple-400 transition-colors"
+          data-testid={`event-name-${event.id}`}>
+          {event.name}
+        </h3>
+
+        {/* Date & Time */}
+        <div className="flex items-center gap-2 text-gray-400 dark:text-gray-400 text-sm mb-3"
+          data-testid={`event-date-${event.id}`}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span>{formatDate(event.event_start_date)}</span>
+          <span>•</span>
+          <span>{formatTime(event.event_start_date)}</span>
+        </div>
+
+        {/* Venue */}
+        <div className="flex items-center gap-2 text-gray-400 dark:text-gray-400 text-sm mb-4"
+          data-testid={`event-location-${event.id}`}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span className="line-clamp-1">
+            {getCountryFlag(event.venue_country_code)} {event.venue_city} • {event.venue_name}
+          </span>
+        </div>
+
+        {/* Price Section */}
+        {lowestPrice && (
+          <div className="mb-4 p-3 bg-gray-800 dark:bg-gray-700 rounded-lg"
+            data-testid={`event-price-${event.id}`}>
+            <p className="text-xs text-gray-400 dark:text-gray-400 mb-1">Starting from</p>
+            <div className="flex items-end gap-2">
+              <p className="text-3xl font-bold text-white dark:text-white">
+                ${lowestPrice.toFixed(2)}
+              </p>
+              {maxPrice && lowestPrice !== maxPrice && (
+                <p className="text-sm text-gray-400 dark:text-gray-400 mb-1">
+                  - ${maxPrice.toFixed(2)}
+                </p>
+              )}
             </div>
+            <p className="text-xs text-gray-400 dark:text-gray-400 mt-1">{event.currency || 'USD'}</p>
           </div>
         )}
-        
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4">
-          <h3 className="text-white font-bold text-lg mb-2 line-clamp-2" data-testid={`event-name-${event.id}`}>
-            {event.name}
-          </h3>
-          <div className="space-y-1 text-white/90 text-sm">
-            <div className="flex items-center gap-2" data-testid={`event-date-${event.id}`}>
-              <span>📅</span>
-              <span className="text-xs">{formatDate(event.event_start_date)}</span>
+
+        {/* Rewards Messaging */}
+        <div className="bg-gradient-to-r from-purple-900/50 to-pink-900/50 border border-purple-500/30 rounded-lg p-3 mb-4">
+          <div className="flex items-start gap-2">
+            <span className="text-2xl">💎</span>
+            <div>
+              <p className="text-white dark:text-white font-semibold text-sm">
+                Book & Earn Rewards
+              </p>
+              <p className="text-gray-300 dark:text-gray-300 text-xs mt-1">
+                Get ${rewardAmount} hotel credit + points on every booking
+              </p>
             </div>
-            <div className="flex items-center gap-2" data-testid={`event-location-${event.id}`}>
-              <span>{getCountryFlag(event.venue_country_code)}</span>
-              <span>{event.venue_city}</span>
-            </div>
-            <div className="flex items-center gap-2" data-testid={`event-venue-${event.id}`}>
-              <span>🏟️</span>
-              <span className="line-clamp-1">{event.venue_name}</span>
-            </div>
-            <div className="flex items-center gap-2" data-testid={`event-price-${event.id}`}>
-              <span>💰</span>
-              <span>{formatPrice()}</span>
-            </div>
+          </div>
+        </div>
+
+        {/* CTA Button */}
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-4 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-2xl group relative overflow-hidden"
+          data-testid={`button-get-tickets-${event.id}`}
+        >
+          {/* Shimmer effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-[200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
+          
+          <div className="relative flex items-center justify-center gap-2">
+            <span className="text-lg">Get Tickets & Earn ${rewardAmount}</span>
+            <svg 
+              className="w-5 h-5 group-hover:translate-x-1 transition-transform" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </div>
+          <p className="relative text-xs mt-1 opacity-90">
+            Plus earn points on hotels & flights
+          </p>
+        </button>
+
+        {/* Trust indicators */}
+        <div className="mt-3 flex items-center justify-center gap-4 text-xs text-gray-400 dark:text-gray-400">
+          <div className="flex items-center gap-1">
+            <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span>Secure Booking</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span>Instant Rewards</span>
           </div>
         </div>
       </div>
@@ -205,6 +288,8 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
   };
 
   const dateTime = formatDateTime(event.event_start_date);
+  const lowestPrice = event.price_min ? parseFloat(event.price_min) : null;
+  const maxPrice = event.price_max ? parseFloat(event.price_max) : null;
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -297,12 +382,12 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
                     <div className="text-sm text-white/60">Date & Time</div>
                     <div className="font-semibold">{dateTime.date} at {dateTime.time}</div>
                   </div>
-                  {event.price_min && event.price_max && (
+                  {lowestPrice && (
                     <div>
                       <div className="text-sm text-white/60">Price Range</div>
                       <div className="font-semibold flex items-center gap-2">
-                        <DollarSign className="h-4 w-4" />
-                        {event.currency || 'USD'} {event.price_min} - {event.price_max}
+                        {event.currency || 'USD'} ${lowestPrice.toFixed(2)}
+                        {maxPrice && lowestPrice !== maxPrice && ` - $${maxPrice.toFixed(2)}`}
                       </div>
                     </div>
                   )}
@@ -344,10 +429,7 @@ function NetflixStyleModal({ event, onClose }: { event: TicketmasterEvent; onClo
             {/* Description */}
             {event.info && (
               <div className="mb-6">
-                <h3 className="text-xl font-bold mb-3 flex items-center gap-2">
-                  <Info className="h-5 w-5" />
-                  About This Event
-                </h3>
+                <h3 className="text-xl font-bold mb-3">About This Event</h3>
                 <p className="text-white/80 leading-relaxed">{event.info}</p>
               </div>
             )}
@@ -381,6 +463,25 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
 }) {
   const [selectedEvent, setSelectedEvent] = useState<TicketmasterEvent | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -396,47 +497,59 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
     return null;
   }
 
+  // Sort by lowest price
+  const sortedEvents = [...events].sort((a, b) => {
+    const priceA = a.price_min ? parseFloat(a.price_min) : Infinity;
+    const priceB = b.price_min ? parseFloat(b.price_min) : Infinity;
+    return priceA - priceB;
+  });
+
   return (
     <>
-      <div className="mb-12">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold flex items-center gap-2" data-testid={`section-title-${title}`}>
-            <span>{icon}</span> {title}
-          </h2>
+      <div 
+        ref={sectionRef}
+        className={`mb-12 transition-all duration-700 ${
+          isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+        }`}
+      >
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
+            <span className="text-4xl">{icon}</span>
+            <h2 className="text-3xl font-bold text-white dark:text-white" data-testid={`section-title-${title}`}>
+              {title}
+            </h2>
             {viewAllCount && (
-              <span className="text-sm text-slate-600 dark:text-slate-400">
-                {viewAllCount} events
+              <span className="text-gray-400 dark:text-gray-400 text-sm">
+                ({viewAllCount} events)
               </span>
             )}
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => scroll('left')}
-                className="rounded-full"
-                data-testid={`scroll-left-${title}`}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => scroll('right')}
-                className="rounded-full"
-                data-testid={`scroll-right-${title}`}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => scroll('left')}
+              className="rounded-full"
+              data-testid={`scroll-left-${title}`}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => scroll('right')}
+              className="rounded-full"
+              data-testid={`scroll-right-${title}`}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
         </div>
         <div 
           ref={scrollRef}
-          className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory pb-4"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
         >
-          {events.map((event) => (
+          {sortedEvents.slice(0, 12).map((event) => (
             <EventCard 
               key={event.id} 
               event={event} 
@@ -455,15 +568,18 @@ function HorizontalScroller({ title, events, icon, viewAllCount }: {
 
 function LoadingSkeleton() {
   return (
-    <div className="mb-12">
-      <Skeleton className="h-8 w-64 mb-4" />
-      <div className="flex gap-4 overflow-hidden">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="min-w-[300px]">
-            <Skeleton className="h-[400px] rounded-xl" />
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-12">
+      {[...Array(8)].map((_, i) => (
+        <div key={i} className="bg-gray-800 dark:bg-gray-700 rounded-2xl overflow-hidden animate-pulse">
+          <div className="h-64 bg-gray-700 dark:bg-gray-600" />
+          <div className="p-5 space-y-3">
+            <div className="h-6 bg-gray-700 dark:bg-gray-600 rounded w-3/4" />
+            <div className="h-4 bg-gray-700 dark:bg-gray-600 rounded w-1/2" />
+            <div className="h-4 bg-gray-700 dark:bg-gray-600 rounded w-2/3" />
+            <div className="h-12 bg-gray-700 dark:bg-gray-600 rounded-lg" />
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -497,25 +613,23 @@ export default function Events() {
   }, []);
 
   const fetchEvents = async () => {
-    console.log('🎫 Fetching Ticketmaster events with 3-4 month rolling window...');
+    console.log('🎫 Fetching live Ticketmaster events with 3-4 month rolling window...');
     setLoading(true);
     setError(null);
 
     try {
-      // Calculate rolling 3-4 month window
       const today = new Date();
       const startDate = new Date();
-      startDate.setDate(today.getDate() + 7); // Start 1 week from now
+      startDate.setDate(today.getDate() + 7);
       
       const endDate = new Date();
-      endDate.setMonth(today.getMonth() + 4); // 4 months out
+      endDate.setMonth(today.getMonth() + 4);
       
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
       
       console.log('📅 Date range:', { startDateStr, endDateStr });
 
-      // Fetch events from all regions with date range
       const regions = [
         { code: 'US', priority: 1 },
         { code: 'CA', priority: 2 },
@@ -538,7 +652,6 @@ export default function Events() {
         const events = await response.json();
         console.log(`✅ ${regionCode} events:`, events.length);
         
-        // Add region metadata to each event
         return events.map((event: TicketmasterEvent) => ({
           ...event,
           regionPriority: priority,
@@ -557,7 +670,6 @@ export default function Events() {
       
       console.log('📊 Total events loaded:', combinedEvents.length);
 
-      // Categorize events dynamically
       categorizeEvents(combinedEvents);
     } catch (err: any) {
       console.error('❌ Error fetching events:', err);
@@ -581,13 +693,11 @@ export default function Events() {
     const thirtyDaysOut = new Date();
     thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
 
-    // 1. HAPPENING SOON (Next 30 days, all regions)
     newCategories.happeningSoon = events
       .filter(e => new Date(e.event_start_date) <= thirtyDaysOut)
       .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
       .slice(0, 20);
 
-    // 2. SPORTS BY REGION (US/CA combined)
     newCategories.sportsUSCA = events
       .filter(e => 
         (e.venue_country_code === 'US' || e.venue_country_code === 'CA') &&
@@ -596,7 +706,6 @@ export default function Events() {
       .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
       .slice(0, 30);
 
-    // 3. MUSIC BY REGION (US/CA)
     newCategories.musicUSCA = events
       .filter(e => 
         (e.venue_country_code === 'US' || e.venue_country_code === 'CA') &&
@@ -605,19 +714,16 @@ export default function Events() {
       .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
       .slice(0, 30);
 
-    // 4. UK EVENTS (All types)
     newCategories.ukEvents = events
       .filter(e => e.venue_country_code === 'GB')
       .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
       .slice(0, 30);
 
-    // 5. AUSTRALIA EVENTS (All types)
     newCategories.auEvents = events
       .filter(e => e.venue_country_code === 'AU')
       .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
       .slice(0, 30);
 
-    // 6. CHAMPIONSHIPS/FINALS (All regions, filter by keywords)
     const championshipKeywords = ['final', 'championship', 'cup', 'bowl', 'series', 'grand prix', 'playoff', 'world'];
     newCategories.championships = events
       .filter(e => {
@@ -627,7 +733,6 @@ export default function Events() {
       .sort((a, b) => new Date(a.event_start_date).getTime() - new Date(b.event_start_date).getTime())
       .slice(0, 20);
 
-    // 7. ARTS & THEATER (All regions)
     newCategories.arts = events
       .filter(e => 
         e.segment === 'Arts & Theatre' ||
@@ -637,197 +742,115 @@ export default function Events() {
       .slice(0, 20);
 
     setCategories(newCategories);
-    
-    console.log('📂 Categories:', {
-      happeningSoon: newCategories.happeningSoon.length,
-      sportsUSCA: newCategories.sportsUSCA.length,
-      musicUSCA: newCategories.musicUSCA.length,
-      ukEvents: newCategories.ukEvents.length,
-      auEvents: newCategories.auEvents.length,
-      championships: newCategories.championships.length,
-      arts: newCategories.arts.length
-    });
   };
 
   const isLaunchPeriod = new Date() < new Date('2026-06-30');
   const rewardAmount = isLaunchPeriod ? 20 : 10;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-800">
-      {/* Hero Section */}
-      <div className="relative bg-gradient-to-r from-purple-600 to-purple-800 text-white overflow-hidden">
-        <div className="absolute inset-0 bg-black/20"></div>
-        <div className="relative max-w-7xl mx-auto px-6 lg:px-8 py-20 lg:py-28">
-          <div className="text-center mb-12">
-            <h1 className="text-4xl lg:text-6xl font-bold mb-4 tracking-tight" data-testid="hero-title">
-              Discover Major Events Worldwide
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900 dark:from-black dark:via-gray-900 dark:to-black">
+      <div className="container mx-auto px-4 py-8">
+        {/* Hero Section with Rewards */}
+        <div className="bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white py-8 px-6 rounded-2xl mb-8 shadow-2xl">
+          <div className="max-w-4xl mx-auto text-center">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">
+              Unforgettable Events
+              <span className="block text-amber-300 mt-2">+ Instant Rewards 🎉</span>
             </h1>
-            <p className="text-xl text-purple-100 max-w-2xl mx-auto" data-testid="hero-subtitle">
-              Curated packages for F1 races, music festivals, and championship games
+            <p className="text-xl mb-6 opacity-90">
+              Book event tickets and earn ${rewardAmount} hotel credit instantly
             </p>
-          </div>
-
-          {/* Search Bar */}
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-4xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="md:col-span-1">
-                <Input
-                  placeholder="Location or Venue"
-                  className="h-12 text-slate-900"
-                  data-testid="input-location"
-                />
+            <div className="flex flex-wrap justify-center gap-4 text-sm">
+              <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full">
+                <span>✓</span>
+                <span>${rewardAmount} Hotel Credit per ticket</span>
               </div>
-              <div>
-                <Input
-                  type="date"
-                  className="h-12 text-slate-900"
-                  data-testid="input-date"
-                />
+              <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full">
+                <span>✓</span>
+                <span>Earn points on every booking</span>
               </div>
-              <div>
-                <Select>
-                  <SelectTrigger className="h-12 text-slate-900" data-testid="select-event-type">
-                    <SelectValue placeholder="Event Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Events</SelectItem>
-                    <SelectItem value="music">Music</SelectItem>
-                    <SelectItem value="sports">Sports</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Button 
-                  className="w-full h-12 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
-                  data-testid="button-discover"
-                >
-                  <Search className="mr-2 h-5 w-5" />
-                  Discover Events
-                </Button>
+              <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full">
+                <span>✓</span>
+                <span>Best prices guaranteed</span>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Events Content */}
-      <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12">
-        {/* Rewards Banner */}
-        {isLaunchPeriod ? (
-          <div 
-            className="rounded-xl p-6 text-center mb-8 shadow-lg"
-            style={{ 
-              background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-              color: '#000000'
-            }}
-            data-testid="banner-launch-celebration"
-          >
-            <h2 className="text-3xl font-bold mb-2">🎉 LAUNCH CELEBRATION 🎉</h2>
-            <p className="text-xl font-bold mb-1">Book Event Tickets → Earn ${rewardAmount} Hotel Credit</p>
-            <p className="text-sm opacity-90 mb-2">Limited Time: Launch Special Through June 2026</p>
-            <p className="text-xs opacity-75">Plus, earn points on all bookings with Event Escapes Rewards!</p>
-          </div>
-        ) : (
-          <div 
-            className="rounded-xl p-6 text-center mb-8 shadow-lg"
-            style={{ 
-              background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
-              color: '#ffffff'
-            }}
-            data-testid="banner-rewards-program"
-          >
-            <h2 className="text-2xl font-bold mb-2">Event Escapes Rewards</h2>
-            <p className="text-lg mb-1">Earn ${rewardAmount} hotel credit on every event ticket purchase!</p>
-            <p className="text-sm opacity-90">Plus, collect points on hotels, flights, and packages</p>
-          </div>
-        )}
+        {/* Loading State */}
+        {loading && <LoadingSkeleton />}
 
+        {/* Error State */}
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center mb-8">
-            <p className="text-red-700 dark:text-red-300 font-semibold">{error}</p>
-            <Button 
-              onClick={fetchEvents} 
-              className="mt-4"
-              variant="outline"
-              data-testid="button-retry"
-            >
+          <div className="text-center py-12">
+            <p className="text-red-400 text-lg mb-4">❌ {error}</p>
+            <Button onClick={fetchEvents} variant="outline">
               Try Again
             </Button>
           </div>
         )}
 
-        {loading ? (
+        {/* Events Categories */}
+        {!loading && !error && (
           <>
-            <LoadingSkeleton />
-            <LoadingSkeleton />
-            <LoadingSkeleton />
-          </>
-        ) : allEvents.length === 0 ? (
-          <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-12 text-center">
-            <p className="text-xl text-slate-600 dark:text-slate-400 mb-4">No events found</p>
-            <p className="text-sm text-slate-500 dark:text-slate-500">Try adjusting your filters or check back later</p>
-          </div>
-        ) : (
-          <>
-            {/* Dynamic Carousels - Only show categories with 4+ events */}
             {categories.happeningSoon.length >= 4 && (
               <HorizontalScroller 
                 title="Happening Soon" 
-                events={categories.happeningSoon} 
+                events={categories.happeningSoon}
                 icon="⚡"
                 viewAllCount={categories.happeningSoon.length}
               />
             )}
-
+            
             {categories.sportsUSCA.length >= 4 && (
               <HorizontalScroller 
-                title="Sports - USA & Canada" 
-                events={categories.sportsUSCA} 
+                title="Sports USA & Canada" 
+                events={categories.sportsUSCA}
                 icon="🏈"
                 viewAllCount={categories.sportsUSCA.length}
               />
             )}
-
+            
             {categories.musicUSCA.length >= 4 && (
               <HorizontalScroller 
-                title="Music & Concerts - USA & Canada" 
-                events={categories.musicUSCA} 
+                title="Music USA & Canada" 
+                events={categories.musicUSCA}
                 icon="🎵"
                 viewAllCount={categories.musicUSCA.length}
               />
             )}
-
+            
             {categories.ukEvents.length >= 4 && (
               <HorizontalScroller 
-                title="UK Premier Events" 
-                events={categories.ukEvents} 
+                title="United Kingdom Events" 
+                events={categories.ukEvents}
                 icon="🇬🇧"
                 viewAllCount={categories.ukEvents.length}
               />
             )}
-
+            
             {categories.auEvents.length >= 4 && (
               <HorizontalScroller 
                 title="Australia Events" 
-                events={categories.auEvents} 
+                events={categories.auEvents}
                 icon="🇦🇺"
                 viewAllCount={categories.auEvents.length}
               />
             )}
-
+            
             {categories.championships.length >= 4 && (
               <HorizontalScroller 
                 title="Championships & Finals" 
-                events={categories.championships} 
+                events={categories.championships}
                 icon="🏆"
                 viewAllCount={categories.championships.length}
               />
             )}
-
+            
             {categories.arts.length >= 4 && (
               <HorizontalScroller 
                 title="Arts & Theater" 
-                events={categories.arts} 
+                events={categories.arts}
                 icon="🎭"
                 viewAllCount={categories.arts.length}
               />
