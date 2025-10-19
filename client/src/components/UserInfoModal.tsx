@@ -134,7 +134,7 @@ export function UserInfoModal({ open, onClose, event }: UserInfoModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md z-[100]" data-testid="modal-user-info">
+      <DialogContent className="sm:max-w-md" data-testid="modal-user-info">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-purple-700 bg-clip-text text-transparent">
             🎉 Unlock Rewards!
