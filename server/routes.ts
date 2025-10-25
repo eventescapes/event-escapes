@@ -546,6 +546,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== FIXIE PROXY & SUPPLIER RELAY ROUTES ====================
+  
+  // Proxy IP endpoint - shows Fixie outbound IP
+  app.get("/api/proxy-ip", async (req, res) => {
+    try {
+      const { makeProxiedAxios } = await import("./lib/proxyClient");
+      const proxyAxios = makeProxiedAxios();
+      
+      const response = await proxyAxios.get("https://api.ipify.org?format=json");
+      res.json({
+        ip: response.data.ip,
+        source: "ipify via Fixie proxy",
+        fixieConfigured: !!process.env.FIXIE_URL
+      });
+    } catch (error: any) {
+      console.error("Error fetching proxy IP:", error.message);
+      res.status(500).json({ 
+        message: "Error fetching proxy IP: " + error.message,
+        fixieConfigured: !!process.env.FIXIE_URL
+      });
+    }
+  });
+
+  // Middleware for relay authentication
+  const authenticateRelay = (req: any, res: any, next: any) => {
+    const relayKey = req.headers['x-relay-key'];
+    const expectedKey = process.env.RELAY_KEY;
+    
+    if (!expectedKey) {
+      return res.status(500).json({ message: "Relay key not configured on server" });
+    }
+    
+    if (relayKey !== expectedKey) {
+      return res.status(401).json({ message: "Unauthorized: Invalid relay key" });
+    }
+    
+    next();
+  };
+
+  // RateHawk relay endpoint
+  app.post("/api/ratehawk/search", authenticateRelay, async (req, res) => {
+    const requestId = `rh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const startTime = Date.now();
+    
+    try {
+      console.log(`[${requestId}] RateHawk search request received`);
+      
+      // Placeholder response - will be replaced with actual API call
+      res.json({
+        status: "RateHawk relay active",
+        requestId,
+        latencyMs: Date.now() - startTime,
+        config: {
+          appId: process.env.RATEHAWK_APP_ID || "not-configured",
+          hasToken: !!process.env.RATEHAWK_TOKEN
+        }
+      });
+      
+      console.log(`[${requestId}] RateHawk search completed in ${Date.now() - startTime}ms`);
+    } catch (error: any) {
+      console.error(`[${requestId}] RateHawk error:`, error.message);
+      res.status(500).json({ 
+        message: "RateHawk relay error: " + error.message,
+        requestId,
+        latencyMs: Date.now() - startTime
+      });
+    }
+  });
+
+  // Travellanda relay endpoint
+  app.post("/api/travellanda/search", authenticateRelay, async (req, res) => {
+    const requestId = `tl-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const startTime = Date.now();
+    
+    try {
+      console.log(`[${requestId}] Travellanda search request received`);
+      
+      // Placeholder response - will be replaced with actual API call
+      res.json({
+        status: "Travellanda relay active",
+        requestId,
+        latencyMs: Date.now() - startTime,
+        config: {
+          hasKey: !!process.env.TRAVELLANDA_KEY
+        }
+      });
+      
+      console.log(`[${requestId}] Travellanda search completed in ${Date.now() - startTime}ms`);
+    } catch (error: any) {
+      console.error(`[${requestId}] Travellanda error:`, error.message);
+      res.status(500).json({ 
+        message: "Travellanda relay error: " + error.message,
+        requestId,
+        latencyMs: Date.now() - startTime
+      });
+    }
+  });
+
+  // TBO relay endpoint
+  app.post("/api/tbo/search", authenticateRelay, async (req, res) => {
+    const requestId = `tbo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const startTime = Date.now();
+    
+    try {
+      console.log(`[${requestId}] TBO search request received`);
+      
+      // Placeholder response - will be replaced with actual API call
+      res.json({
+        status: "TBO relay active",
+        requestId,
+        latencyMs: Date.now() - startTime,
+        config: {
+          hasApiKey: !!process.env.TBO_API_KEY
+        }
+      });
+      
+      console.log(`[${requestId}] TBO search completed in ${Date.now() - startTime}ms`);
+    } catch (error: any) {
+      console.error(`[${requestId}] TBO error:`, error.message);
+      res.status(500).json({ 
+        message: "TBO relay error: " + error.message,
+        requestId,
+        latencyMs: Date.now() - startTime
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
