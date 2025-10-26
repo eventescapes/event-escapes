@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,23 +21,58 @@ interface MultiCitySlice {
 const FlightSearchForm = () => {
   const [, navigate] = useLocation();
 
-  // Flight search state
-  const [searchParams, setSearchParams] = useState<FlightSearchParams>({
-    tripType: 'return',
-    from: '',
-    to: '',
-    departDate: '',
-    returnDate: '',
-    passengers: 1,
-    cabinClass: 'economy',
-    multiCitySlices: []
-  });
+  // Initialize with saved data from sessionStorage or defaults
+  const getSavedSearchParams = (): FlightSearchParams => {
+    try {
+      const saved = sessionStorage.getItem('flightSearchParams');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved search params');
+    }
+    return {
+      tripType: 'return',
+      from: '',
+      to: '',
+      departDate: '',
+      returnDate: '',
+      passengers: 1,
+      cabinClass: 'economy',
+      multiCitySlices: []
+    };
+  };
 
-  // Multi-city state
-  const [multiCitySlices, setMultiCitySlices] = useState<MultiCitySlice[]>([
-    { id: '1', origin: '', destination: '', departure_date: '' },
-    { id: '2', origin: '', destination: '', departure_date: '' }
-  ]);
+  const getSavedMultiCitySlices = (): MultiCitySlice[] => {
+    try {
+      const saved = sessionStorage.getItem('multiCitySlices');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved multi-city slices');
+    }
+    return [
+      { id: '1', origin: '', destination: '', departure_date: '' },
+      { id: '2', origin: '', destination: '', departure_date: '' }
+    ];
+  };
+
+  // Flight search state - restored from sessionStorage
+  const [searchParams, setSearchParams] = useState<FlightSearchParams>(getSavedSearchParams());
+
+  // Multi-city state - restored from sessionStorage
+  const [multiCitySlices, setMultiCitySlices] = useState<MultiCitySlice[]>(getSavedMultiCitySlices());
+
+  // Save search params to sessionStorage whenever they change
+  useEffect(() => {
+    sessionStorage.setItem('flightSearchParams', JSON.stringify(searchParams));
+  }, [searchParams]);
+
+  // Save multi-city slices to sessionStorage whenever they change
+  useEffect(() => {
+    sessionStorage.setItem('multiCitySlices', JSON.stringify(multiCitySlices));
+  }, [multiCitySlices]);
 
   // Update search params when trip type changes
   const handleTripTypeChange = (tripType: TripType) => {

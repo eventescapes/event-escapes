@@ -1,0 +1,579 @@
+# 🔴 Duffel Flights - Remaining Issues to Fix
+
+## ✅ What's Working Now:
+- Flight search ✅
+- Flight selection ✅  
+- Seat selection UI ✅
+- Baggage selection UI ✅
+- Stripe payment ✅
+- Booking creation in Duffel ✅
+- Confirmation page loads ✅
+- Booking reference shows ✅
+
+## ❌ What's Still Broken:
+
+---
+
+### **Issue 1: Back Button Breaks Flight Search Page**
+
+**Problem:** When user clicks browser back button from flight results, the search form disappears.
+
+**Root Cause:** React state not persisting or route not handling properly.
+
+**Fix Location:** Flight search page component
+
+```tsx
+// Add state persistence or proper navigation
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+
+export default function FlightSearchPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [searchFormVisible, setSearchFormVisible] = useState(true);
+  
+  // Restore search form when returning to page
+  useEffect(() => {
+    setSearchFormVisible(true);
+  }, []);
+  
+  // OR use session storage to persist form data
+  useEffect(() => {
+    const savedSearch = sessionStorage.getItem('flightSearch');
+    if (savedSearch) {
+      const searchData = JSON.parse(savedSearch);
+      // Restore form values
+    }
+  }, []);
+  
+  const handleSearch = (formData) => {
+    // Save search to session storage
+    sessionStorage.setItem('flightSearch', JSON.stringify(formData));
+    
+    // Navigate to results
+    router.push(`/flight-results?${new URLSearchParams(formData)}`);
+  };
+  
+  return (
+    <div>
+      {searchFormVisible && (
+        <FlightSearchForm onSearch={handleSearch} />
+      )}
+    </div>
+  );
+}
+```
+
+**Alternative Fix:** Check if the search form is conditionally hidden. Look for:
+```tsx
+// BAD - Don't hide the form
+{!searchResults && <SearchForm />}
+
+// GOOD - Always show the form
+<SearchForm />
+{searchResults && <ResultsList />}
+```
+
+---
+
+### **Issue 2: Confirmation Page Shows $0.00**
+
+**Problem:** Database has correct amount ($344.72) but confirmation page displays $0.00.
+
+**Evidence from Database:**
+```json
+{
+  "amount": 344.72,  // ✅ Correct in DB
+  "currency": "AUD"
+}
+```
+
+**But confirmation page shows:** `AUD $0.00`
+
+**Root Cause:** Confirmation page not reading `booking.amount` correctly.
+
+**Fix Location:** `/app/confirmation/page.tsx` or similar
+
+```tsx
+// CURRENT (BROKEN):
+export default function ConfirmationPage() {
+  const [booking, setBooking] = useState(null);
+  
+  // ... loading code ...
+  
+  return (
+    <div>
+      <h3>Total Paid</h3>
+      <p>{booking.currency} ${booking.total_amount?.toFixed(2)}</p>
+      {/* ❌ booking.total_amount doesn't exist in DB! */}
+    </div>
+  );
+}
+
+// FIX:
+export default function ConfirmationPage() {
+  const [booking, setBooking] = useState(null);
+  
+  // ... loading code ...
+  
+  return (
+    <div>
+      <h3>Total Paid</h3>
+      <p>{booking.currency} ${booking.amount.toFixed(2)}</p>
+      {/* ✅ Use booking.amount, not booking.total_amount */}
+    </div>
+  );
+}
+```
+
+**Complete Fix:**
+
+```tsx
+// /app/confirmation/page.tsx
+
+export default function ConfirmationPage() {
+  // ... existing code ...
+  
+  return (
+    <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <div className="max-w-3xl mx-auto">
+        
+        {/* Success Header */}
+        <div className="bg-green-50 border-2 border-green-500 rounded-lg p-6 mb-6">
+          <div className="flex items-center">
+            <div className="bg-green-500 rounded-full p-3 mr-4">
+              ✓
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-green-700">Booking Confirmed!</h1>
+              <p className="text-green-600">Your flight has been successfully booked</p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Booking Reference */}
+        {booking?.booking_reference && (
+          <div className="bg-white rounded-lg p-6 mb-6 shadow">
+            <h2 className="text-lg font-semibold mb-2">Booking Reference</h2>
+            <p className="text-3xl font-mono font-bold text-blue-600">
+              {booking.booking_reference}
+            </p>
+            <p className="text-sm text-gray-600 mt-2">
+              Confirmation sent to {booking.primary_email}
+            </p>
+          </div>
+        )}
+        
+        {/* Flight Details */}
+        <div className="bg-white rounded-lg p-6 mb-6 shadow">
+          <h2 className="text-lg font-semibold mb-4">Flight Details</h2>
+          
+          {booking?.offer_data?.slices?.map((slice, index) => (
+            <div key={index} className="mb-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm text-gray-600">
+                    {new Date(slice.segments[0].departing_at).toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                  <p className="text-xl font-bold mt-1">
+                    {slice.origin.iata_code} → {slice.destination.iata_code}
+                  </p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {slice.segments[0].marketing_carrier.name} • 
+                    Flight {slice.segments[0].marketing_carrier_flight_number}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Duration: {slice.duration.replace('PT', '').replace('H', 'h ').replace('M', 'm')}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Departure</p>
+                  <p className="font-bold text-lg">
+                    {new Date(slice.segments[0].departing_at).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                  <p className="text-sm text-gray-600 mt-2">Arrival</p>
+                  <p className="font-bold text-lg">
+                    {new Date(slice.segments[0].arriving_at).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {/* Passengers */}
+        <div className="bg-white rounded-lg p-6 mb-6 shadow">
+          <h2 className="text-lg font-semibold mb-4">Passengers</h2>
+          {booking?.passengers_data?.map((passenger, index) => (
+            <div key={index} className="mb-3">
+              <p className="font-medium capitalize">
+                {passenger.title}. {passenger.given_name} {passenger.family_name}
+              </p>
+              <p className="text-sm text-gray-600">{passenger.email}</p>
+              <p className="text-sm text-gray-600">{passenger.phone_number}</p>
+            </div>
+          ))}
+        </div>
+        
+        {/* CRITICAL FIX: Use booking.amount, not booking.total_amount */}
+        <div className="bg-white rounded-lg p-6 mb-6 shadow">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-semibold">Total Paid</h2>
+            <p className="text-2xl font-bold text-green-600">
+              {booking?.currency} ${booking?.amount?.toFixed(2) || '0.00'}
+            </p>
+          </div>
+          
+          {/* Show breakdown if available */}
+          {booking?.offer_data && (
+            <div className="mt-4 pt-4 border-t text-sm text-gray-600">
+              <div className="flex justify-between mb-1">
+                <span>Base Fare:</span>
+                <span>{booking.currency} ${parseFloat(booking.offer_data.base_amount).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between mb-1">
+                <span>Taxes & Fees:</span>
+                <span>{booking.currency} ${parseFloat(booking.offer_data.tax_amount).toFixed(2)}</span>
+              </div>
+              {/* Show ancillaries if they exist */}
+              {booking.services_data && booking.services_data.length > 0 && (
+                <div className="flex justify-between mb-1">
+                  <span>Seat & Baggage:</span>
+                  <span>{booking.currency} ${(booking.amount - parseFloat(booking.offer_data.total_amount)).toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        
+        {/* Rewards Earned */}
+        <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg p-6 text-white mb-6">
+          <h2 className="text-lg font-semibold mb-2">🎉 Rewards Earned!</h2>
+          <p className="text-3xl font-bold mb-2">
+            {Math.floor(booking?.amount || 0)} points
+          </p>
+          <p className="text-sm opacity-90">
+            You earned 1 point per dollar spent on this flight
+          </p>
+          <p className="text-xs opacity-75 mt-2">
+            = ${(Math.floor(booking?.amount || 0) / 100).toFixed(2)} value
+          </p>
+        </div>
+        
+        {/* Actions */}
+        <div className="flex gap-4">
+          <button 
+            onClick={() => window.location.href = '/'}
+            className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+          >
+            Book Another Trip
+          </button>
+          <button 
+            onClick={() => window.print()}
+            className="flex-1 px-6 py-3 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300"
+          >
+            Print Confirmation
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+###  **Issue 3: Seats & Baggage Not Being Saved to Database**
+
+**Problem:** User selects seat ($40.88) and baggage ($40.88) but `services_data` in database is `null`.
+
+**Evidence:**
+```json
+{
+  "amount": 344.72,  // ✅ This is correct (base + seat + bag)
+  "services_data": null  // ❌ Should be array of service IDs
+}
+```
+
+**Root Cause:** Services not being sent to backend when creating Stripe checkout session.
+
+**Fix Location:** Checkout creation endpoint
+
+```typescript
+// Backend: /api/create-checkout-session/route.ts or similar
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const { 
+    offerId, 
+    offerData, 
+    passengers, 
+    services // ❌ This might not be coming through
+  } = body;
+  
+  // CRITICAL FIX: Ensure services are captured and saved
+  const servicesData = services && services.length > 0 ? services : null;
+  
+  // Create booking record
+  const { data: booking, error } = await supabase
+    .from('bookings')
+    .insert({
+      duffel_offer_id: offerId,
+      offer_data: offerData,
+      passengers_data: passengers,
+      services_data: servicesData,  // ✅ Make sure this is included
+      amount: calculateTotal(offerData, services),  // ✅ Include services in total
+      currency: offerData.total_currency,
+      passenger_count: passengers.length,
+      primary_email: passengers[0].email,
+      primary_phone: passengers[0].phone_number,
+      stripe_session_id: session.id,
+      status: 'pending'
+    })
+    .select()
+    .single();
+    
+  return Response.json({ sessionId: session.id });
+}
+
+// Helper function
+function calculateTotal(offerData, services) {
+  const baseAmount = parseFloat(offerData.total_amount);
+  const servicesTotal = services?.reduce((sum, service) => {
+    return sum + (parseFloat(service.price) * (service.quantity || 1));
+  }, 0) || 0;
+  
+  return baseAmount + servicesTotal;
+}
+```
+
+**Frontend Fix:** Ensure services are sent to backend
+
+```typescript
+// /app/ancillaries/page.tsx or wherever checkout is initiated
+
+const handleCheckout = async () => {
+  // Collect selected services
+  const services = [
+    ...selectedSeats.map(seat => ({
+      id: seat.service_id,  // Duffel service ID
+      type: 'seat',
+      price: seat.price,
+      quantity: 1,
+      description: `Seat ${seat.designator}`
+    })),
+    ...selectedBaggage.map(bag => ({
+      id: bag.service_id,  // Duffel service ID
+      type: 'baggage',
+      price: bag.price,
+      quantity: bag.quantity,
+      description: `Checked baggage`
+    }))
+  ];
+  
+  // Create checkout session
+  const response = await fetch('/api/create-checkout-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      offerId: selectedOffer.id,
+      offerData: selectedOffer,
+      passengers: passengersData,
+      services: services  // ✅ Make sure this is sent
+    })
+  });
+  
+  const { sessionId } = await response.json();
+  
+  // Redirect to Stripe
+  const stripe = await getStripe();
+  await stripe.redirectToCheckout({ sessionId });
+};
+```
+
+---
+
+### **Issue 4: Services Not Being Sent to Duffel**
+
+**Problem:** When booking is confirmed with Duffel, seats and baggage aren't included in the order.
+
+**Fix Location:** Duffel order creation (webhook or after payment)
+
+```typescript
+// /api/webhooks/stripe/route.ts or booking confirmation handler
+
+async function confirmDuffelBooking(bookingId: string) {
+  // Get booking from database
+  const { data: booking } = await supabase
+    .from('bookings')
+    .select('*')
+    .eq('id', bookingId)
+    .single();
+  
+  // Prepare passengers for Duffel
+  const passengers = booking.passengers_data.map(p => ({
+    id: p.id,
+    given_name: p.given_name,
+    family_name: p.family_name,
+    gender: p.gender,
+    born_on: p.born_on,
+    title: p.title,
+    email: p.email,
+    phone_number: p.phone_number
+  }));
+  
+  // ✅ CRITICAL: Include services in Duffel order creation
+  const orderPayload = {
+    selected_offers: [booking.duffel_offer_id],
+    passengers: passengers,
+    type: 'instant',
+    payments: [{
+      type: 'balance',
+      amount: booking.amount.toString(),
+      currency: booking.currency
+    }]
+  };
+  
+  // ✅ Add services if they exist
+  if (booking.services_data && booking.services_data.length > 0) {
+    orderPayload.services = booking.services_data.map(service => ({
+      id: service.id,
+      quantity: service.quantity || 1
+    }));
+  }
+  
+  // Create Duffel order
+  const duffelResponse = await fetch('https://api.duffel.com/air/orders', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.DUFFEL_API_KEY}`,
+      'Content-Type': 'application/json',
+      'Duffel-Version': 'v1'
+    },
+    body: JSON.stringify(orderPayload)
+  });
+  
+  const order = await duffelResponse.json();
+  
+  // Update booking with order data
+  await supabase
+    .from('bookings')
+    .update({
+      duffel_order_id: order.data.id,
+      booking_reference: order.data.booking_reference,
+      order_data: order.data,
+      status: 'confirmed',
+      booking_confirmed_at: new Date().toISOString()
+    })
+    .eq('id', bookingId);
+    
+  return order;
+}
+```
+
+---
+
+## 🧪 Testing Checklist
+
+### Test 1: Cart State
+- [ ] Select flight → See price in "Your Flight" section
+- [ ] Click "Yes, select seats" → See seat modal
+- [ ] Select seat 28C ($40.88) → See "Your Flight" price update to include seat
+- [ ] Click "Yes, add bags" → See baggage modal
+- [ ] Add 1 checked bag ($40.88) → See "Your Flight" price include bag
+- [ ] Final price should be: Base + Seat + Bag
+
+### Test 2: Back Button
+- [ ] Search for flights
+- [ ] Click browser back button
+- [ ] Verify search form still visible
+- [ ] Can search again without page refresh
+
+### Test 3: Checkout & Confirmation
+- [ ] Complete booking with seat + baggage
+- [ ] Pay with Stripe test card
+- [ ] Confirm total on Stripe checkout matches Your Flight total
+- [ ] After redirect, confirmation page shows:
+   - [ ] Booking reference
+   - [ ] Flight details
+   - [ ] Passenger details
+   - [ ] **Total Paid shows correct amount (not $0.00)**
+   - [ ] Rewards points shown
+
+### Test 4: Database Verification
+- [ ] After booking, check Supabase `bookings` table
+- [ ] Verify `amount` matches what user paid
+- [ ] Verify `services_data` is NOT null if services selected
+- [ ] Verify `services_data` contains seat and baggage service IDs
+
+### Test 5: Duffel Verification
+- [ ] Log into Duffel dashboard
+- [ ] Find order by booking reference
+- [ ] Verify order includes seats and baggage
+- [ ] Verify total amount matches
+
+---
+
+## 📋 Implementation Priority
+
+### Phase 1: Fix Confirmation Display (5 mins)
+1. Update confirmation page to use `booking.amount` instead of `booking.total_amount`
+2. Test: Complete a booking and verify total shows correctly
+
+### Phase 2: Fix Services Data Flow (30 mins)
+1. Update frontend to collect services properly
+2. Update checkout API to receive and save services
+3. Update Duffel order creation to include services
+4. Test: Complete booking with seat + baggage, verify saves to DB
+
+### Phase 3: Fix Back Button (15 mins)
+1. Add session storage or state persistence
+2. Test: Navigate back and forth
+
+---
+
+## 🚀 Quick Wins
+
+**Fastest fix (5 minutes):**
+Just fix the confirmation page display issue - change `booking.total_amount` to `booking.amount`.
+
+**Medium fix (30 minutes):**
+Fix services data flow so seats/baggage are saved and sent to Duffel.
+
+**Polish (15 minutes):**
+Fix back button navigation.
+
+---
+
+## 💡 Key Insights from Database
+
+Your latest booking shows:
+```
+✅ Booking succeeded
+✅ Payment completed ($344.72)
+✅ Booking reference: K5V2G7
+✅ Duffel order created
+❌ services_data: null (should have service IDs)
+❌ Confirmation shows $0.00 (wrong field)
+```
+
+The booking **worked** but:
+1. Services weren't sent to Duffel (missing in order)
+2. Confirmation page looking at wrong field
+
+---
+
+**END OF FIXES DOCUMENT**
+
+Give this to Replit Agent and it should fix everything! 🚀

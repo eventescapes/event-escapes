@@ -133,17 +133,38 @@ const handler = async (req: Request) => {
 
         console.log('[stripe-webhook] Duffel order created:', order.id);
         console.log('[stripe-webhook] Booking reference:', order.booking_reference);
+        console.log('[stripe-webhook] Order amount:', order.total_amount, order.total_currency);
         console.log('[stripe-webhook] Order creation successful!');
 
-        // Store booking status in Deno KV for polling
+        // Parse offer data from metadata
+        const offerData = session.metadata?.offerData ? JSON.parse(session.metadata.offerData) : null;
+
+        // Enrich services data with descriptions and prices from original services
+        const enrichedServices = parsedServices.map((service: any) => ({
+          id: service.id,
+          type: service.type,
+          quantity: service.quantity || 1,
+          description: service.description || `${service.type} service`,
+          // Try to get amount from service, fall back to 0
+          amount: service.amount || service.price || 0,
+          currency: service.currency || (session.currency || 'usd').toUpperCase()
+        }));
+
+        // Store complete booking status in Deno KV for polling
         const kv = await Deno.openKv();
         await kv.set(['booking_status', session.id], {
           status: 'confirmed',
           booking_reference: order.booking_reference,
           duffel_order_id: order.id,
+          amount: parseFloat(order.total_amount),  // Use Duffel order amount
+          currency: order.total_currency.toUpperCase(),  // Use Duffel currency
+          offer_data: offerData,
+          passengers_data: duffelPassengers,  // Use snake_case passengers (not parsedPassengers!)
+          services_data: enrichedServices,  // Use enriched services with full details
+          primary_email: duffelPassengers[0]?.email || '',
           timestamp: new Date().toISOString()
         });
-        console.log('[stripe-webhook] Booking status stored for session:', session.id);
+        console.log('[stripe-webhook] Complete booking data stored for session:', session.id);
 
       } catch (error: any) {
         console.error('[stripe-webhook] Error processing payment:', error);

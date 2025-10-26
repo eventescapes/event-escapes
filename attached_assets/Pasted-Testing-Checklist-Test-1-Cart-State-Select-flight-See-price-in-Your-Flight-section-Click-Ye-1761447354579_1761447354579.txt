@@ -1,0 +1,86 @@
+Testing Checklist
+Test 1: Cart State
+
+ Select flight → See price in "Your Flight" section
+ Click "Yes, select seats" → See seat modal
+ Select seat 28C ($40.88) → See "Your Flight" price update to include seat
+ Click "Yes, add bags" → See baggage modal
+ Add 1 checked bag ($40.88) → See "Your Flight" price include bag
+ Final price should be: Base + Seat + Bag
+
+Test 2: Back Button
+
+ Search for flights
+ Click browser back button
+ Verify search form still visible
+ Can search again without page refresh
+
+Test 3: Checkout & Confirmation
+
+ Complete booking with seat + baggage
+ Pay with Stripe test card
+ Confirm total on Stripe checkout matches Your Flight total
+ After redirect, confirmation page shows:
+
+ Booking reference
+ Flight details
+ Passenger details
+ Total Paid shows correct amount (not $0.00)
+ Rewards points shown
+
+
+
+Test 4: Database Verification
+
+ After booking, check Supabase bookings table
+ Verify amount matches what user paid
+ Verify services_data is NOT null if services selected
+ Verify services_data contains seat and baggage service IDs
+
+Test 5: Duffel Verification
+
+ Log into Duffel dashboard
+ Find order by booking reference
+ Verify order includes seats and baggage
+ Verify total amount matches
+
+
+📋 Implementation Priority
+Phase 1: Fix Confirmation Display (5 mins)
+
+Update confirmation page to use booking.amount instead of booking.total_amount
+Test: Complete a booking and verify total shows correctly
+
+Phase 2: Fix Services Data Flow (30 mins)
+
+Update frontend to collect services properly
+Update checkout API to receive and save services
+Update Duffel order creation to include services
+Test: Complete booking with seat + baggage, verify saves to DB
+
+Phase 3: Fix Back Button (15 mins)
+
+Add session storage or state persistence
+Test: Navigate back and forth
+
+
+🚀 Quick Wins
+Fastest fix (5 minutes):
+Just fix the confirmation page display issue - change booking.total_amount to booking.amount.
+Medium fix (30 minutes):
+Fix services data flow so seats/baggage are saved and sent to Duffel.
+Polish (15 minutes):
+Fix back button navigation.
+
+💡 Key Insights from Database
+Your latest booking shows:
+✅ Booking succeeded
+✅ Payment completed ($344.72)
+✅ Booking reference: K5V2G7
+✅ Duffel order created
+❌ services_data: null (should have service IDs)
+❌ Confirmation shows $0.00 (wrong field)
+The booking worked but:
+
+Services weren't sent to Duffel (missing in order)
+Confirmation page looking at wrong field
