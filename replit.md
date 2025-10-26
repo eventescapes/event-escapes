@@ -8,9 +8,11 @@ The platform follows a streamlined 3-4 step user flow: search and discover event
 
 ## Recent Changes (October 26, 2025)
 
-### Duffel Flights Bug Fixes - Critical Services Persistence Issue RESOLVED
+### Duffel Flights Bug Fixes - COMPLETE RESOLUTION
 
-**Root Cause Identified:** Services (seats/baggage) selected on ancillaries page were being stored in a separate Deno KV location that the Stripe webhook never checked, causing them to be lost during checkout and resulting in $0.00 total and missing services on confirmation.
+**Root Cause #1 - Services Data Loss:** Services (seats/baggage) selected on ancillaries page were being stored in a separate Deno KV location that the Stripe webhook never checked, causing them to be lost during checkout.
+
+**Root Cause #2 - Incorrect Stripe Amount:** Stripe checkout session was created with only the flight price, not including seat and baggage costs, causing payment to charge the wrong amount.
 
 **Complete Fix Implemented:**
 
@@ -32,10 +34,21 @@ The platform follows a streamlined 3-4 step user flow: search and discover event
    - Form data preserved when using browser back button
    - No more empty form frustration after navigation
 
+5. **Booking Review Page** - NEW intermediate step before payment
+   - Shows complete breakdown: flight price, seats, baggage
+   - Calculates and displays grand total (flight + services)
+   - User confirms pricing before entering card details
+   - Sends correct grand total to Stripe checkout
+   - Improves transparency and prevents payment amount errors
+
 ### Data Flow Architecture
 ```
-Ancillaries Page → sessionStorage → PassengerDetailsPage → create-checkout-session 
-→ Stripe Metadata → Payment Success → Webhook → Deno KV booking_status → Confirmation Page
+Ancillaries Page → Passenger Details → BOOKING REVIEW PAGE (NEW) → Stripe Checkout
+                                              ↓
+                                   Grand Total Calculated
+                                   (Flight + Seats + Bags)
+                                              ↓
+                                   Stripe Metadata → Payment → Webhook → Confirmation
 ```
 
 ### Technical Implementation Details
@@ -45,6 +58,9 @@ Ancillaries Page → sessionStorage → PassengerDetailsPage → create-checkout
 - Cart store includes helper methods: getTotal(), getSeats(), getBaggage()
 - Back navigation added to AncillaryChoicePage and PassengerDetailsPage
 - "Change flight" functionality in TripSummary with cart clearing
+- **BookingReviewPage** calculates grand total and sends to create-checkout-session
+- Stripe checkout now receives correct total amount including all services
+- PassengerDetailsPage saves data to sessionStorage and navigates to review page
 
 ## User Preferences
 
