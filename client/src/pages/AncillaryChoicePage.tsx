@@ -159,9 +159,16 @@ export default function AncillaryChoicePage() {
       offer: cartItem.offer,
       selectedSeats,
       selectedBaggage,
+      servicesWithDetails,  // Include enriched services for display/calculation
       services: servicesForBooking, // Duffel API format for booking
       passengers, // Include real passenger IDs
     };
+    
+    console.log('📦 Saving checkout data to sessionStorage:');
+    console.log('  - Selected Seats:', selectedSeats);
+    console.log('  - Selected Baggage:', selectedBaggage);
+    console.log('  - Services with details:', servicesWithDetails);
+    
     sessionStorage.setItem('checkout_item', JSON.stringify(checkoutData));
     navigate("/passenger-details");
   };

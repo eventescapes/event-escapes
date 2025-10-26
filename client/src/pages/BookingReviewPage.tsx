@@ -39,17 +39,27 @@ export function BookingReviewPage() {
   const flightPrice = parseFloat(checkoutItem.offer?.total_amount || '0');
   const currency = (checkoutItem.offer?.total_currency || 'AUD').toUpperCase();
   
-  // Calculate services total
-  const seatsTotal = (checkoutItem.selectedSeats || []).reduce((sum: number, seat: any) => 
-    sum + parseFloat(seat.amount || '0'), 0
-  );
+  // Use servicesWithDetails for accurate pricing (enriched on ancillaries page)
+  const servicesWithDetails = checkoutItem.servicesWithDetails || [];
   
-  const baggageTotal = (checkoutItem.selectedBaggage || []).reduce((sum: number, bag: any) => 
-    sum + (parseFloat(bag.amount || '0') * (bag.quantity || 1)), 0
-  );
+  // Calculate services total from enriched data
+  const seatsTotal = servicesWithDetails
+    .filter((s: any) => s.type === 'seat')
+    .reduce((sum: number, seat: any) => sum + parseFloat(seat.amount || '0'), 0);
+  
+  const baggageTotal = servicesWithDetails
+    .filter((s: any) => s.type === 'baggage')
+    .reduce((sum: number, bag: any) => sum + (parseFloat(bag.amount || '0') * (bag.quantity || 1)), 0);
   
   const servicesTotal = seatsTotal + baggageTotal;
   const grandTotal = flightPrice + servicesTotal;
+  
+  console.log('🔍 REVIEW PAGE - Pricing Breakdown:');
+  console.log('  Services with details:', servicesWithDetails);
+  console.log('  Flight Price:', flightPrice);
+  console.log('  Seats Total:', seatsTotal);
+  console.log('  Baggage Total:', baggageTotal);
+  console.log('  Grand Total:', grandTotal);
 
   const handlePayNow = async () => {
     setSubmitting(true);
@@ -150,16 +160,16 @@ export function BookingReviewPage() {
           </Card>
 
           {/* Selected Seats Card */}
-          {checkoutItem.selectedSeats && checkoutItem.selectedSeats.length > 0 && (
+          {servicesWithDetails.filter((s: any) => s.type === 'seat').length > 0 && (
             <Card className="bg-white/10 backdrop-blur-lg border-white/20 p-6">
               <div className="flex items-center gap-3 mb-4">
                 <Armchair className="h-6 w-6 text-blue-300" />
                 <h2 className="text-xl font-semibold text-white">Selected Seats</h2>
               </div>
               <div className="space-y-3">
-                {checkoutItem.selectedSeats.map((seat: any, index: number) => (
+                {servicesWithDetails.filter((s: any) => s.type === 'seat').map((seat: any, index: number) => (
                   <div key={index} className="flex justify-between text-blue-100">
-                    <span>Seat {seat.designator}</span>
+                    <span>Seat {seat.designator || 'N/A'}</span>
                     <span className="font-medium">{currency} ${parseFloat(seat.amount || '0').toFixed(2)}</span>
                   </div>
                 ))}
@@ -172,14 +182,14 @@ export function BookingReviewPage() {
           )}
 
           {/* Selected Baggage Card */}
-          {checkoutItem.selectedBaggage && checkoutItem.selectedBaggage.length > 0 && (
+          {servicesWithDetails.filter((s: any) => s.type === 'baggage').length > 0 && (
             <Card className="bg-white/10 backdrop-blur-lg border-white/20 p-6">
               <div className="flex items-center gap-3 mb-4">
                 <Luggage className="h-6 w-6 text-blue-300" />
                 <h2 className="text-xl font-semibold text-white">Selected Baggage</h2>
               </div>
               <div className="space-y-3">
-                {checkoutItem.selectedBaggage.map((bag: any, index: number) => (
+                {servicesWithDetails.filter((s: any) => s.type === 'baggage').map((bag: any, index: number) => (
                   <div key={index} className="flex justify-between text-blue-100">
                     <span>Checked Bag × {bag.quantity || 1}</span>
                     <span className="font-medium">
