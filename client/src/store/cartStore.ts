@@ -34,6 +34,30 @@ export const useCart = create<CartState>()(
       },
       
       clearAll: () => set({ items: [] }),
+      
+      getTotal: (offerId) => {
+        const item = get().items.find(i => i.offerId === offerId);
+        if (!item) return 0;
+        
+        const flightAmount = parseFloat(item.offer?.total_amount || '0');
+        const servicesAmount = item.services.reduce((sum, service) => {
+          const amount = parseFloat(service.amount || '0');
+          const quantity = service.quantity || 1;
+          return sum + (amount * quantity);
+        }, 0);
+        
+        return flightAmount + servicesAmount;
+      },
+      
+      getSeats: (offerId) => {
+        const item = get().items.find(i => i.offerId === offerId);
+        return item?.services.filter(s => s.type === 'seat') || [];
+      },
+      
+      getBaggage: (offerId) => {
+        const item = get().items.find(i => i.offerId === offerId);
+        return item?.services.filter(s => s.type === 'baggage') || [];
+      },
     }),
     {
       name: 'eventescapes-flight-cart',

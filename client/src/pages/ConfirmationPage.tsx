@@ -121,43 +121,156 @@ export function ConfirmationPage() {
   }
 
   if (status === 'confirmed') {
+    const flightData = bookingData.offer_data || bookingData.offerData;
+    const passengersData = bookingData.passengers_data || bookingData.passengersData || [];
+    const servicesData = bookingData.services_data || bookingData.servicesData || [];
+    const totalAmount = bookingData.amount || bookingData.total_amount || 0;
+    const currency = bookingData.currency || flightData?.total_currency || 'AUD';
+    
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="max-w-3xl mx-auto px-4">
-          <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-            <CheckCircle className="w-20 h-20 text-green-500 mx-auto mb-6" />
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Booking Confirmed!</h1>
-            <p className="text-gray-600 mb-8">Your flight has been successfully booked</p>
-            
-            <div className="bg-gray-50 rounded-lg p-6 mb-6 text-left">
-              <h2 className="font-semibold text-gray-900 mb-4">Booking Details</h2>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Booking Reference:</span>
-                  <span className="font-mono font-semibold text-lg" data-testid="text-booking-reference">
-                    {bookingData.bookingReference || bookingData.booking_reference}
-                  </span>
-                </div>
-                {bookingData.duffelOrderId && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Order ID:</span>
-                    <span className="font-mono text-xs text-gray-500">{bookingData.duffelOrderId}</span>
-                  </div>
-                )}
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">
+        <div className="max-w-3xl mx-auto">
+          
+          {/* Success Header */}
+          <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-500 dark:border-green-700 rounded-lg p-6 mb-6">
+            <div className="flex items-center">
+              <div className="bg-green-500 rounded-full p-3 mr-4">
+                <CheckCircle className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-green-700 dark:text-green-400">Booking Confirmed!</h1>
+                <p className="text-green-600 dark:text-green-500">Your flight has been successfully booked</p>
               </div>
             </div>
-
-            <p className="text-sm text-gray-500 mb-6">
-              A confirmation email has been sent with your booking details and e-tickets.
+          </div>
+          
+          {/* Booking Reference */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 mb-6 shadow">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Booking Reference</h2>
+            <p className="text-3xl font-mono font-bold text-blue-600 dark:text-blue-400" data-testid="text-booking-reference">
+              {bookingData.bookingReference || bookingData.booking_reference}
             </p>
-
-            <button
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+              Confirmation sent to {bookingData.primary_email || (passengersData[0]?.email) || 'your email'}
+            </p>
+          </div>
+          
+          {/* Flight Details */}
+          {flightData?.slices && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 mb-6 shadow">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Flight Details</h2>
+              
+              {flightData.slices.map((slice: any, index: number) => (
+                <div key={index} className="mb-4 pb-4 border-b last:border-b-0 last:pb-0 border-gray-200 dark:border-gray-700">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {slice.departure_time ? new Date(slice.departure_time).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        }) : 'Flight Date'}
+                      </p>
+                      <p className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                        {slice.origin?.iata_code || slice.origin} → {slice.destination?.iata_code || slice.destination}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        {slice.segments?.[0]?.airline || 'Airline'} • Flight {slice.segments?.[0]?.flight_number || ''}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {slice.duration || ''} • {slice.segments?.length === 1 ? 'Direct' : `${slice.segments?.length - 1} stop(s)`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Departure</p>
+                      <p className="font-bold text-gray-900 dark:text-gray-100">
+                        {slice.departure_time ? new Date(slice.departure_time).toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        }) : '--:--'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* Passengers */}
+          {passengersData.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 mb-6 shadow">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Passengers</h2>
+              {passengersData.map((passenger: any, index: number) => (
+                <div key={index} className="mb-2">
+                  <p className="font-medium text-gray-900 dark:text-gray-100">
+                    {passenger.title}. {passenger.givenName || passenger.given_name} {passenger.familyName || passenger.family_name}
+                  </p>
+                  {passenger.email && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{passenger.email}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* Services (Seats & Baggage) */}
+          {servicesData.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 mb-6 shadow">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Additional Services</h2>
+              {servicesData.map((service: any, index: number) => (
+                <div key={index} className="flex justify-between mb-2 text-gray-900 dark:text-gray-100">
+                  <p>Service {index + 1}</p>
+                  <p>Quantity: {service.quantity}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* Total Amount */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 mb-6 shadow">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Total Paid</h2>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {currency.toUpperCase()} ${(typeof totalAmount === 'number' ? totalAmount : parseFloat(totalAmount || '0')).toFixed(2)}
+              </p>
+            </div>
+          </div>
+          
+          {/* Rewards Earned */}
+          {totalAmount > 0 && (
+            <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg p-6 text-white mb-6">
+              <h2 className="text-lg font-semibold mb-2">🎉 Rewards Earned!</h2>
+              <p className="text-3xl font-bold mb-2">
+                {Math.floor(typeof totalAmount === 'number' ? totalAmount : parseFloat(totalAmount || '0'))} points
+              </p>
+              <p className="text-sm opacity-90">
+                You earned 1 point per dollar spent on this flight
+              </p>
+            </div>
+          )}
+          
+          {/* Actions */}
+          <div className="flex gap-4">
+            <button 
               onClick={() => navigate('/')}
-              className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700"
+              className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold"
+              data-testid="button-book-another"
             >
-              Book Another Flight
+              Book Another Trip
+            </button>
+            <button 
+              onClick={() => window.print()}
+              className="flex-1 px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg font-semibold"
+              data-testid="button-print"
+            >
+              Print Confirmation
             </button>
           </div>
+          
+          <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
+            Need help? Contact support@eventescapes.com
+          </p>
         </div>
       </div>
     );

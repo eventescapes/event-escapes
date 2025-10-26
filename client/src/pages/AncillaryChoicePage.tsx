@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useCart } from "@/store/cartStore";
 import { Button } from "@/components/ui/button";
-import { Plane, Luggage, ArrowRight, Loader2 } from "lucide-react";
+import { Plane, Luggage, ArrowRight, Loader2, ArrowLeft } from "lucide-react";
 import { SeatSelectionModal } from "@/components/SeatSelectionModal";
 import { BaggageSelectionModal } from "@/components/ui/BaggageSelectionModal";
 
@@ -115,31 +115,51 @@ export default function AncillaryChoicePage() {
   };
 
   const proceedToCheckout = () => {
-    // Format services in Duffel API format: { id, type, quantity, passenger_id }
-    const services = [
+    // Format services with full details including prices for cart display
+    const servicesWithDetails = [
       ...selectedSeats.map((s: any) => ({ 
         id: s.serviceId || s.id, 
-        type: 'seat',
+        type: 'seat' as const,
         quantity: 1,
-        passenger_id: s.passengerId || s.passenger_id
+        amount: s.amount,
+        currency: cartItem.offer?.total_currency || 'AUD',
+        designator: s.designator,
+        passengerId: s.passengerId || s.passenger_id,
+        segmentId: s.segmentId,
+        segmentIndex: s.segmentIndex
       })),
       ...selectedBaggage.map((b: any) => ({ 
         id: b.serviceId || b.id, 
-        type: 'baggage',
+        type: 'baggage' as const,
         quantity: b.quantity || 1,
-        passenger_id: b.passengerId || b.passenger_id
+        amount: b.amount,
+        currency: cartItem.offer?.total_currency || 'AUD',
+        passengerId: b.passengerId || b.passenger_id,
+        segmentId: b.segmentId
       })),
     ];
     
-    console.log('💺🎒 Formatted services for checkout:', services);
-    setServicesForOffer(offerId, services);
+    console.log('💺🎒 Services with details for cart:', servicesWithDetails);
+    setServicesForOffer(offerId, servicesWithDetails);
+    
+    // Format services in Duffel API format for booking: { id, quantity }
+    const servicesForBooking = [
+      ...selectedSeats.map((s: any) => ({ 
+        id: s.serviceId || s.id, 
+        quantity: 1
+      })),
+      ...selectedBaggage.map((b: any) => ({ 
+        id: b.serviceId || b.id, 
+        quantity: b.quantity || 1
+      })),
+    ];
     
     // Save to sessionStorage for checkout
     const checkoutData = {
       offer: cartItem.offer,
       selectedSeats,
       selectedBaggage,
-      services, // Include formatted services
+      services: servicesForBooking, // Duffel API format for booking
       passengers, // Include real passenger IDs
     };
     sessionStorage.setItem('checkout_item', JSON.stringify(checkoutData));
@@ -160,6 +180,16 @@ export default function AncillaryChoicePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 py-12 px-4">
       <div className="max-w-2xl mx-auto">
+        {/* Back Button */}
+        <button
+          onClick={() => navigate('/flight-results')}
+          className="flex items-center text-blue-200 hover:text-white mb-6 transition-colors"
+          data-testid="button-back"
+        >
+          <ArrowLeft className="w-5 h-5 mr-2" />
+          Back to Flight Selection
+        </button>
+        
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2" data-testid="text-page-title">

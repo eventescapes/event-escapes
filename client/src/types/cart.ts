@@ -1,10 +1,13 @@
 export type SelectedService = { 
   id: string; 
+  type?: 'seat' | 'baggage';
   quantity?: number;
   amount?: string;
+  currency?: string;
   designator?: string;
   passengerId?: string;
   segmentId?: string;
+  segmentIndex?: number;
 };
 
 export type CartItem = {
@@ -20,4 +23,7 @@ export type CartState = {
   setServicesForOffer: (offerId: string, services: SelectedService[]) => void;
   clearOffer: (offerId: string) => void;
   clearAll: () => void;
+  getTotal: (offerId: string) => number;
+  getSeats: (offerId: string) => SelectedService[];
+  getBaggage: (offerId: string) => SelectedService[];
 };

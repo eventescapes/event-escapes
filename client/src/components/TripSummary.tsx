@@ -1,4 +1,6 @@
 import { Button } from '@/components/ui/button';
+import { useCart } from '@/store/cartStore';
+import { useLocation } from 'wouter';
 
 interface TripSummaryProps {
   currentSelection: {
@@ -15,17 +17,22 @@ export default function TripSummary({
   onBookNow,
   onAddToCart
 }: TripSummaryProps) {
-  const { offer, seats, baggage } = currentSelection;
+  const { offer } = currentSelection;
+  const { items, getSeats, getBaggage, getTotal, clearOffer } = useCart();
+  const [, navigate] = useLocation();
   
-  // Debug logging
-  console.log('📊 TripSummary received:', {
-    seats: currentSelection.seats,
-    seatsAmount: currentSelection.seats.reduce((sum, s) => {
-      console.log(`📊 Seat ${s.designator}: amount = ${s.amount}`);
-      return sum + parseFloat(s.amount || '0');
-    }, 0)
-  });
+  // Get cart item for this offer
+  const cartItem = offer ? items.find(i => i.offerId === offer.id) : null;
   
+  // Get seats and baggage from cart store (with prices) or fall back to props
+  const seatsFromCart = cartItem ? getSeats(offer.id) : [];
+  const baggageFromCart = cartItem ? getBaggage(offer.id) : [];
+  
+  // Use cart data if available, otherwise fall back to props
+  const seats = seatsFromCart.length > 0 ? seatsFromCart : currentSelection.seats;
+  const baggage = baggageFromCart.length > 0 ? baggageFromCart : currentSelection.baggage;
+  
+  // Calculate amounts
   const flightAmount = offer ? parseFloat(offer.total_amount?.toString() || '0') : 0;
   const seatsAmount = seats.reduce((sum, s) => sum + parseFloat(s.amount || '0'), 0);
   const baggageAmount = baggage.reduce((sum, b) => sum + (parseFloat(b.amount || '0') * (b.quantity || 1)), 0);
@@ -38,12 +45,53 @@ export default function TripSummary({
     <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 sticky top-4" data-testid="order-summary">
       <h3 className="text-xl font-bold text-gray-900 mb-6">Order Summary</h3>
 
+      {/* Selected Flight Details */}
+      {offer && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6 border border-blue-200 dark:border-blue-800">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100">Selected Flight</h4>
+            <button
+              onClick={() => {
+                if (confirm('Are you sure you want to change your flight? Your seat and baggage selections will be lost.')) {
+                  clearOffer(offer.id);
+                  navigate('/flight-results');
+                }
+              }}
+              className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
+              data-testid="button-change-flight"
+            >
+              Change flight
+            </button>
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="font-bold text-gray-900 dark:text-gray-100">
+                  {offer.slices?.[0]?.origin?.iata_code || offer.slices?.[0]?.origin} → {offer.slices?.[0]?.destination?.iata_code || offer.slices?.[0]?.destination}
+                </div>
+                <div className="text-gray-600 dark:text-gray-400 text-xs mt-1">
+                  {offer.slices?.[0]?.segments?.[0]?.airline || 'Flight'} • {offer.slices?.[0]?.segments?.[0]?.flight_number || ''}
+                </div>
+                <div className="text-gray-600 dark:text-gray-400 text-xs">
+                  {offer.slices?.[0]?.duration || ''} • {offer.slices?.[0]?.segments?.length === 1 ? 'Direct' : `${offer.slices?.[0]?.segments?.length - 1} stop(s)`}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-bold text-blue-600 dark:text-blue-400">
+                  {currency.toUpperCase()} ${flightAmount.toFixed(2)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Flight Status */}
       <div className="space-y-4 mb-6">
         <div>
           <div className="text-xs font-semibold text-gray-500 uppercase mb-1">Outbound</div>
           {offer ? (
-            <div className="text-sm text-gray-900">
+            <div className="text-sm text-gray-900 dark:text-gray-100">
               {offer.slices?.[0]?.segments?.[0]?.airline || 'Selected'}
             </div>
           ) : (
@@ -71,28 +119,34 @@ export default function TripSummary({
       {/* Price Breakdown */}
       {offer && (
         <div className="border-t pt-4 mb-6">
-          <h4 className="text-sm font-semibold text-gray-900 mb-3">Price Breakdown</h4>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Price Breakdown</h4>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-gray-600">Flight</span>
-              <span className="font-medium">{currency.toUpperCase()} ${flightAmount.toFixed(2)}</span>
+              <span className="text-gray-600 dark:text-gray-400">Flight</span>
+              <span className="font-medium text-gray-900 dark:text-gray-100">{currency.toUpperCase()} ${flightAmount.toFixed(2)}</span>
             </div>
             
             {seats.length > 0 && (
-              <div className="flex justify-between">
-                <span className="text-gray-600">
-                  Seats ({seats.map(s => s.designator).join(', ')})
-                </span>
-                <span className="font-medium">{currency.toUpperCase()} ${seatsAmount.toFixed(2)}</span>
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <span className="text-gray-600 dark:text-gray-400">Seats</span>
+                  <div className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                    {seats.map(s => s.designator).filter(Boolean).join(', ') || `${seats.length} seat(s)`}
+                  </div>
+                </div>
+                <span className="font-medium text-gray-900 dark:text-gray-100">{currency.toUpperCase()} ${seatsAmount.toFixed(2)}</span>
               </div>
             )}
             
             {baggage.length > 0 && (
-              <div className="flex justify-between">
-                <span className="text-gray-600">
-                  Baggage ({baggage.reduce((sum, b) => sum + (b.quantity || 1), 0)} {baggage.reduce((sum, b) => sum + (b.quantity || 1), 0) === 1 ? 'bag' : 'bags'})
-                </span>
-                <span className="font-medium">{currency.toUpperCase()} ${baggageAmount.toFixed(2)}</span>
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <span className="text-gray-600 dark:text-gray-400">Baggage</span>
+                  <div className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                    {baggage.reduce((sum, b) => sum + (b.quantity || 1), 0)} {baggage.reduce((sum, b) => sum + (b.quantity || 1), 0) === 1 ? 'bag' : 'bags'}
+                  </div>
+                </div>
+                <span className="font-medium text-gray-900 dark:text-gray-100">{currency.toUpperCase()} ${baggageAmount.toFixed(2)}</span>
               </div>
             )}
           </div>

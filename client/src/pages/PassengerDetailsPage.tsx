@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, AlertCircle, CheckCircle, Plane, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, AlertCircle, CheckCircle, Plane, Loader2, ArrowLeft } from 'lucide-react';
 
 interface PassengerForm {
   title: string;
@@ -486,6 +486,16 @@ export function PassengerDetailsPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
+        {/* Back Button */}
+        <button
+          onClick={() => window.history.back()}
+          className="flex items-center text-gray-600 hover:text-gray-900 mb-6 transition-colors"
+          data-testid="button-back"
+        >
+          <ArrowLeft className="w-5 h-5 mr-2" />
+          Back
+        </button>
+        
         <h1 className="text-3xl font-bold text-gray-900 mb-6">Passenger Details</h1>
 
         {requiresPassport && (
