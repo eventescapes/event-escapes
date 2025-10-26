@@ -16,15 +16,7 @@ const handler = async (req: Request) => {
   }
 
   try {
-    const { offerId, passengers, services, totalAmount, currency, offerData } = await req.json();
-
-    console.log('[create-checkout] === CREATING STRIPE SESSION ===');
-    console.log('[create-checkout] Offer ID:', offerId);
-    console.log('[create-checkout] TOTAL AMOUNT RECEIVED:', totalAmount, currency);
-    console.log('[create-checkout] Amount in cents for Stripe:', Math.round(parseFloat(totalAmount) * 100));
-    console.log('[create-checkout] Passengers:', passengers.length);
-    console.log('[create-checkout] Services count:', services?.length || 0);
-    console.log('[create-checkout] Services:', JSON.stringify(services, null, 2));
+    const { offerId, passengers, services, servicesWithDetails, flightPrice, seatsTotal, baggageTotal, totalAmount, currency, offerData } = await req.json();
 
     if (!offerId || !passengers || !totalAmount || !currency) {
       return new Response(
@@ -37,28 +29,65 @@ const handler = async (req: Request) => {
     const destination = offerData?.slices?.[offerData.slices.length - 1]?.destination?.iata_code || 'Destination';
     const passengerCount = passengers.length;
 
+    // Build line items with separate entries for flight, seats, and baggage
+    const lineItems = [];
+    
+    // Flight line item
+    const flightAmount = parseFloat(flightPrice || totalAmount);
+    lineItems.push({
+      price_data: {
+        currency: currency.toLowerCase(),
+        product_data: {
+          name: `Flight: ${origin} → ${destination}`,
+          description: `${passengerCount} passenger${passengerCount > 1 ? 's' : ''}`,
+        },
+        unit_amount: Math.round(flightAmount * 100),
+      },
+      quantity: 1,
+    });
+
+    // Seats line item
+    const seatsCost = parseFloat(seatsTotal || '0');
+    if (seatsCost > 0) {
+      lineItems.push({
+        price_data: {
+          currency: currency.toLowerCase(),
+          product_data: {
+            name: 'Seat Selection',
+            description: 'Selected seats for your flight',
+          },
+          unit_amount: Math.round(seatsCost * 100),
+        },
+        quantity: 1,
+      });
+    }
+
+    // Baggage line item
+    const baggageCost = parseFloat(baggageTotal || '0');
+    if (baggageCost > 0) {
+      lineItems.push({
+        price_data: {
+          currency: currency.toLowerCase(),
+          product_data: {
+            name: 'Checked Baggage',
+            description: 'Additional checked baggage',
+          },
+          unit_amount: Math.round(baggageCost * 100),
+        },
+        quantity: 1,
+      });
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: currency.toLowerCase(),
-            product_data: {
-              name: `Flight: ${origin} → ${destination}`,
-              description: `${passengerCount} passenger${passengerCount > 1 ? 's' : ''}`,
-            },
-            unit_amount: Math.round(parseFloat(totalAmount) * 100),
-          },
-          quantity: 1,
-        },
-      ],
+      line_items: lineItems,
       mode: 'payment',
       success_url: `${req.headers.get('origin')}/booking-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.get('origin')}/passenger-details?canceled=true`,
       metadata: {
         offerId,
         passengers: JSON.stringify(passengers),
-        services: JSON.stringify(services || []),  // Store services in Stripe metadata
+        services: JSON.stringify(servicesWithDetails || services || []),
         offerData: JSON.stringify(offerData),
       },
     });

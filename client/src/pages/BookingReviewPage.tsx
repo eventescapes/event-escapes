@@ -14,25 +14,14 @@ export function BookingReviewPage() {
     const item = sessionStorage.getItem('checkout_item');
     const passengers = sessionStorage.getItem('passenger_data');
     
-    console.log('📦 LOADING SESSION STORAGE:');
-    console.log('  checkout_item exists:', !!item);
-    console.log('  passenger_data exists:', !!passengers);
-    
     if (!item || !passengers) {
       navigate('/');
       return;
     }
 
     try {
-      const parsedItem = JSON.parse(item);
-      const parsedPassengers = JSON.parse(passengers);
-      
-      console.log('  Parsed checkout_item:', parsedItem);
-      console.log('  servicesWithDetails:', parsedItem.servicesWithDetails);
-      console.log('  selectedSeats:', parsedItem.selectedSeats);
-      
-      setCheckoutItem(parsedItem);
-      setPassengerData(parsedPassengers);
+      setCheckoutItem(JSON.parse(item));
+      setPassengerData(JSON.parse(passengers));
     } catch (err) {
       console.error('Error loading booking data:', err);
       navigate('/');
@@ -64,13 +53,6 @@ export function BookingReviewPage() {
   
   const servicesTotal = seatsTotal + baggageTotal;
   const grandTotal = flightPrice + servicesTotal;
-  
-  console.log('🔍 REVIEW PAGE - Pricing Breakdown:');
-  console.log('  Services with details:', servicesWithDetails);
-  console.log('  Flight Price:', flightPrice);
-  console.log('  Seats Total:', seatsTotal);
-  console.log('  Baggage Total:', baggageTotal);
-  console.log('  Grand Total:', grandTotal);
 
   const handlePayNow = async () => {
     setSubmitting(true);
@@ -80,17 +62,14 @@ export function BookingReviewPage() {
         offerId: checkoutItem.offer.id,
         passengers: passengerData,
         services: checkoutItem.services || [],
-        totalAmount: grandTotal.toFixed(2),  // Grand total including services
+        servicesWithDetails,  // Send enriched services for line items
+        flightPrice: flightPrice.toFixed(2),
+        seatsTotal: seatsTotal.toFixed(2),
+        baggageTotal: baggageTotal.toFixed(2),
+        totalAmount: grandTotal.toFixed(2),
         currency: currency,
         offerData: checkoutItem.offer,
       };
-      
-      console.log('💳 === BOOKING REVIEW PAGE - PAYMENT REQUEST ===');
-      console.log('💰 Flight Price:', flightPrice);
-      console.log('💺 Seats Total:', seatsTotal);
-      console.log('🧳 Baggage Total:', baggageTotal);
-      console.log('💵 GRAND TOTAL:', grandTotal);
-      console.log('📤 Request Body:', JSON.stringify(requestBody, null, 2));
       
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`,
@@ -110,12 +89,9 @@ export function BookingReviewPage() {
         throw new Error(result.error || 'Failed to create checkout session');
       }
 
-      console.log('✅ Checkout session created');
-      console.log('🚀 Redirecting to Stripe with total:', grandTotal);
       window.location.href = result.url;
 
     } catch (error: any) {
-      console.error('❌ Checkout error:', error);
       alert(`Payment initialization failed: ${error.message}`);
       setSubmitting(false);
     }

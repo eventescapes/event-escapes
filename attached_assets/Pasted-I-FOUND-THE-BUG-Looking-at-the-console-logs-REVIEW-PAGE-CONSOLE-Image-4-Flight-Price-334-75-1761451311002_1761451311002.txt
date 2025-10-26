@@ -1,0 +1,80 @@
+I FOUND THE BUG! Looking at the console logs:
+
+REVIEW PAGE CONSOLE (Image 4):
+✅ Flight Price: 334.75
+✅ Seats Total: 40.88
+✅ Grand Total: 375.63
+
+STRIPE CHECKOUT (Image 5):
+❌ Shows: A$334.75 (only flight price!)
+❌ Should show: A$375.63
+
+THE BUG:
+In BookingReviewPage.tsx, when creating the Stripe checkout session, the code is passing the FLIGHT PRICE (334.75) instead of the GRAND TOTAL (375.63).
+
+FIND THIS CODE in BookingReviewPage.tsx:
+```javascript
+const handleProceedToPayment = async () => {
+  // ...
+  const response = await fetch('/api/create-checkout-session', {
+    body: JSON.stringify({
+      amount: checkout_item.total_amount, // ❌ WRONG - this is flight only
+      // OR
+      amount: flightPrice, // ❌ WRONG
+    })
+  });
+};
+```
+
+CHANGE IT TO:
+```javascript
+const handleProceedToPayment = async () => {
+  // Calculate grand total
+  const grandTotal = flightPrice + seatsTotal + baggageTotal;
+  
+  console.log('🚀 CREATING STRIPE SESSION WITH:', {
+    flightPrice,
+    seatsTotal,
+    baggageTotal,
+    grandTotal
+  });
+  
+  const response = await fetch('/api/create-checkout-session', {
+    body: JSON.stringify({
+      amount: grandTotal, // ✅ CORRECT - full total
+      line_items: [
+        {
+          price_data: {
+            currency: 'aud',
+            product_data: { name: 'Flight Booking' },
+            unit_amount: Math.round(flightPrice * 100)
+          },
+          quantity: 1
+        },
+        ...(seatsTotal > 0 ? [{
+          price_data: {
+            currency: 'aud',
+            product_data: { name: 'Seat Selection' },
+            unit_amount: Math.round(seatsTotal * 100)
+          },
+          quantity: 1
+        }] : []),
+        ...(baggageTotal > 0 ? [{
+          price_data: {
+            currency: 'aud',
+            product_data: { name: 'Baggage' },
+            unit_amount: Math.round(baggageTotal * 100)
+          },
+          quantity: 1
+        }] : [])
+      ]
+    })
+  });
+};
+```
+
+VERIFY:
+1. Console should show: "🚀 CREATING STRIPE SESSION WITH: { flightPrice: 334.75, seatsTotal: 40.88, grandTotal: 375.63 }"
+2. Stripe checkout should show: A$375.63 (NOT $334.75)
+
+FOCUS ONLY ON: The handleProceedToPayment function in BookingReviewPage.tsx
