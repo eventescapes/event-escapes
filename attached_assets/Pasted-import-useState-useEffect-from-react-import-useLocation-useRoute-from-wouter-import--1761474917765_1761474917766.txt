@@ -158,11 +158,11 @@ export function BookingReviewPage() {
       <div className="max-w-3xl mx-auto">
         {/* Back Button */}
         <button
-          onClick={() => navigate(`/ancillaries/${offerId}`)}
+          onClick={() => navigate(`/passenger-details`)}
           className="flex items-center text-blue-200 hover:text-white mb-6 transition-colors"
         >
           <ArrowLeft className="w-5 h-5 mr-2" />
-          Back to Flight Extras
+          Back to Passenger Details
         </button>
 
         {/* Header */}
@@ -248,9 +248,9 @@ export function BookingReviewPage() {
                   <span>Checked Bag × {b.quantity || 1}</span>
                   <span>
                     {currency} $
-                    {(parseFloat(b.amount || "0") * (b.quantity || 1)).toFixed(
-                      2,
-                    )}
+                    {(
+                      parseFloat(b.amount || "0") * (b.quantity || 1)
+                    ).toFixed(2)}
                   </span>
                 </div>
               ))}
