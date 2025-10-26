@@ -34,11 +34,11 @@ function Router() {
           <Route path="/hotels" component={HotelResults} />
           <Route path="/flights" component={FlightResults} />
           <Route path="/ancillaries/:offerId" component={AncillaryChoicePage} />
-          <Route path="/review/:offerId" component={BookingReviewPage} />
           <Route path="/cart" component={CartPage} />
           <Route path="/checkout" component={Checkout} />
           <Route path="/confirmation" component={ConfirmationPage} />
           <Route path="/passenger-details" component={PassengerDetailsPage} />
+          <Route path="/booking-review" component={BookingReviewPage} />
           <Route path="/booking-success" component={BookingSuccessPage} />
           <Route path="/find-booking" component={FindBooking} />
           <Route path="/event-tickets" component={EventTickets} />
