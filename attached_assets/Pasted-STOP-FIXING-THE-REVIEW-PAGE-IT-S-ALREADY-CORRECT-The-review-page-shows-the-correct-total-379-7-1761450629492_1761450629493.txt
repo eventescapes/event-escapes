@@ -1,0 +1,79 @@
+STOP FIXING THE REVIEW PAGE - IT'S ALREADY CORRECT!
+
+The review page shows the correct total: $379.75
+The problem is in the Stripe checkout session creation.
+
+EXACT PROBLEM:
+When the "Pay AUD $379.75 Now" button is clicked, the code creates a Stripe session but passes the wrong amount variable.
+
+WHERE THE BUG IS:
+Find the function that creates the Stripe checkout session. It's probably in:
+- BookingReviewPage.tsx (the Pay Now button handler)
+- OR a file like: api/create-checkout-session
+- OR PaymentService.ts
+
+CURRENT BROKEN CODE probably looks like:
+```javascript
+const createCheckoutSession = async () => {
+  const response = await fetch('/api/create-checkout', {
+    body: JSON.stringify({
+      amount: flightPrice, // ❌ WRONG - only flight
+      // OR
+      amount: checkout_item.total_amount, // ❌ WRONG variable
+    })
+  });
+};
+```
+
+THE FIX:
+Change it to use the GRAND TOTAL that's already calculated on the review page:
+```javascript
+const createCheckoutSession = async () => {
+  // Get the grand total from the review page calculation
+  const grandTotal = flightPrice + seatsTotal + baggageTotal;
+  
+  const response = await fetch('/api/create-checkout', {
+    body: JSON.stringify({
+      amount: grandTotal, // ✅ CORRECT - use grand total
+      line_items: [
+        {
+          price_data: {
+            currency: 'aud',
+            product_data: { name: 'Flight Booking' },
+            unit_amount: Math.round(flightPrice * 100)
+          },
+          quantity: 1
+        },
+        ...(seatsTotal > 0 ? [{
+          price_data: {
+            currency: 'aud',
+            product_data: { name: 'Seat Selection' },
+            unit_amount: Math.round(seatsTotal * 100)
+          },
+          quantity: 1
+        }] : []),
+        ...(baggageTotal > 0 ? [{
+          price_data: {
+            currency: 'aud',
+            product_data: { name: 'Baggage' },
+            unit_amount: Math.round(baggageTotal * 100)
+          },
+          quantity: 1
+        }] : [])
+      ]
+    })
+  });
+};
+```
+
+VERIFY:
+1. Console log shows: "Creating Stripe session with amount: 379.75"
+2. Stripe checkout page shows: A$379.75 (NOT $338.87)
+3. Payment completes for full amount
+
+FOCUS ONLY ON:
+- The Pay Now button click handler
+- The Stripe session creation code
+- Passing the GRAND TOTAL (not just flight price)
+
+DO NOT modify the review page - it's already calculating correctly!

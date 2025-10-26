@@ -14,14 +14,25 @@ export function BookingReviewPage() {
     const item = sessionStorage.getItem('checkout_item');
     const passengers = sessionStorage.getItem('passenger_data');
     
+    console.log('📦 LOADING SESSION STORAGE:');
+    console.log('  checkout_item exists:', !!item);
+    console.log('  passenger_data exists:', !!passengers);
+    
     if (!item || !passengers) {
       navigate('/');
       return;
     }
 
     try {
-      setCheckoutItem(JSON.parse(item));
-      setPassengerData(JSON.parse(passengers));
+      const parsedItem = JSON.parse(item);
+      const parsedPassengers = JSON.parse(passengers);
+      
+      console.log('  Parsed checkout_item:', parsedItem);
+      console.log('  servicesWithDetails:', parsedItem.servicesWithDetails);
+      console.log('  selectedSeats:', parsedItem.selectedSeats);
+      
+      setCheckoutItem(parsedItem);
+      setPassengerData(parsedPassengers);
     } catch (err) {
       console.error('Error loading booking data:', err);
       navigate('/');
