@@ -8,20 +8,41 @@ The platform follows a streamlined 3-4 step user flow: search and discover event
 
 ## Recent Changes (October 26, 2025)
 
-### Duffel Flights Bug Fixes
-Fixed three critical issues in the flights booking flow:
+### Duffel Flights Bug Fixes - Critical Services Persistence Issue RESOLVED
 
-1. **Confirmation Page Amount Display** - Updated stripe-webhook to store complete booking data in Deno KV, including actual amount from Duffel order (not Stripe session), ensuring confirmation page shows correct total instead of $0.00
+**Root Cause Identified:** Services (seats/baggage) selected on ancillaries page were being stored in a separate Deno KV location that the Stripe webhook never checked, causing them to be lost during checkout and resulting in $0.00 total and missing services on confirmation.
 
-2. **Services Data Persistence** - Enhanced stripe-webhook to store enriched services data (seats/baggage) with full details (id, type, quantity, description, amount, currency) so confirmation page can display meaningful services breakdown with prices
+**Complete Fix Implemented:**
 
-3. **Flight Search Form State** - Added sessionStorage persistence to FlightSearchForm component, preventing form data loss when using browser back button
+1. **Services Data Flow** - Services now flow through Stripe metadata (authoritative source)
+   - PassengerDetailsPage sends services to create-checkout-session endpoint
+   - create-checkout-session stores services in Stripe session metadata
+   - Stripe webhook retrieves services from metadata (not separate KV)
+   - Eliminated redundant set-booking-services function call
 
-### Technical Details
-- Stripe webhook now stores `duffelPassengers` (snake_case format) instead of `parsedPassengers` (camelCase) to match confirmation page expectations
-- Booking amount sourced from `order.total_amount` (Duffel's authoritative amount) instead of `session.amount_total` (Stripe)
-- Services enriched with descriptions and pricing for proper cart/confirmation display
-- Cart store includes getTotal(), getSeats(), getBaggage() helper methods
+2. **Confirmation Page Amount Display** - Using Duffel order amounts as source of truth
+   - Booking amount sourced from `order.total_amount` (Duffel API) instead of `session.amount_total` (Stripe)
+   - Currency from `order.total_currency` to prevent Stripe/Duffel drift
+
+3. **Services Data Enrichment** - Full service details stored for display
+   - Services enriched with: id, type, quantity, description, amount, currency
+   - Passengers stored in snake_case format (given_name, family_name) to match confirmation page
+
+4. **Flight Search Form State** - Added sessionStorage persistence
+   - Form data preserved when using browser back button
+   - No more empty form frustration after navigation
+
+### Data Flow Architecture
+```
+Ancillaries Page → sessionStorage → PassengerDetailsPage → create-checkout-session 
+→ Stripe Metadata → Payment Success → Webhook → Deno KV booking_status → Confirmation Page
+```
+
+### Technical Implementation Details
+- Services stored in Stripe metadata alongside passengers and offerData
+- Webhook parses services from metadata: `JSON.parse(session.metadata.services)`
+- Enriched services include full pricing and descriptions for cart/confirmation display
+- Cart store includes helper methods: getTotal(), getSeats(), getBaggage()
 - Back navigation added to AncillaryChoicePage and PassengerDetailsPage
 - "Change flight" functionality in TripSummary with cart clearing
 
