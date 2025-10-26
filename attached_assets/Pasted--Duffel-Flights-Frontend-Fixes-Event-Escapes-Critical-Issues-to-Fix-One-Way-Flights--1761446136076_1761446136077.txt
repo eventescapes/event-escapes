@@ -1,0 +1,695 @@
+# 🛠️ Duffel Flights Frontend Fixes - Event Escapes
+
+## 🔴 Critical Issues to Fix (One-Way Flights)
+
+### Issue 1: Seats & Baggage Not Showing in Cart
+**Problem:** When user selects seats ($40.88) and baggage ($40.88), they don't appear in the Order Summary sidebar.
+
+**Root Cause:** State management issue - ancillaries are selected but not propagated to cart state.
+
+**Fix Location:** `/src/components/flights/AncillariesModal.tsx` or similar
+
+```tsx
+// CURRENT (BROKEN):
+const [selectedSeats, setSelectedSeats] = useState([]);
+const [selectedBaggage, setSelectedBaggage] = useState([]);
+
+// User selects seat → state updates locally
+// But cart doesn't update!
+
+// FIX:
+import { useCartStore } from '@/store/cartStore';
+
+const { addAncillary, updateTotal } = useCartStore();
+
+// When seat selected:
+const handleSeatSelection = (seatId, price) => {
+  setSelectedSeats([...selectedSeats, { id: seatId, price }]);
+  
+  // ADD THIS:
+  addAncillary({
+    type: 'seat',
+    id: seatId,
+    price: price,
+    currency: 'AUD',
+    description: `Seat ${seatId}`
+  });
+  
+  updateTotal(); // Recalculate cart total
+};
+
+// When baggage selected:
+const handleBaggageSelection = (baggageId, quantity, price) => {
+  setSelectedBaggage([...selectedBaggage, { id: baggageId, quantity, price }]);
+  
+  // ADD THIS:
+  addAncillary({
+    type: 'baggage',
+    id: baggageId,
+    quantity: quantity,
+    price: price,
+    currency: 'AUD',
+    description: `Checked baggage (${quantity}x)`
+  });
+  
+  updateTotal(); // Recalculate cart total
+};
+```
+
+---
+
+### Issue 2: Total Amount Not Updating (Shows $0.00)
+**Problem:** Order Summary shows "AUD $0.00" even after selecting flight + ancillaries.
+
+**Root Cause:** Cart total calculation not working or not being triggered.
+
+**Fix Location:** `/src/store/cartStore.ts` or `/src/components/flights/OrderSummary.tsx`
+
+```typescript
+// CREATE OR UPDATE: /src/store/cartStore.ts
+import { create } from 'zustand';
+
+interface CartItem {
+  type: 'flight' | 'seat' | 'baggage';
+  id: string;
+  price: number;
+  currency: string;
+  description: string;
+  quantity?: number;
+}
+
+interface CartStore {
+  items: CartItem[];
+  total: number;
+  currency: string;
+  
+  addFlight: (flight: any) => void;
+  addAncillary: (ancillary: CartItem) => void;
+  removeAncillary: (id: string) => void;
+  clearCart: () => void;
+  updateTotal: () => void;
+}
+
+export const useCartStore = create<CartStore>((set, get) => ({
+  items: [],
+  total: 0,
+  currency: 'AUD',
+  
+  addFlight: (flight) => {
+    set({
+      items: [{
+        type: 'flight',
+        id: flight.id,
+        price: parseFloat(flight.total_amount),
+        currency: flight.total_currency,
+        description: `${flight.slices[0].origin} → ${flight.slices[0].destination}`
+      }]
+    });
+    get().updateTotal();
+  },
+  
+  addAncillary: (ancillary) => {
+    set(state => ({
+      items: [...state.items, ancillary]
+    }));
+    get().updateTotal();
+  },
+  
+  removeAncillary: (id) => {
+    set(state => ({
+      items: state.items.filter(item => item.id !== id)
+    }));
+    get().updateTotal();
+  },
+  
+  clearCart: () => {
+    set({ items: [], total: 0 });
+  },
+  
+  updateTotal: () => {
+    const items = get().items;
+    const total = items.reduce((sum, item) => {
+      return sum + (item.price * (item.quantity || 1));
+    }, 0);
+    set({ total });
+  }
+}));
+```
+
+**Update OrderSummary Component:**
+
+```tsx
+// /src/components/flights/OrderSummary.tsx
+import { useCartStore } from '@/store/cartStore';
+
+export default function OrderSummary() {
+  const { items, total, currency } = useCartStore();
+  
+  const flightItem = items.find(item => item.type === 'flight');
+  const seatItems = items.filter(item => item.type === 'seat');
+  const baggageItems = items.filter(item => item.type === 'baggage');
+  
+  return (
+    <div className="order-summary">
+      <h2>Order Summary</h2>
+      
+      {/* OUTBOUND */}
+      <div className="section">
+        <h3>OUTBOUND</h3>
+        {flightItem ? (
+          <div className="flight-info">
+            <p>{flightItem.description}</p>
+            <p>{currency} ${flightItem.price.toFixed(2)}</p>
+          </div>
+        ) : (
+          <p className="text-gray-500">Not selected</p>
+        )}
+      </div>
+      
+      {/* SEATS */}
+      {seatItems.length > 0 && (
+        <div className="section">
+          <h4>Seats</h4>
+          {seatItems.map(seat => (
+            <div key={seat.id} className="ancillary-item">
+              <p>{seat.description}</p>
+              <p>{currency} ${seat.price.toFixed(2)}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* BAGGAGE */}
+      {baggageItems.length > 0 && (
+        <div className="section">
+          <h4>Baggage</h4>
+          {baggageItems.map(bag => (
+            <div key={bag.id} className="ancillary-item">
+              <p>{bag.description}</p>
+              <p>{currency} ${(bag.price * (bag.quantity || 1)).toFixed(2)}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* TOTAL */}
+      <div className="total">
+        <h3>Total</h3>
+        <p className="text-2xl font-bold">
+          {currency} ${total.toFixed(2)}
+        </p>
+      </div>
+      
+      <button 
+        disabled={total === 0}
+        className="checkout-btn"
+        onClick={() => window.location.href = '/checkout'}
+      >
+        {total === 0 ? 'Select a flight to continue' : 'Continue to Checkout'}
+      </button>
+    </div>
+  );
+}
+```
+
+---
+
+### Issue 3: No Flight Details Visible After Selection
+**Problem:** After clicking "Select Flight", user can't see what they selected.
+
+**Fix:** Show selected flight details prominently in Order Summary.
+
+```tsx
+// /src/components/flights/OrderSummary.tsx - Enhanced version
+
+{flightItem && (
+  <div className="selected-flight-details bg-blue-50 p-4 rounded-lg mb-4">
+    <h4 className="font-semibold mb-2">Selected Flight</h4>
+    
+    {/* Get full flight data from offer store */}
+    {offerData && (
+      <>
+        <div className="flex justify-between items-center mb-2">
+          <div>
+            <p className="text-sm text-gray-600">
+              {formatDate(offerData.slices[0].departure_time)}
+            </p>
+            <p className="font-bold text-lg">
+              {offerData.slices[0].origin} → {offerData.slices[0].destination}
+            </p>
+          </div>
+          <p className="font-bold">
+            ${offerData.total_amount}
+          </p>
+        </div>
+        
+        <div className="text-sm text-gray-600">
+          <p>{offerData.slices[0].segments[0].airline}</p>
+          <p>Flight {offerData.slices[0].segments[0].flight_number}</p>
+          <p>{offerData.slices[0].duration}</p>
+          <p>{offerData.slices[0].stops === 0 ? 'Direct' : `${offerData.slices[0].stops} stop(s)`}</p>
+        </div>
+        
+        {/* Edit button */}
+        <button 
+          className="text-blue-600 text-sm mt-2"
+          onClick={() => setShowFlightSelection(true)}
+        >
+          Change flight
+        </button>
+      </>
+    )}
+  </div>
+)}
+```
+
+---
+
+### Issue 4: Confirmation Page Crashes After Payment
+**Problem:** After successful Stripe payment, redirect to confirmation page fails (Image 7).
+
+**Root Cause:** Confirmation page can't load booking data or session expired.
+
+**Fix Location:** `/src/app/confirmation/page.tsx` or similar
+
+```tsx
+// /src/app/confirmation/page.tsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+
+export default function ConfirmationPage() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get('session_id');
+  
+  const [booking, setBooking] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    if (!sessionId) {
+      setError('No session ID provided');
+      setLoading(false);
+      return;
+    }
+    
+    loadBooking();
+  }, [sessionId]);
+  
+  async function loadBooking() {
+    try {
+      // Get booking from Supabase
+      const { data, error: dbError } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('stripe_session_id', sessionId)
+        .single();
+      
+      if (dbError) throw dbError;
+      
+      if (!data) {
+        throw new Error('Booking not found');
+      }
+      
+      setBooking(data);
+      
+      // If still processing, poll for updates
+      if (data.status === 'processing' || data.status === 'pending') {
+        pollBookingStatus(data.id);
+      }
+      
+    } catch (err) {
+      console.error('Error loading booking:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+  
+  async function pollBookingStatus(bookingId) {
+    const maxAttempts = 10;
+    let attempts = 0;
+    
+    const interval = setInterval(async () => {
+      attempts++;
+      
+      const { data } = await supabase
+        .from('bookings')
+        .select('status, duffel_order_id, booking_reference, order_data')
+        .eq('id', bookingId)
+        .single();
+      
+      if (data && (data.status === 'confirmed' || data.status === 'failed')) {
+        clearInterval(interval);
+        setBooking(prev => ({ ...prev, ...data }));
+      }
+      
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+      }
+    }, 2000); // Check every 2 seconds
+  }
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-lg">Processing your booking...</p>
+          <p className="text-sm text-gray-600">This may take a moment</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="max-w-md p-6 bg-red-50 rounded-lg">
+          <h2 className="text-xl font-bold text-red-700 mb-2">Booking Error</h2>
+          <p className="text-red-600">{error}</p>
+          <button 
+            onClick={() => window.location.href = '/flights'}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded"
+          >
+            Return to Flights
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
+  if (booking?.status === 'failed') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="max-w-md p-6 bg-red-50 rounded-lg">
+          <h2 className="text-xl font-bold text-red-700 mb-2">Booking Failed</h2>
+          <p className="text-red-600 mb-4">
+            {booking.error_message || 'Unable to complete booking'}
+          </p>
+          <p className="text-sm mb-4">
+            Your payment was successful but the booking failed. 
+            A refund will be processed automatically.
+          </p>
+          <button 
+            onClick={() => window.location.href = '/flights'}
+            className="px-4 py-2 bg-red-600 text-white rounded"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
+  // SUCCESS
+  return (
+    <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <div className="max-w-3xl mx-auto">
+        
+        {/* Success Header */}
+        <div className="bg-green-50 border-2 border-green-500 rounded-lg p-6 mb-6">
+          <div className="flex items-center">
+            <div className="bg-green-500 rounded-full p-3 mr-4">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-green-700">Booking Confirmed!</h1>
+              <p className="text-green-600">Your flight has been successfully booked</p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Booking Reference */}
+        {booking.booking_reference && (
+          <div className="bg-white rounded-lg p-6 mb-6 shadow">
+            <h2 className="text-lg font-semibold mb-2">Booking Reference</h2>
+            <p className="text-3xl font-mono font-bold text-blue-600">
+              {booking.booking_reference}
+            </p>
+            <p className="text-sm text-gray-600 mt-2">
+              Confirmation sent to {booking.primary_email}
+            </p>
+          </div>
+        )}
+        
+        {/* Flight Details */}
+        <div className="bg-white rounded-lg p-6 mb-6 shadow">
+          <h2 className="text-lg font-semibold mb-4">Flight Details</h2>
+          
+          {booking.offer_data.slices.map((slice, index) => (
+            <div key={index} className="mb-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm text-gray-600">
+                    {new Date(slice.departure_time).toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                  <p className="text-xl font-bold">
+                    {slice.origin} → {slice.destination}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {slice.segments[0].airline} • Flight {slice.segments[0].flight_number}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Departure</p>
+                  <p className="font-bold">
+                    {new Date(slice.departure_time).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {/* Passengers */}
+        <div className="bg-white rounded-lg p-6 mb-6 shadow">
+          <h2 className="text-lg font-semibold mb-4">Passengers</h2>
+          {booking.passengers_data.map((passenger, index) => (
+            <div key={index} className="mb-2">
+              <p className="font-medium">
+                {passenger.title}. {passenger.givenName} {passenger.familyName}
+              </p>
+              <p className="text-sm text-gray-600">{passenger.email}</p>
+            </div>
+          ))}
+        </div>
+        
+        {/* Services (Seats & Baggage) */}
+        {booking.services_data && booking.services_data.length > 0 && (
+          <div className="bg-white rounded-lg p-6 mb-6 shadow">
+            <h2 className="text-lg font-semibold mb-4">Additional Services</h2>
+            {booking.services_data.map((service, index) => (
+              <div key={index} className="flex justify-between mb-2">
+                <p>Service {index + 1}</p>
+                <p>Quantity: {service.quantity}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* Amount */}
+        <div className="bg-white rounded-lg p-6 mb-6 shadow">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-semibold">Total Paid</h2>
+            <p className="text-2xl font-bold">
+              {booking.currency} ${booking.amount.toFixed(2)}
+            </p>
+          </div>
+        </div>
+        
+        {/* Rewards Earned */}
+        <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg p-6 text-white">
+          <h2 className="text-lg font-semibold mb-2">🎉 Rewards Earned!</h2>
+          <p className="text-3xl font-bold mb-2">
+            {Math.floor(booking.amount)} points
+          </p>
+          <p className="text-sm opacity-90">
+            You earned 1 point per dollar spent on this flight
+          </p>
+          <button 
+            onClick={() => window.location.href = '/rewards'}
+            className="mt-4 px-4 py-2 bg-white text-purple-600 rounded font-semibold"
+          >
+            View Rewards
+          </button>
+        </div>
+        
+        {/* Actions */}
+        <div className="mt-6 flex gap-4">
+          <button 
+            onClick={() => window.location.href = '/'}
+            className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold"
+          >
+            Book Another Trip
+          </button>
+          <button 
+            onClick={() => window.print()}
+            className="flex-1 px-6 py-3 bg-gray-200 text-gray-800 rounded-lg font-semibold"
+          >
+            Print Confirmation
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+### Issue 5: No Back Button
+**Problem:** User can't go back to change selection.
+
+**Fix:** Add navigation controls.
+
+```tsx
+// Add to every step of the booking flow
+import { useRouter } from 'next/navigation';
+
+export default function BookingStep() {
+  const router = useRouter();
+  
+  return (
+    <div>
+      <button 
+        onClick={() => router.back()}
+        className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
+      >
+        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        Back
+      </button>
+      
+      {/* Rest of component */}
+    </div>
+  );
+}
+```
+
+---
+
+## 📋 Implementation Checklist
+
+### Phase 1: Fix Cart & Totals (PRIORITY)
+- [ ] Create or update `/src/store/cartStore.ts` with proper state management
+- [ ] Update ancillaries selection to use cart store
+- [ ] Update Order Summary to show all items
+- [ ] Test: Select flight → See in cart
+- [ ] Test: Select seat → See in cart + total updates
+- [ ] Test: Select baggage → See in cart + total updates
+- [ ] Test: Total = Flight + Seats + Baggage
+
+### Phase 2: Fix Confirmation Page
+- [ ] Create/update confirmation page with proper loading states
+- [ ] Add booking status polling
+- [ ] Add error handling
+- [ ] Add rewards earned display
+- [ ] Test: Complete booking → See confirmation
+- [ ] Test: Failed booking → See error message
+
+### Phase 3: Add Navigation
+- [ ] Add back button to ancillaries page
+- [ ] Add back button to passenger details page
+- [ ] Add "Change flight" button in Order Summary
+- [ ] Test all navigation flows
+
+### Phase 4: UI Polish
+- [ ] Show flight details prominently after selection
+- [ ] Add loading states everywhere
+- [ ] Add success/error toast notifications
+- [ ] Improve mobile responsiveness
+
+---
+
+## 🧪 Testing Script
+
+```javascript
+// Test 1: Basic Flow
+1. Go to /flights
+2. Search: LAX → JFK, Oct 28, 1 passenger
+3. Select cheapest flight ($332)
+4. Verify Order Summary shows flight
+5. Click "Yes, select seats"
+6. Select seat 28C ($40.88)
+7. Verify Order Summary shows: Flight + Seat = $372.88
+8. Click "Yes, add bags"
+9. Add 1 checked bag ($40.88)
+10. Verify Order Summary shows: Flight + Seat + Bag = $413.76
+11. Click Continue
+12. Fill passenger details
+13. Pay with test card
+14. Verify confirmation page loads
+15. Verify booking reference shown
+16. Verify flight details displayed
+17. Verify rewards earned shown
+
+// Test 2: Navigation
+1. Start booking flow
+2. At each step, click Back button
+3. Verify can return and change selections
+4. Complete booking successfully
+
+// Test 3: Error Handling
+1. Start booking
+2. Let offer expire (wait 30 mins)
+3. Try to complete booking
+4. Verify error message shown
+5. Verify can start new search
+```
+
+---
+
+## 🚨 Common Pitfalls to Avoid
+
+1. **Don't forget to clear cart** after successful booking
+2. **Handle offer expiration** - Duffel offers expire after 30 minutes
+3. **Store services_data correctly** - Must be array of `{id, quantity}`
+4. **Currency consistency** - Always use same currency throughout
+5. **Validate total on backend** - Don't trust frontend calculations alone
+
+---
+
+## 📞 Next Steps After Fixes
+
+Once one-way flights are working perfectly:
+
+1. **Add Return Flights**
+   - Modify search to include return date
+   - Handle 2 slices in offer selection
+   - Update Order Summary for outbound + return
+   - Test full round-trip flow
+
+2. **Add Multi-City**
+   - Allow multiple slice additions
+   - Complex routing logic
+   - More complex UI
+
+3. **Add Rewards Integration**
+   - Award points after confirmed booking
+   - Show points earned on confirmation
+   - Allow points redemption (but not on flights per your rules)
+
+4. **Production Checklist**
+   - Switch to live Duffel API
+   - Update Stripe to live mode
+   - Add proper error tracking (Sentry)
+   - Add analytics (PostHog/Mixpanel)
+   - Load testing
+
+---
+
+**END OF FIXES DOCUMENT**
