@@ -221,6 +221,7 @@ export function PassengerDetailsPage() {
           body: JSON.stringify({
             offerId: checkoutItem.offer.id,
             passengers,
+            services,  // Include services in checkout session
             totalAmount: checkoutItem.offer.total_amount,
             currency: checkoutItem.offer.total_currency,
             offerData: checkoutItem.offer,
@@ -235,39 +236,6 @@ export function PassengerDetailsPage() {
       }
 
       console.log('✅ Checkout session created:', result.sessionId);
-
-      // Save services to backend using sessionId
-      if (services.length > 0) {
-        console.log('💾 Saving services for session:', result.sessionId);
-        try {
-          const servicesResponse = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/set-booking-services`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-              },
-              body: JSON.stringify({
-                sessionId: result.sessionId,
-                services
-              })
-            }
-          );
-
-          if (!servicesResponse.ok) {
-            console.error('⚠️ Failed to save services, but continuing to checkout');
-          } else {
-            console.log('✅ Services saved successfully');
-          }
-        } catch (err) {
-          console.error('⚠️ Error saving services:', err);
-          // Continue to checkout even if service saving fails
-        }
-      } else {
-        console.log('ℹ️ No services selected, skipping service save');
-      }
-
       console.log('🚀 Redirecting to Stripe checkout...');
       window.location.href = result.url;
 

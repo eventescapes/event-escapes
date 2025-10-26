@@ -44,20 +44,17 @@ const handler = async (req: Request) => {
       console.log('[stripe-webhook] Amount:', (session.amount_total || 0) / 100, session.currency);
 
       try {
-        const { offerId, passengers } = session.metadata || {};
+        const { offerId, passengers, services } = session.metadata || {};
         
         if (!offerId || !passengers) {
           throw new Error('Missing booking data in session metadata');
         }
 
         const parsedPassengers = JSON.parse(passengers);
+        const parsedServices = services ? JSON.parse(services) : [];
         
-        // Retrieve services from Deno KV (saved by set-booking-services)
-        const kv = await Deno.openKv();
-        const servicesResult = await kv.get(['booking_services', session.id]);
-        const parsedServices = servicesResult.value?.services || [];
-        
-        console.log('[stripe-webhook] Retrieved services:', JSON.stringify(parsedServices, null, 2));
+        console.log('[stripe-webhook] Passengers:', parsedPassengers.length);
+        console.log('[stripe-webhook] Services from metadata:', JSON.stringify(parsedServices, null, 2));
 
         console.log('[stripe-webhook] Creating Duffel order for offer:', offerId);
 

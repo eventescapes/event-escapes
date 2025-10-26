@@ -1,0 +1,91 @@
+SINGLE TASK: Fix seat and baggage selections being lost during checkout.
+
+CURRENT ACTUAL FLOW:
+1. User selects flight ✅
+2. User selects seats/baggage on ancillaries page ✅
+3. User clicks "Continue to Checkout" 
+4. User enters passenger details ✅
+5. User clicks "Pay Now"
+6. Stripe checkout page opens ✅
+7. Payment completes ✅
+8. Booking is created with services_data: NULL ❌
+
+THE PROBLEM:
+Services selected on ancillaries page are lost before reaching database.
+There is NO cart/review page - it goes directly from passenger details to Stripe.
+
+WHAT TO FIX:
+
+STEP 1 - Ancillaries Page (where services are selected):
+- When user selects seat/baggage, store in React state
+- When clicking "Continue to Checkout", pass services data to passenger details page
+- Use: navigate('/passenger-details', { state: { services: servicesData } })
+  OR: sessionStorage.setItem('selectedServices', JSON.stringify(servicesData))
+
+STEP 2 - Passenger Details Page:
+- Retrieve services data from navigation state or sessionStorage
+- Display services summary: "Seat 12A ($25) + 1 Checked Bag ($50)"
+- Show updated total: Flight price + Services price
+- When clicking "Pay Now", include services in Stripe session creation
+
+STEP 3 - Create Stripe Checkout Session (backend):
+- Include services as line items in Stripe session
+- Pass services data in Stripe metadata
+- Include services cost in total amount
+
+STEP 4 - After Stripe Payment Success:
+- Retrieve services from Stripe session metadata
+- Save to bookings.services_data as JSON
+- Include services in Duffel order creation API call
+
+STEP 5 - Duffel Order Creation:
+- Add selected_services parameter to order creation
+- Format services for Duffel API
+
+EXPECTED services_data JSON FORMAT:
+{
+  "seats": [
+    {
+      "passenger_id": "pas_xxx",
+      "segment_id": "seg_xxx", 
+      "service_id": "ase_xxx",
+      "seat_number": "12A",
+      "price": 25.00,
+      "currency": "AUD"
+    }
+  ],
+  "baggage": [
+    {
+      "passenger_id": "pas_xxx",
+      "service_id": "bag_xxx",
+      "quantity": 1,
+      "price": 50.00,
+      "currency": "AUD"
+    }
+  ],
+  "total_services_cost": 75.00
+}
+
+FILES TO CHECK/MODIFY:
+1. Ancillaries page - capture and pass services
+2. Passenger details page - receive and display services
+3. Stripe session creation function - include services
+4. Booking creation function - save services_data
+5. Duffel order creation - include services
+
+VERIFY:
+1. Select seat on ancillaries page
+2. Select baggage
+3. Click "Continue to Checkout"
+4. Passenger details page should show services summary
+5. Total should include services cost
+6. After payment, check database: services_data should be populated
+7. Check Duffel order: should include services
+
+DO NOT:
+- Create a cart/review page (it doesn't exist)
+- Modify flight search
+- Change confirmation page yet
+- Break existing booking flow
+
+FOCUS: Pass services data from ancillaries → passenger details → Stripe → database → Duffel
