@@ -18,6 +18,7 @@ import EventTickets from "@/pages/event-tickets";
 import Events from "@/pages/events";
 import Rewards from "@/pages/rewards";
 import { PassengerDetailsPage } from "@/pages/PassengerDetailsPage";
+import { BookingReviewPage } from "@/pages/BookingReviewPage";
 import { ConfirmationPage } from "@/pages/ConfirmationPage";
 import { BookingSuccessPage } from "@/pages/BookingSuccessPage";
 import NotFound from "@/pages/not-found";
@@ -37,6 +38,7 @@ function Router() {
           <Route path="/checkout" component={Checkout} />
           <Route path="/confirmation" component={ConfirmationPage} />
           <Route path="/passenger-details" component={PassengerDetailsPage} />
+          <Route path="/booking-review" component={BookingReviewPage} />
           <Route path="/booking-success" component={BookingSuccessPage} />
           <Route path="/find-booking" component={FindBooking} />
           <Route path="/event-tickets" component={EventTickets} />

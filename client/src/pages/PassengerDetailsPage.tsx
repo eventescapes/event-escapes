@@ -204,40 +204,13 @@ export function PassengerDetailsPage() {
         return passenger;
       });
 
-      // Use formatted services from ancillary page (includes passenger_id and type)
-      const services = checkoutItem.services || [];
+      // Save passenger data to sessionStorage for review page
+      console.log('💾 Saving passenger data for review page');
+      sessionStorage.setItem('passenger_data', JSON.stringify(passengers));
       
-      console.log('💳 Creating Stripe checkout session...');
-      console.log('💺 Services to include:', services);
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`,
-        {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
-          },
-          body: JSON.stringify({
-            offerId: checkoutItem.offer.id,
-            passengers,
-            services,  // Include services in checkout session
-            totalAmount: checkoutItem.offer.total_amount,
-            currency: checkoutItem.offer.total_currency,
-            offerData: checkoutItem.offer,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create checkout session');
-      }
-
-      console.log('✅ Checkout session created:', result.sessionId);
-      console.log('🚀 Redirecting to Stripe checkout...');
-      window.location.href = result.url;
+      // Navigate to review page to show complete booking summary
+      console.log('📋 Navigating to booking review page');
+      navigate('/booking-review');
 
     } catch (error: any) {
       console.error('❌ Checkout error:', error);
