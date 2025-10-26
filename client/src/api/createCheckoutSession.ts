@@ -1,7 +1,10 @@
 type CreateCheckoutInput = {
   offerId: string;
-  passengers: any[];   // already normalized with mapPassengers()
+  passengers: any[];
   services?: any[];
+  offerData?: any;
+  totalAmount?: string;
+  currency?: string;
 };
 
 type CreateCheckoutResponse = {
@@ -9,38 +12,33 @@ type CreateCheckoutResponse = {
   url: string;
 };
 
-export async function createCheckoutSession(
-  { offerId, passengers, services = [] }: CreateCheckoutInput
-): Promise<CreateCheckoutResponse> {
-  // Prefer explicit override; otherwise derive from Supabase URL.
-  const directUrl = import.meta.env.VITE_CREATE_CHECKOUT_URL as string | undefined;
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-
-  const endpoint = directUrl
-    ?? (supabaseUrl
-          ? `${supabaseUrl}/functions/v1/create-checkout-session`
-          : undefined);
-
-  if (!endpoint) {
-    throw new Error(
-      "Missing endpoint. Set VITE_CREATE_CHECKOUT_URL or VITE_SUPABASE_URL in your environment."
-    );
-  }
+export async function createCheckoutSession({
+  offerId,
+  passengers,
+  services = [],
+  offerData,
+  totalAmount,
+  currency,
+}: CreateCheckoutInput): Promise<CreateCheckoutResponse> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const endpoint = `${supabaseUrl}/functions/v1/create-checkout-session`;
 
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ offerId, passengers, services }),
+    body: JSON.stringify({
+      offerId,
+      passengers,
+      services,
+      offerData,
+      totalAmount,
+      currency,
+    }),
   });
 
-  const data = await res.json().catch(() => ({}));
+  const data = await res.json();
   if (!res.ok) {
-    throw new Error(data?.error || `Failed to create checkout session (${res.status})`);
-  }
-
-  // Expected shape from your edge function
-  if (!data?.url || !data?.sessionId) {
-    throw new Error("Malformed response from create-checkout-session");
+    throw new Error(data?.error || "Failed to create checkout session");
   }
 
   return data as CreateCheckoutResponse;

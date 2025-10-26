@@ -11,11 +11,11 @@ export function BookingReviewPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const item = sessionStorage.getItem('checkout_item');
-    const passengers = sessionStorage.getItem('passenger_data');
-    
+    const item = sessionStorage.getItem("checkout_item");
+    const passengers = sessionStorage.getItem("passenger_data");
+
     if (!item || !passengers) {
-      navigate('/');
+      navigate("/");
       return;
     }
 
@@ -23,36 +23,45 @@ export function BookingReviewPage() {
       setCheckoutItem(JSON.parse(item));
       setPassengerData(JSON.parse(passengers));
     } catch (err) {
-      console.error('Error loading booking data:', err);
-      navigate('/');
+      console.error("Error loading booking data:", err);
+      navigate("/");
     }
   }, [navigate]);
 
   if (!checkoutItem || !passengerData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
         <Loader2 className="h-12 w-12 text-blue-400 animate-spin" />
       </div>
     );
   }
 
-  const flightPrice = parseFloat(checkoutItem.offer?.total_amount || '0');
-  const currency = (checkoutItem.offer?.total_currency || 'AUD').toUpperCase();
-  
-  // Use servicesWithDetails for accurate pricing (enriched on ancillaries page)
+  // Duffel offer data
+  const offer = checkoutItem.offer;
+  const airline = offer?.owner?.name || "Unknown Airline";
+  const currency = (offer?.total_currency || "AUD").toUpperCase();
+  const flightPrice = parseFloat(offer?.total_amount || "0");
+
+  // Ancillary calculation
   const servicesWithDetails = checkoutItem.servicesWithDetails || [];
-  
-  // Calculate services total from enriched data
+
   const seatsTotal = servicesWithDetails
-    .filter((s: any) => s.type === 'seat')
-    .reduce((sum: number, seat: any) => sum + parseFloat(seat.amount || '0'), 0);
-  
+    .filter((s: any) => s.type === "seat")
+    .reduce((sum, s) => sum + parseFloat(s.amount || "0"), 0);
+
   const baggageTotal = servicesWithDetails
-    .filter((s: any) => s.type === 'baggage')
-    .reduce((sum: number, bag: any) => sum + (parseFloat(bag.amount || '0') * (bag.quantity || 1)), 0);
-  
+    .filter((s: any) => s.type === "baggage")
+    .reduce(
+      (sum, s) => sum + parseFloat(s.amount || "0") * (s.quantity || 1),
+      0,
+    );
+
   const servicesTotal = seatsTotal + baggageTotal;
   const grandTotal = flightPrice + servicesTotal;
+
+  const origin = offer?.slices?.[0]?.origin?.iata_code || "N/A";
+  const destination =
+    offer?.slices?.[offer.slices.length - 1]?.destination?.iata_code || "N/A";
 
   const handlePayNow = async () => {
     setSubmitting(true);
@@ -62,7 +71,7 @@ export function BookingReviewPage() {
         offerId: checkoutItem.offer.id,
         passengers: passengerData,
         services: checkoutItem.services || [],
-        servicesWithDetails,  // Send enriched services for line items
+        servicesWithDetails,
         flightPrice: flightPrice.toFixed(2),
         seatsTotal: seatsTotal.toFixed(2),
         baggageTotal: baggageTotal.toFixed(2),
@@ -97,146 +106,117 @@ export function BookingReviewPage() {
     }
   };
 
-  const origin = checkoutItem.offer?.slices?.[0]?.origin?.iata_code || 'N/A';
-  const destination = checkoutItem.offer?.slices?.[checkoutItem.offer.slices.length - 1]?.destination?.iata_code || 'N/A';
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 py-12 px-4">
+    <div className="min-h-screen py-12 px-4 bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       <div className="max-w-3xl mx-auto">
-        {/* Back Button */}
         <button
-          onClick={() => navigate('/passenger-details')}
-          className="flex items-center text-blue-200 hover:text-white mb-6 transition-colors"
-          data-testid="button-back"
+          onClick={() => navigate("/passenger-details")}
+          className="flex items-center text-blue-200 hover:text-white mb-6 transition"
         >
           <ArrowLeft className="w-5 h-5 mr-2" />
           Back to Passenger Details
         </button>
 
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2" data-testid="text-page-title">
-            Review Your Booking
-          </h1>
-          <p className="text-blue-200">
-            Please review your booking details before payment
-          </p>
-        </div>
+        <h1 className="text-3xl font-bold text-white text-center mb-2">
+          Review Your Booking
+        </h1>
+        <p className="text-blue-200 text-center mb-8">
+          Please review your booking before proceeding to payment
+        </p>
 
-        <div className="space-y-6">
-          {/* Flight Details Card */}
-          <Card className="bg-white/10 backdrop-blur-lg border-white/20 p-6">
+        {/* Flight */}
+        <Card className="bg-white/10 backdrop-blur-lg border-white/20 p-6 mb-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Plane className="h-6 w-6 text-blue-300" />
+            <h2 className="text-xl font-semibold text-white">Flight Details</h2>
+          </div>
+          <div className="space-y-2 text-blue-100">
+            <div className="flex justify-between">
+              <span className="opacity-80">Airline:</span>
+              <span className="font-medium">{airline}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="opacity-80">Route:</span>
+              <span className="font-medium">
+                {origin} → {destination}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="opacity-80">Passengers:</span>
+              <span className="font-medium">{passengerData.length}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="opacity-80">Flight Price:</span>
+              <span className="font-medium">
+                {currency} ${flightPrice.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </Card>
+
+        {/* Extras */}
+        {servicesTotal > 0 && (
+          <Card className="bg-white/10 backdrop-blur-lg border-white/20 p-6 mb-6">
             <div className="flex items-center gap-3 mb-4">
-              <Plane className="h-6 w-6 text-blue-300" />
-              <h2 className="text-xl font-semibold text-white">Flight Details</h2>
+              <Luggage className="h-6 w-6 text-blue-300" />
+              <h2 className="text-xl font-semibold text-white">
+                Extras Summary
+              </h2>
             </div>
             <div className="space-y-2 text-blue-100">
-              <div className="flex justify-between">
-                <span className="opacity-80">Route:</span>
-                <span className="font-medium">{origin} → {destination}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="opacity-80">Passengers:</span>
-                <span className="font-medium">{checkoutItem.offer?.passengers?.length || 1}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="opacity-80">Flight Price:</span>
-                <span className="font-medium text-lg">{currency} ${flightPrice.toFixed(2)}</span>
-              </div>
-            </div>
-          </Card>
-
-          {/* Selected Seats Card */}
-          {servicesWithDetails.filter((s: any) => s.type === 'seat').length > 0 && (
-            <Card className="bg-white/10 backdrop-blur-lg border-white/20 p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <Armchair className="h-6 w-6 text-blue-300" />
-                <h2 className="text-xl font-semibold text-white">Selected Seats</h2>
-              </div>
-              <div className="space-y-3">
-                {servicesWithDetails.filter((s: any) => s.type === 'seat').map((seat: any, index: number) => (
-                  <div key={index} className="flex justify-between text-blue-100">
-                    <span>Seat {seat.designator || 'N/A'}</span>
-                    <span className="font-medium">{currency} ${parseFloat(seat.amount || '0').toFixed(2)}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between text-white font-semibold pt-2 border-t border-white/20">
-                  <span>Seats Subtotal:</span>
-                  <span>{currency} ${seatsTotal.toFixed(2)}</span>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* Selected Baggage Card */}
-          {servicesWithDetails.filter((s: any) => s.type === 'baggage').length > 0 && (
-            <Card className="bg-white/10 backdrop-blur-lg border-white/20 p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <Luggage className="h-6 w-6 text-blue-300" />
-                <h2 className="text-xl font-semibold text-white">Selected Baggage</h2>
-              </div>
-              <div className="space-y-3">
-                {servicesWithDetails.filter((s: any) => s.type === 'baggage').map((bag: any, index: number) => (
-                  <div key={index} className="flex justify-between text-blue-100">
-                    <span>Checked Bag × {bag.quantity || 1}</span>
-                    <span className="font-medium">
-                      {currency} ${(parseFloat(bag.amount || '0') * (bag.quantity || 1)).toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-                <div className="flex justify-between text-white font-semibold pt-2 border-t border-white/20">
-                  <span>Baggage Subtotal:</span>
-                  <span>{currency} ${baggageTotal.toFixed(2)}</span>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* Grand Total Card */}
-          <Card className="bg-gradient-to-r from-blue-600/30 to-purple-600/30 backdrop-blur-lg border-white/30 p-6">
-            <div className="space-y-3">
-              <div className="flex justify-between text-blue-100 text-lg">
-                <span>Flight:</span>
-                <span>{currency} ${flightPrice.toFixed(2)}</span>
-              </div>
-              {servicesTotal > 0 && (
-                <div className="flex justify-between text-blue-100 text-lg">
-                  <span>Extras (Seats & Baggage):</span>
-                  <span>{currency} ${servicesTotal.toFixed(2)}</span>
+              {seatsTotal > 0 && (
+                <div className="flex justify-between">
+                  <span>Seat Selection</span>
+                  <span>
+                    {currency} ${seatsTotal.toFixed(2)}
+                  </span>
                 </div>
               )}
-              <div className="h-px bg-white/30 my-3"></div>
-              <div className="flex justify-between text-white font-bold text-2xl">
-                <span>Grand Total:</span>
-                <span data-testid="text-grand-total">{currency} ${grandTotal.toFixed(2)}</span>
+              {baggageTotal > 0 && (
+                <div className="flex justify-between">
+                  <span>Baggage</span>
+                  <span>
+                    {currency} ${baggageTotal.toFixed(2)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between text-white font-semibold pt-2 border-t border-white/20">
+                <span>Extras Total:</span>
+                <span>
+                  {currency} ${servicesTotal.toFixed(2)}
+                </span>
               </div>
             </div>
           </Card>
+        )}
 
-          {/* Pay Now Button */}
-          <Button
-            onClick={handlePayNow}
-            disabled={submitting}
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-6 text-lg"
-            data-testid="button-pay-now"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <CreditCard className="mr-2 h-5 w-5" />
-                Pay {currency} ${grandTotal.toFixed(2)} Now
-              </>
-            )}
-          </Button>
+        {/* Grand total */}
+        <Card className="bg-gradient-to-r from-blue-600/30 to-purple-600/30 border-white/30 backdrop-blur-lg p-6 mb-6">
+          <div className="flex justify-between text-white font-bold text-2xl">
+            <span>Grand Total:</span>
+            <span>
+              {currency} ${grandTotal.toFixed(2)}
+            </span>
+          </div>
+        </Card>
 
-          <p className="text-center text-blue-200 text-sm">
-            You will be redirected to Stripe for secure payment
-          </p>
-        </div>
+        {/* Pay now */}
+        <Button
+          onClick={handlePayNow}
+          disabled={submitting}
+          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-6 text-lg"
+        >
+          {submitting ? (
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Processing...
+            </>
+          ) : (
+            <>
+              <CreditCard className="mr-2 h-5 w-5" /> Pay {currency} $
+              {grandTotal.toFixed(2)} Now
+            </>
+          )}
+        </Button>
       </div>
     </div>
   );
