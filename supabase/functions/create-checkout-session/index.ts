@@ -18,10 +18,13 @@ const handler = async (req: Request) => {
   try {
     const { offerId, passengers, services, totalAmount, currency, offerData } = await req.json();
 
-    console.log('[create-checkout] Creating session for offer:', offerId);
-    console.log('[create-checkout] Amount:', totalAmount, currency);
+    console.log('[create-checkout] === CREATING STRIPE SESSION ===');
+    console.log('[create-checkout] Offer ID:', offerId);
+    console.log('[create-checkout] TOTAL AMOUNT RECEIVED:', totalAmount, currency);
+    console.log('[create-checkout] Amount in cents for Stripe:', Math.round(parseFloat(totalAmount) * 100));
     console.log('[create-checkout] Passengers:', passengers.length);
-    console.log('[create-checkout] Services:', services?.length || 0);
+    console.log('[create-checkout] Services count:', services?.length || 0);
+    console.log('[create-checkout] Services:', JSON.stringify(services, null, 2));
 
     if (!offerId || !passengers || !totalAmount || !currency) {
       return new Response(

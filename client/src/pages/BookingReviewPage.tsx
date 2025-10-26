@@ -55,7 +55,21 @@ export function BookingReviewPage() {
     setSubmitting(true);
 
     try {
-      console.log('💳 Creating Stripe checkout with grand total:', grandTotal);
+      const requestBody = {
+        offerId: checkoutItem.offer.id,
+        passengers: passengerData,
+        services: checkoutItem.services || [],
+        totalAmount: grandTotal.toFixed(2),  // Grand total including services
+        currency: currency,
+        offerData: checkoutItem.offer,
+      };
+      
+      console.log('💳 === BOOKING REVIEW PAGE - PAYMENT REQUEST ===');
+      console.log('💰 Flight Price:', flightPrice);
+      console.log('💺 Seats Total:', seatsTotal);
+      console.log('🧳 Baggage Total:', baggageTotal);
+      console.log('💵 GRAND TOTAL:', grandTotal);
+      console.log('📤 Request Body:', JSON.stringify(requestBody, null, 2));
       
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`,
@@ -65,14 +79,7 @@ export function BookingReviewPage() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
           },
-          body: JSON.stringify({
-            offerId: checkoutItem.offer.id,
-            passengers: passengerData,
-            services: checkoutItem.services || [],
-            totalAmount: grandTotal.toFixed(2),  // Grand total including services
-            currency: currency,
-            offerData: checkoutItem.offer,
-          }),
+          body: JSON.stringify(requestBody),
         }
       );
 
