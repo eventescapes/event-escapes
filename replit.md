@@ -6,6 +6,25 @@ EventEscapes is a premium luxury online travel agency (OTA) that specializes in 
 
 The platform follows a streamlined 3-4 step user flow: search and discover events, select accommodations/flights/tickets, review and pay, and receive confirmation. The application targets discerning travelers seeking curated, premium event experiences with an emphasis on luxury design and seamless user experience.
 
+## Recent Changes (October 26, 2025)
+
+### Duffel Flights Bug Fixes
+Fixed three critical issues in the flights booking flow:
+
+1. **Confirmation Page Amount Display** - Updated stripe-webhook to store complete booking data in Deno KV, including actual amount from Duffel order (not Stripe session), ensuring confirmation page shows correct total instead of $0.00
+
+2. **Services Data Persistence** - Enhanced stripe-webhook to store enriched services data (seats/baggage) with full details (id, type, quantity, description, amount, currency) so confirmation page can display meaningful services breakdown with prices
+
+3. **Flight Search Form State** - Added sessionStorage persistence to FlightSearchForm component, preventing form data loss when using browser back button
+
+### Technical Details
+- Stripe webhook now stores `duffelPassengers` (snake_case format) instead of `parsedPassengers` (camelCase) to match confirmation page expectations
+- Booking amount sourced from `order.total_amount` (Duffel's authoritative amount) instead of `session.amount_total` (Stripe)
+- Services enriched with descriptions and pricing for proper cart/confirmation display
+- Cart store includes getTotal(), getSeats(), getBaggage() helper methods
+- Back navigation added to AncillaryChoicePage and PassengerDetailsPage
+- "Change flight" functionality in TripSummary with cart clearing
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
