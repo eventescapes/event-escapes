@@ -11,6 +11,7 @@ export default function AncillaryChoicePage() {
   const [, navigate] = useLocation();
   const offerId = params?.offerId || "";
   const { items, setServicesForOffer } = useCart();
+
   const cartItem = useMemo(
     () => items.find((i) => i.offerId === offerId),
     [items, offerId],
@@ -24,19 +25,17 @@ export default function AncillaryChoicePage() {
   const [selectedBaggage, setSelectedBaggage] = useState<any[]>([]);
   const [passengers, setPassengers] = useState<any[]>([]);
   const [loadingPassengers, setLoadingPassengers] = useState(true);
-
-  // 🔹 NEW: store available services fetched from Supabase
   const [availableServices, setAvailableServices] = useState<any>(null);
   const [loadingServices, setLoadingServices] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  // -----------------------------------------------
-  // STEP 1: fetch passengers from Supabase function
-  // -----------------------------------------------
+  // ----------------------------------------------------
+  // STEP 1: fetch passengers
+  // ----------------------------------------------------
   useEffect(() => {
     const fetchPassengerIds = async () => {
       if (!offerId) return;
       try {
-        console.log("🎫 Fetching passenger IDs for offer:", offerId);
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-offer-lite`,
           {
@@ -51,7 +50,6 @@ export default function AncillaryChoicePage() {
 
         if (!response.ok) throw new Error("Failed to fetch passenger IDs");
         const data = await response.json();
-        console.log("✅ Passenger IDs fetched:", data.passengers);
         setPassengers(data.passengers || []);
       } catch (error) {
         console.error("❌ Error fetching passenger IDs:", error);
@@ -68,13 +66,12 @@ export default function AncillaryChoicePage() {
   }, [offerId, cartItem]);
 
   // ----------------------------------------------------
-  // STEP 2: fetch available services (seats & baggage)
+  // STEP 2: fetch available services (Duffel seats/bags)
   // ----------------------------------------------------
   useEffect(() => {
     const fetchAvailableServices = async () => {
       if (!offerId) return;
       try {
-        console.log("🧾 Fetching available services for offer:", offerId);
         const res = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/available-services`,
           {
@@ -89,7 +86,6 @@ export default function AncillaryChoicePage() {
         const data = await res.json();
         if (!data.success) throw new Error(data.error);
         setAvailableServices(data.availableServices || {});
-        console.log("✅ Available services:", data.availableServices);
       } catch (err) {
         console.error("❌ Failed to fetch available services:", err);
         setAvailableServices({});
@@ -99,25 +95,6 @@ export default function AncillaryChoicePage() {
     };
     fetchAvailableServices();
   }, [offerId]);
-
-  // ----------------------------------------------------
-  // UI loading states
-  // ----------------------------------------------------
-  if (!cartItem) {
-    navigate("/flights");
-    return null;
-  }
-
-  if (loadingPassengers || loadingServices) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-12 w-12 text-blue-400 animate-spin mx-auto mb-4" />
-          <p className="text-blue-200">Loading flight extras...</p>
-        </div>
-      </div>
-    );
-  }
 
   // ----------------------------------------------------
   // MAIN EVENT HANDLERS
@@ -135,7 +112,6 @@ export default function AncillaryChoicePage() {
   };
 
   const handleSeatsSelected = (seats: any[]) => {
-    console.log("💺 Seats selected:", seats);
     setSelectedSeats(seats);
     setShowSeatModal(false);
     if (wantBags) setShowBaggageModal(true);
@@ -143,69 +119,81 @@ export default function AncillaryChoicePage() {
   };
 
   const handleBaggageComplete = (baggage: any[]) => {
-    console.log("🧳 Baggage selected:", baggage);
     setSelectedBaggage(baggage);
     setShowBaggageModal(false);
     proceedToCheckout();
   };
 
-  const proceedToCheckout = () => {
-    const servicesWithDetails = [
-      ...selectedSeats.map((s) => ({
-        id: s.serviceId || s.id,
-        type: "seat",
-        quantity: 1,
-        amount: s.amount,
+  // ✅ Replace sessionStorage logic with backend persistence
+  const proceedToCheckout = async () => {
+    try {
+      setSaving(true);
+
+      const totalAmount =
+        selectedSeats.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0) +
+        selectedBaggage.reduce(
+          (sum, b) => sum + (parseFloat(b.amount) || 0),
+          0,
+        );
+
+      const res = await saveAncillaries({
+        offerId,
+        passengers,
+        seats: selectedSeats,
+        baggage: selectedBaggage,
+        totalAmount,
         currency: cartItem.offer?.total_currency || "AUD",
-        designator: s.designator,
-        passengerId: s.passengerId || s.passenger_id,
-        segmentId: s.segmentId,
-        segmentIndex: s.segmentIndex,
-      })),
-      ...selectedBaggage.map((b) => ({
-        id: b.serviceId || b.id,
-        type: "baggage",
-        quantity: b.quantity || 1,
-        amount: b.amount,
-        currency: cartItem.offer?.total_currency || "AUD",
-        passengerId: b.passengerId || b.passenger_id,
-        segmentId: b.segmentId,
-      })),
-    ];
+      });
 
-    console.log("💺🎒 Services with details for cart:", servicesWithDetails);
-    setServicesForOffer(offerId, servicesWithDetails);
+      console.log("✅ Ancillaries saved to Supabase:", res);
 
-    const servicesForBooking = [
-      ...selectedSeats.map((s) => ({ id: s.serviceId || s.id, quantity: 1 })),
-      ...selectedBaggage.map((b) => ({
-        id: b.serviceId || b.id,
-        quantity: b.quantity || 1,
-      })),
-    ];
+      // Still store services locally for UI reference
+      const servicesWithDetails = [
+        ...selectedSeats.map((s) => ({
+          id: s.serviceId || s.id,
+          type: "seat",
+          amount: s.amount,
+          currency: cartItem.offer?.total_currency || "AUD",
+        })),
+        ...selectedBaggage.map((b) => ({
+          id: b.serviceId || b.id,
+          type: "baggage",
+          amount: b.amount,
+          currency: cartItem.offer?.total_currency || "AUD",
+        })),
+      ];
 
-    const checkoutData = {
-      offer: cartItem.offer,
-      selectedSeats,
-      selectedBaggage,
-      servicesWithDetails,
-      services: servicesForBooking,
-      passengers,
-    };
+      setServicesForOffer(offerId, servicesWithDetails);
 
-    sessionStorage.setItem("checkout_item", JSON.stringify(checkoutData));
-    navigate("/passenger-details");
+      navigate(`/passenger-details/${offerId}`);
+    } catch (err) {
+      console.error("❌ Failed to save ancillaries:", err);
+      alert("Could not save your selections. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSkip = () => {
-    const checkoutData = {
-      offer: cartItem.offer,
-      selectedSeats: [],
-      selectedBaggage: [],
-    };
-    sessionStorage.setItem("checkout_item", JSON.stringify(checkoutData));
-    navigate("/passenger-details");
-  };
+  const handleSkip = () => navigate(`/passenger-details/${offerId}`);
+
+  // ----------------------------------------------------
+  // UI STATES
+  // ----------------------------------------------------
+  if (!cartItem) {
+    navigate("/flights");
+    return null;
+  }
+
+  if (loadingPassengers || loadingServices) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 text-blue-400 animate-spin mx-auto mb-4" />
+          <p className="text-blue-200">Loading flight extras...</p>
+        </div>
+      </div>
+    );
+  }
 
   // ----------------------------------------------------
   // RENDER
@@ -230,6 +218,7 @@ export default function AncillaryChoicePage() {
           </p>
         </div>
 
+        {/* Flight summary */}
         <div className="bg-white/10 backdrop-blur-lg rounded-xl border border-white/20 p-6 mb-8">
           <div className="flex items-center gap-3 mb-4">
             <Plane className="h-6 w-6 text-blue-300" />
@@ -257,11 +246,11 @@ export default function AncillaryChoicePage() {
           </div>
         </div>
 
-        {/* Seat and Baggage Options */}
+        {/* Seats + Baggage cards */}
         <div className="space-y-4 mb-8">
           {/* Seats */}
           <div
-            className={`bg-white/10 backdrop-blur-lg rounded-xl border-2 transition-all ${
+            className={`bg-white/10 rounded-xl border-2 transition-all ${
               wantSeats ? "border-blue-400 bg-blue-500/20" : "border-white/20"
             } p-6`}
           >
@@ -302,7 +291,7 @@ export default function AncillaryChoicePage() {
 
           {/* Baggage */}
           <div
-            className={`bg-white/10 backdrop-blur-lg rounded-xl border-2 transition-all ${
+            className={`bg-white/10 rounded-xl border-2 transition-all ${
               wantBags ? "border-blue-400 bg-blue-500/20" : "border-white/20"
             } p-6`}
           >
@@ -342,6 +331,7 @@ export default function AncillaryChoicePage() {
           </div>
         </div>
 
+        {/* Footer */}
         <div className="flex gap-4">
           <Button
             onClick={handleSkip}
@@ -351,10 +341,11 @@ export default function AncillaryChoicePage() {
             Skip for now
           </Button>
           <Button
+            disabled={saving}
             onClick={onContinue}
             className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold"
           >
-            Continue
+            {saving ? "Saving..." : "Continue"}
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
@@ -364,18 +355,14 @@ export default function AncillaryChoicePage() {
         </p>
       </div>
 
-      {/* Pass available services into modals */}
+      {/* Modals */}
       {showSeatModal && (
         <SeatSelectionModal
           offerId={offerId}
           passengers={passengers}
           availableServices={availableServices?.seat || []}
           onSeatsSelected={handleSeatsSelected}
-          onClose={() => {
-            setShowSeatModal(false);
-            if (wantBags) setShowBaggageModal(true);
-            else proceedToCheckout();
-          }}
+          onClose={() => setShowSeatModal(false)}
           onSkip={() => {
             setShowSeatModal(false);
             if (wantBags) setShowBaggageModal(true);
@@ -390,10 +377,7 @@ export default function AncillaryChoicePage() {
           offerId={offerId}
           passengers={passengers}
           availableServices={availableServices?.baggage || []}
-          onClose={() => {
-            setShowBaggageModal(false);
-            proceedToCheckout();
-          }}
+          onClose={() => setShowBaggageModal(false)}
           onComplete={handleBaggageComplete}
         />
       )}
