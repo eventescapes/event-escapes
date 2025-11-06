@@ -30,7 +30,7 @@ import {
   type CheckoutRequest,
   type Passenger,
   type Service,
-} from "../lib/supabase";
+} from "../lib/supabaseApi";
 
 // Import cart store to get selected offer and services
 import { useCart } from "@/store/cartStore";

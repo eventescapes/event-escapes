@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 
 // âœ… Import API function instead of direct fetch
-import { getBaggageServices, type BaggageService } from "../../lib/supabase";
+import { getBaggageServices, type BaggageService } from "../../lib/supabaseApi";
 
 interface BaggageSelectionModalProps {
   isOpen: boolean;
@@ -67,11 +67,11 @@ export function BaggageSelectionModal({
         console.log("✅ Baggage services loaded");
         console.log(
           "Available baggage:",
-          result.available_services.baggage.length,
+          result.available_services?.baggage?.length || 0,
         );
-        console.log("Included baggage:", result.included_baggage.length);
+        console.log("Included baggage:", result.included_baggage?.length || 0);
 
-        setAvailableBaggage(result.available_services.baggage || []);
+        setAvailableBaggage(result.available_services?.baggage || []);
         setIncludedBaggage(result.included_baggage || []);
       } else {
         throw new Error("Failed to load baggage services");

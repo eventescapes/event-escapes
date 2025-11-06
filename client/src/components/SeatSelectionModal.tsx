@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 
 // âœ… Import API function instead of direct fetch
-import { getSeatMaps, type SeatMap } from "../lib/supabase";
+import { getSeatMaps, type SeatMap } from "../lib/supabaseApi";
 
 interface SeatSelectionModalProps {
   offerId: string;

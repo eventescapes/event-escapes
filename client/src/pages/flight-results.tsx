@@ -20,7 +20,7 @@ import {
   type EdgeFunctionOffer,
   type EdgeFunctionSlice,
   type EdgeFunctionSegment,
-} from "../lib/supabase";
+} from "../lib/supabaseApi";
 
 // Multi-city slice interface
 interface MultiCitySlice {

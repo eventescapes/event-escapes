@@ -7,7 +7,7 @@ import { SeatSelectionModal } from "@/components/SeatSelectionModal";
 import { BaggageSelectionModal } from "@/components/ui/BaggageSelectionModal";
 
 // âœ… Import API function
-import { saveAncillaries } from "../lib/supabase";
+import { saveAncillaries } from "../lib/supabaseApi";
 
 export default function AncillaryChoicePage() {
   const [, params] = useRoute("/ancillaries/:offerId");
