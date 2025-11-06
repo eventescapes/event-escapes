@@ -1,797 +1,989 @@
+// src/pages/Checkout.tsx
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { loadStripe } from '@stripe/stripe-js';
-import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { useLocation, useRoute } from "wouter";
+import {
+  ArrowLeft,
+  User,
+  Mail,
+  Phone,
+  Calendar,
+  CreditCard,
+  Plane,
+  AlertCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useToast } from "@/hooks/use-toast";
-import { useBooking } from "@/contexts/BookingContext";
-import { apiRequest } from "@/lib/queryClient";
-import { formatCurrency } from "@/lib/utils";
-import { Calendar, Bed, Plane, Music, CreditCard, Bitcoin, Shield, Star, CheckCircle, User, Mail, Phone, Lock, Gift } from "lucide-react";
-import { z } from "zod";
-import { PromoCodeInput } from "@/components/PromoCodeInput";
-import { PointsRedemptionWidget } from "@/components/PointsRedemptionWidget";
-import { redeemPoints } from "@/lib/rewards";
-// Make sure to call `loadStripe` outside of a component's render to avoid
-// recreating the `Stripe` object on every render.
-let stripePromise: ReturnType<typeof loadStripe> | null = null;
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-const stripePublicKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
-if (stripePublicKey) {
-  stripePromise = loadStripe(stripePublicKey);
-  console.log("✓ Stripe payment integration enabled");
-} else {
-  console.log("⚠ Stripe payment integration disabled - payment processing unavailable");
+// âœ… Import API layer
+import {
+  createCheckout,
+  type CheckoutRequest,
+  type Passenger,
+  type Service,
+} from "../lib/supabase";
+
+// Import cart store to get selected offer and services
+import { useCart } from "@/store/cartStore";
+
+interface PassengerFormData extends Passenger {
+  errors?: {
+    given_name?: string;
+    family_name?: string;
+    born_on?: string;
+    email?: string;
+    phone_number?: string;
+  };
 }
-
-const guestInfoSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  email: z.string().email("Valid email is required"),
-  phone: z.string().min(1, "Phone number is required"),
-  paymentMethod: z.enum(["card", "crypto"]),
-  agreeToTerms: z.boolean().refine(val => val === true, "You must agree to terms and conditions"),
-});
-
-type GuestInfo = z.infer<typeof guestInfoSchema>;
-
-// Helper function to format cart data for display
-const getCartDisplayData = (cart: any, cartTotal: number, promoDiscount: number = 0, pointsDiscount: number = 0) => {
-  const subtotal = cartTotal;
-  const taxes = Math.round(subtotal * 0.1); // 10% tax
-  const total = Math.max(0, subtotal + taxes - promoDiscount - pointsDiscount); // Apply both promo and points discounts
-
-  return {
-    items: cart.items,
-    subtotal,
-    taxes,
-    promoDiscount,
-    pointsDiscount,
-    total,
-  };
-};
-
-const CheckoutForm = ({ 
-  cartData, 
-  appliedPoints, 
-  userEmail 
-}: { 
-  cartData: ReturnType<typeof getCartDisplayData>;
-  appliedPoints?: number;
-  userEmail?: string;
-}) => {
-  // Conditionally use Stripe hooks only when Elements provider is available
-  let stripe, elements;
-  try {
-    stripe = useStripe();
-    elements = useElements();
-  } catch (error) {
-    // Stripe hooks not available (no Elements provider)
-    stripe = null;
-    elements = null;
-  }
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const { booking } = useBooking(); // Access booking context directly
-
-  const form = useForm<GuestInfo>({
-    resolver: zodResolver(guestInfoSchema),
-    defaultValues: {
-      firstName: "",
-      lastName: "",
-      email: "",
-      phone: "",
-      paymentMethod: "card",
-      agreeToTerms: false,
-    },
-  });
-
-  const handleSubmit = async (data: GuestInfo) => {
-    if (!stripe || !elements) {
-      toast({
-        title: "Payment Unavailable",
-        description: "Payment processing is temporarily unavailable. Your trip details have been saved.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsProcessing(true);
-
-    try {
-      if (data.paymentMethod === "card") {
-        const { error } = await stripe.confirmPayment({
-          elements,
-          confirmParams: {
-            return_url: `${window.location.origin}/confirmation`,
-          },
-        });
-
-        if (error) {
-          toast({
-            title: "Payment Failed",
-            description: error.message,
-            variant: "destructive",
-          });
-        } else {
-          // Create booking record with flight and seat data  
-          // Access the actual booking context data
-          
-          // Prepare flight data if flights are selected
-          let flightData = null;
-          if (booking.selectedOutboundFlight || booking.selectedReturnFlight) {
-            flightData = {
-              offerId: booking.selectedOutboundFlight?.id || booking.selectedReturnFlight?.id || 'unknown-offer-id', // TODO: Store proper offer_id in BookingContext
-              slices: [] as any[], // Type as any[] to avoid TypeScript never[] error
-              currency: 'USD',
-              passengers: 1, // TODO: Get from search params
-              totalPrice: (booking.selectedOutboundFlight?.price || 0) + (booking.selectedReturnFlight?.price || 0),
-              tripType: booking.selectedReturnFlight ? 'return' : 'one-way'
-            };
-            
-            // Add outbound slice
-            if (booking.selectedOutboundFlight) {
-              flightData.slices.push({
-                index: 0,
-                type: 'outbound',
-                airline: booking.selectedOutboundFlight.airline,
-                departure: booking.selectedOutboundFlight.departure,
-                arrival: booking.selectedOutboundFlight.arrival,
-                duration: booking.selectedOutboundFlight.duration,
-                price: booking.selectedOutboundFlight.price,
-                stops: booking.selectedOutboundFlight.stops
-              });
-            }
-            
-            // Add return slice
-            if (booking.selectedReturnFlight) {
-              flightData.slices.push({
-                index: 1,
-                type: 'return',
-                airline: booking.selectedReturnFlight.airline,
-                departure: booking.selectedReturnFlight.departure,
-                arrival: booking.selectedReturnFlight.arrival,
-                duration: booking.selectedReturnFlight.duration,
-                price: booking.selectedReturnFlight.price,
-                stops: booking.selectedReturnFlight.stops
-              });
-            }
-          }
-
-          const bookingResult: any = await apiRequest("POST", "/api/bookings", {
-            guestEmail: data.email,
-            guestName: `${data.firstName} ${data.lastName}`,
-            guestPhone: data.phone,
-            totalAmount: cartData.total,
-            status: "confirmed",
-            flightData,
-            selectedSeats: booking.selectedSeats || {}
-          });
-
-          // Redeem points if any were applied
-          if (appliedPoints && appliedPoints > 0) {
-            const bookingRef = bookingResult?.id || `booking-${Date.now()}`;
-            const emailToUse = userEmail || data.email;
-            
-            console.log('💎 Redeeming points after successful payment:', {
-              points: appliedPoints,
-              email: emailToUse,
-              bookingRef
-            });
-            
-            const redemptionResult = await redeemPoints({
-              userEmail: emailToUse,
-              points: appliedPoints,
-              bookingReference: bookingRef,
-              description: `Redeemed on booking ${bookingRef}`
-            });
-
-            if (!redemptionResult.success) {
-              console.error('❌ Points redemption failed:', redemptionResult.error);
-              // Don't fail the booking, just log the error
-              toast({
-                title: "Points Redemption Failed",
-                description: "Your booking was successful but we couldn't redeem your points. Please contact support.",
-                variant: "destructive"
-              });
-            } else {
-              console.log('✅ Points redeemed successfully');
-            }
-          }
-
-          setLocation("/confirmation");
-        }
-      } else {
-        // Handle crypto payment
-        toast({
-          title: "Crypto Payment",
-          description: "Crypto payment integration coming soon!",
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Booking Error",
-        description: "There was an error processing your booking. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  return (
-    <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
-      {/* Premium Guest Information */}
-      <div className="glass-card p-8 animate-luxury-fade-in">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="font-display text-2xl font-bold text-primary">Guest Information</h2>
-          <div className="inline-flex items-center bg-luxury-gradient-subtle rounded-full px-4 py-2">
-            <User className="w-4 h-4 text-accent mr-2" />
-            <span className="font-accent font-semibold text-accent text-sm">Primary Guest</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-3">
-            <Label htmlFor="firstName" className="font-accent font-semibold text-primary flex items-center">
-              <User className="w-4 h-4 mr-2 text-accent" />
-              First Name
-            </Label>
-            <Input
-              id="firstName"
-              {...form.register("firstName")}
-              className="glass border-0 focus:ring-2 focus:ring-accent font-accent"
-              placeholder="Enter your first name"
-              data-testid="input-first-name"
-            />
-            {form.formState.errors.firstName && (
-              <p className="text-destructive text-sm mt-2 font-accent">{form.formState.errors.firstName.message}</p>
-            )}
-          </div>
-          <div className="space-y-3">
-            <Label htmlFor="lastName" className="font-accent font-semibold text-primary flex items-center">
-              <User className="w-4 h-4 mr-2 text-accent" />
-              Last Name
-            </Label>
-            <Input
-              id="lastName"
-              {...form.register("lastName")}
-              className="glass border-0 focus:ring-2 focus:ring-accent font-accent"
-              placeholder="Enter your last name"
-              data-testid="input-last-name"
-            />
-            {form.formState.errors.lastName && (
-              <p className="text-destructive text-sm mt-2 font-accent">{form.formState.errors.lastName.message}</p>
-            )}
-          </div>
-          <div className="space-y-3">
-            <Label htmlFor="email" className="font-accent font-semibold text-primary flex items-center">
-              <Mail className="w-4 h-4 mr-2 text-accent" />
-              Email Address
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              {...form.register("email")}
-              className="glass border-0 focus:ring-2 focus:ring-accent font-accent"
-              placeholder="your@email.com"
-              data-testid="input-email"
-            />
-            {form.formState.errors.email && (
-              <p className="text-destructive text-sm mt-2 font-accent">{form.formState.errors.email.message}</p>
-            )}
-          </div>
-          <div className="space-y-3">
-            <Label htmlFor="phone" className="font-accent font-semibold text-primary flex items-center">
-              <Phone className="w-4 h-4 mr-2 text-accent" />
-              Phone Number
-            </Label>
-            <Input
-              id="phone"
-              type="tel"
-              {...form.register("phone")}
-              className="glass border-0 focus:ring-2 focus:ring-accent font-accent"
-              placeholder="+1 (555) 123-4567"
-              data-testid="input-phone"
-            />
-            {form.formState.errors.phone && (
-              <p className="text-destructive text-sm mt-2 font-accent">{form.formState.errors.phone.message}</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Premium Payment Method */}
-      <div className="glass-card p-8 animate-luxury-slide-in">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="font-display text-2xl font-bold text-primary">Payment Method</h2>
-          <div className="inline-flex items-center bg-luxury-gradient-subtle rounded-full px-4 py-2">
-            <Lock className="w-4 h-4 text-accent mr-2" />
-            <span className="font-accent font-semibold text-accent text-sm">Secure Payment</span>
-          </div>
-        </div>
-        <RadioGroup
-          value={form.watch("paymentMethod")}
-          onValueChange={(value) => form.setValue("paymentMethod", value as "card" | "crypto")}
-          className="space-y-6"
-        >
-          <div className="glass p-6 rounded-xl transition-all duration-300 hover:shadow-luxury">
-            <div className="flex items-center space-x-4">
-              <RadioGroupItem value="card" id="card" data-testid="radio-card" className="border-accent" />
-              <Label htmlFor="card" className="flex items-center space-x-4 flex-1 cursor-pointer">
-                <div className="w-12 h-12 bg-luxury-gradient rounded-full flex items-center justify-center">
-                  <CreditCard className="w-6 h-6 text-white" />
-                </div>
-                <div className="flex-1">
-                  <div className="font-accent font-semibold text-primary">Credit/Debit Card</div>
-                  <div className="text-sm text-muted-foreground font-accent">Secure payment via Stripe</div>
-                </div>
-                <div className="flex space-x-2">
-                  <i className="fab fa-cc-visa text-2xl text-accent"></i>
-                  <i className="fab fa-cc-mastercard text-2xl text-accent"></i>
-                  <i className="fab fa-cc-amex text-2xl text-accent"></i>
-                </div>
-              </Label>
-            </div>
-          </div>
-          
-          {form.watch("paymentMethod") === "card" && (
-            <div className="ml-16 p-6 glass rounded-xl animate-luxury-scale-in">
-              <PaymentElement 
-                data-testid="stripe-payment-element"
-                options={{
-                  layout: 'tabs'
-                }}
-              />
-            </div>
-          )}
-
-          <div className="glass p-6 rounded-xl transition-all duration-300 hover:shadow-luxury opacity-60">
-            <div className="flex items-center space-x-4">
-              <RadioGroupItem value="crypto" id="crypto" data-testid="radio-crypto" className="border-accent" disabled />
-              <Label htmlFor="crypto" className="flex items-center space-x-4 cursor-pointer">
-                <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center">
-                  <Bitcoin className="w-6 h-6 text-muted-foreground" />
-                </div>
-                <div className="flex-1">
-                  <div className="font-accent font-semibold text-muted-foreground">Cryptocurrency</div>
-                  <div className="text-sm text-muted-foreground font-accent">Coming soon</div>
-                </div>
-                <div className="flex space-x-2">
-                  <i className="fab fa-bitcoin text-2xl text-muted-foreground"></i>
-                  <i className="fab fa-ethereum text-2xl text-muted-foreground"></i>
-                </div>
-              </Label>
-            </div>
-          </div>
-        </RadioGroup>
-      </div>
-
-      {/* Premium Terms and Conditions */}
-      <div className="glass-card p-8 animate-luxury-scale-in">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="font-display text-xl font-semibold text-primary">Terms & Agreement</h3>
-          <div className="inline-flex items-center bg-luxury-gradient-subtle rounded-full px-4 py-2">
-            <Shield className="w-4 h-4 text-accent mr-2" />
-            <span className="font-accent font-semibold text-accent text-sm">Protected</span>
-          </div>
-        </div>
-        <div className="flex items-start space-x-4 p-4 glass rounded-xl">
-          <Checkbox
-            id="terms"
-            checked={form.watch("agreeToTerms")}
-            onCheckedChange={(checked) => form.setValue("agreeToTerms", checked as boolean)}
-            data-testid="checkbox-terms"
-            className="border-accent data-[state=checked]:bg-luxury-gradient data-[state=checked]:border-accent mt-1"
-          />
-          <div className="flex-1">
-            <Label htmlFor="terms" className="cursor-pointer font-accent font-medium text-primary leading-relaxed">
-              I agree to EventEscapes'{" "}
-              <a href="#" className="text-accent hover:text-luxury font-semibold hover:underline transition-colors">
-                Terms & Conditions
-              </a>{" "}
-              and{" "}
-              <a href="#" className="text-accent hover:text-luxury font-semibold hover:underline transition-colors">
-                Privacy Policy
-              </a>
-              .
-            </Label>
-            <p className="mt-3 text-muted-foreground font-accent leading-relaxed">
-              By completing this booking, you also agree to the cancellation and refund policies of individual service providers. All transactions are protected by our premium guarantee.
-            </p>
-          </div>
-        </div>
-        {form.formState.errors.agreeToTerms && (
-          <p className="text-destructive text-sm mt-4 font-accent flex items-center">
-            <CheckCircle className="w-4 h-4 mr-2" />
-            {form.formState.errors.agreeToTerms.message}
-          </p>
-        )}
-      </div>
-
-      <div className="space-y-6">
-        <Button
-          type="submit"
-          className="btn-luxury w-full py-4 text-lg font-accent font-semibold animate-luxury-pulse"
-          disabled={!stripe || isProcessing}
-          data-testid="button-complete-booking"
-        >
-          {isProcessing ? (
-            <div className="flex items-center justify-center">
-              <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-3"></div>
-              Processing Your Booking...
-            </div>
-          ) : (
-            <div className="flex items-center justify-center">
-              <Gift className="w-5 h-5 mr-3" />
-              Complete Booking - {formatCurrency(cartData.total)}
-            </div>
-          )}
-        </Button>
-
-        <div className="text-center space-y-2">
-          <div className="flex items-center justify-center space-x-2">
-            <Shield className="w-4 h-4 text-accent" />
-            <p className="text-sm text-muted-foreground font-accent">
-              Secure payment processed by Stripe
-            </p>
-          </div>
-          <div className="flex items-center justify-center space-x-4 text-xs text-muted-foreground font-accent">
-            <span className="flex items-center">
-              <Lock className="w-3 h-3 mr-1" />
-              256-bit SSL
-            </span>
-            <span>•</span>
-            <span className="flex items-center">
-              <CheckCircle className="w-3 h-3 mr-1" />
-              PCI Compliant
-            </span>
-          </div>
-        </div>
-      </div>
-    </form>
-  );
-};
 
 export default function Checkout() {
   const [, navigate] = useLocation();
-  const { cart, getCartTotal, getCartItemCount } = useBooking();
-  const { toast } = useToast();
-  const [promoDiscount, setPromoDiscount] = useState(0);
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountAmount: number; promoCodeId: string } | null>(null);
-  const [pointsDiscount, setPointsDiscount] = useState(0);
-  const [appliedPoints, setAppliedPoints] = useState(0);
+  const [match, params] = useRoute("/checkout/:offerId");
 
-  // Redirect to cart if no items
+  // Get offer and services from cart
+  const { items } = useCart();
+  const cartItem = items.find((item) => item.offerId === params?.offerId);
+
+  // State
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState<
+    "passengers" | "review" | "processing"
+  >("passengers");
+
+  // Passenger forms - initialized with empty data
+  const [passengerForms, setPassengerForms] = useState<PassengerFormData[]>([]);
+
+  // Initialize passenger forms from cart data
   useEffect(() => {
-    if (getCartItemCount() === 0) {
-      toast({
-        title: "No items in cart",
-        description: "Please add items to your cart before proceeding to checkout.",
-        variant: "destructive",
-      });
-      navigate('/cart');
-      return;
+    if (cartItem && cartItem.passengers) {
+      const forms = cartItem.passengers.map((p) => ({
+        id: p.id,
+        type: p.type as "adult" | "child" | "infant_without_seat",
+        title: "",
+        given_name: "",
+        family_name: "",
+        gender: "m" as "m" | "f",
+        born_on: "",
+        email: "",
+        phone_number: "",
+        errors: {},
+      }));
+      setPassengerForms(forms);
     }
-  }, [getCartItemCount, navigate, toast]);
+  }, [cartItem]);
 
-  // Determine booking type from cart items
-  // Points can only be redeemed on hotels and packages that INCLUDE hotels
-  const getBookingType = (): 'hotel' | 'flight' | 'package' => {
-    const hasHotel = cart.items.some((item: any) => item.type === 'hotel');
-    const hasFlight = cart.items.some((item: any) => item.type === 'flight');
-    const hasEvent = cart.items.some((item: any) => item.type === 'event');
-    
-    // Package ONLY if it includes a hotel + something else
-    if (hasHotel && (hasFlight || hasEvent)) {
-      return 'package';
+  // Redirect if no cart item
+  useEffect(() => {
+    if (!loading && !cartItem) {
+      console.error("❌ No cart item found for offer:", params?.offerId);
+      navigate("/");
     }
-    // Hotel only
-    if (hasHotel) {
-      return 'hotel';
-    }
-    // Flight or event without hotel (not eligible for points)
-    return 'flight';
+  }, [cartItem, loading, params]);
+
+  if (!cartItem) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Plane className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600">Loading booking details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // VALIDATION
+  // ==========================================
+
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   };
 
-  const bookingType = getBookingType();
-  const cartData = getCartDisplayData(cart, getCartTotal(), promoDiscount, pointsDiscount);
-  const [clientSecret, setClientSecret] = useState("");
-  const [stripeAvailable, setStripeAvailable] = useState(!!stripePromise);
-
-  const handlePromoApplied = (promo: { code: string; discountAmount: number; promoCodeId: string } | null) => {
-    if (promo) {
-      setPromoDiscount(promo.discountAmount);
-      setAppliedPromo(promo);
-      toast({
-        title: "Promo Code Applied!",
-        description: `You saved $${promo.discountAmount.toFixed(2)} with code ${promo.code}`,
-      });
-    } else {
-      setPromoDiscount(0);
-      setAppliedPromo(null);
-    }
+  const validatePhone = (phone: string): boolean => {
+    // Basic international phone validation
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    return phoneRegex.test(phone.replace(/[\s-]/g, ""));
   };
 
-  const handlePointsApplied = (points: number, discount: number) => {
-    setAppliedPoints(points);
-    setPointsDiscount(discount);
-    toast({
-      title: "Points Applied!",
-      description: `${points.toLocaleString()} points redeemed (-$${discount.toFixed(2)})`,
+  const validateDateOfBirth = (dob: string, type: string): string | null => {
+    if (!dob) return "Date of birth is required";
+
+    const birthDate = new Date(dob);
+    const today = new Date();
+    const age = today.getFullYear() - birthDate.getFullYear();
+
+    if (type === "adult" && age < 18) {
+      return "Adult passengers must be 18 or older";
+    }
+    if (type === "child" && (age < 2 || age >= 18)) {
+      return "Child passengers must be between 2 and 17 years old";
+    }
+    if (type === "infant_without_seat" && age >= 2) {
+      return "Infant passengers must be under 2 years old";
+    }
+
+    return null;
+  };
+
+  const validatePassenger = (
+    passenger: PassengerFormData,
+    index: number,
+  ): boolean => {
+    const errors: PassengerFormData["errors"] = {};
+    let isValid = true;
+
+    // Title
+    if (!passenger.title) {
+      errors.given_name = "Title is required";
+      isValid = false;
+    }
+
+    // First name
+    if (!passenger.given_name || passenger.given_name.trim().length < 2) {
+      errors.given_name = "First name must be at least 2 characters";
+      isValid = false;
+    }
+
+    // Last name
+    if (!passenger.family_name || passenger.family_name.trim().length < 2) {
+      errors.family_name = "Last name must be at least 2 characters";
+      isValid = false;
+    }
+
+    // Email (required for first passenger)
+    if (index === 0) {
+      if (!passenger.email || !validateEmail(passenger.email)) {
+        errors.email = "Valid email is required for primary passenger";
+        isValid = false;
+      }
+    }
+
+    // Phone (required for first passenger)
+    if (index === 0) {
+      if (!passenger.phone_number || !validatePhone(passenger.phone_number)) {
+        errors.phone_number =
+          "Valid phone number is required (e.g., +61412345678)";
+        isValid = false;
+      }
+    }
+
+    // Date of birth
+    const dobError = validateDateOfBirth(passenger.born_on, passenger.type);
+    if (dobError) {
+      errors.born_on = dobError;
+      isValid = false;
+    }
+
+    // Update passenger with errors
+    if (!isValid) {
+      setPassengerForms((prev) => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], errors };
+        return updated;
+      });
+    }
+
+    return isValid;
+  };
+
+  const validateAllPassengers = (): boolean => {
+    let allValid = true;
+
+    passengerForms.forEach((passenger, index) => {
+      const isValid = validatePassenger(passenger, index);
+      if (!isValid) allValid = false;
+    });
+
+    if (!allValid) {
+      setError("Please fix the errors in passenger details");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    return allValid;
+  };
+
+  // ==========================================
+  // FORM HANDLERS
+  // ==========================================
+
+  const updatePassenger = (
+    index: number,
+    field: keyof Passenger,
+    value: any,
+  ) => {
+    setPassengerForms((prev) => {
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        [field]: value,
+        errors: { ...updated[index].errors, [field]: undefined }, // Clear error on change
+      };
+      return updated;
     });
   };
 
-  const handleRemovePoints = () => {
-    setAppliedPoints(0);
-    setPointsDiscount(0);
-    toast({
-      title: "Points Removed",
-      description: "Points have been removed from your booking",
-    });
+  const handleContinueToReview = () => {
+    if (validateAllPassengers()) {
+      setCurrentStep("review");
+      setError(null);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
-  useEffect(() => {
-    // Only create PaymentIntent if Stripe is available and cart has items
-    if (stripePromise && getCartItemCount() > 0) {
-      apiRequest("POST", "/api/create-payment-intent", { 
-        amount: cartData.total,
-        bookingId: "temp-booking-id" 
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          setClientSecret(data.clientSecret);
-        })
-        .catch((error) => {
-          console.log("Payment setup failed:", error);
-          setStripeAvailable(false);
-          toast({
-            title: "Payment Setup Error",
-            description: "Payment processing is currently unavailable. You can still review your booking details.",
-            variant: "destructive",
+  const handleBackToPassengers = () => {
+    setCurrentStep("passengers");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // ==========================================
+  // CHECKOUT SUBMISSION
+  // ==========================================
+
+  const handleCompleteBooking = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setCurrentStep("processing");
+
+      console.log("💳 === CREATING CHECKOUT SESSION ===");
+
+      // Build services array from cart item
+      const services: Service[] = [];
+
+      // Add seats
+      if (cartItem.selectedSeats && cartItem.selectedSeats.length > 0) {
+        cartItem.selectedSeats.forEach((seat) => {
+          services.push({
+            id: seat.serviceId,
+            type: "seat",
+            amount: parseFloat(seat.amount || "0"),
+            quantity: 1,
           });
         });
+      }
+
+      // Add baggage
+      if (cartItem.selectedBaggage && cartItem.selectedBaggage.length > 0) {
+        cartItem.selectedBaggage.forEach((bag) => {
+          services.push({
+            id: bag.id,
+            type: "baggage",
+            amount: parseFloat(bag.amount || "0"),
+            quantity: bag.quantity || 1,
+          });
+        });
+      }
+
+      // Build checkout request
+      const checkoutData: CheckoutRequest = {
+        offerId: cartItem.offerId,
+        passengers: passengerForms.map((p) => ({
+          id: p.id,
+          type: p.type,
+          title: p.title,
+          given_name: p.given_name.trim(),
+          family_name: p.family_name.trim(),
+          gender: p.gender,
+          born_on: p.born_on,
+          email: p.email || passengerForms[0].email, // Use primary passenger's email if not provided
+          phone_number: p.phone_number || passengerForms[0].phone_number, // Use primary passenger's phone if not provided
+        })),
+        services: services,
+        totalAmount: cartItem.pricing.total,
+        currency: cartItem.pricing.currency,
+      };
+
+      console.log("💳 Checkout request:", {
+        offerId: checkoutData.offerId,
+        passengers: checkoutData.passengers.length,
+        services: checkoutData.services.length,
+        total: `${checkoutData.currency} ${checkoutData.totalAmount}`,
+      });
+
+      // âœ… Call API layer (no direct fetch!)
+      const result = await createCheckout(checkoutData);
+
+      if (result.success && result.url) {
+        console.log("✅ Checkout session created:", result.sessionId);
+        console.log("✅ Redirecting to Stripe Checkout...");
+
+        // Store booking data in sessionStorage for post-payment page
+        sessionStorage.setItem(
+          "pending_booking",
+          JSON.stringify({
+            offerId: cartItem.offerId,
+            sessionId: result.sessionId,
+            timestamp: new Date().toISOString(),
+          }),
+        );
+
+        // Redirect to Stripe
+        window.location.href = result.url;
+      } else {
+        throw new Error("Failed to create checkout session");
+      }
+    } catch (err) {
+      console.error("❌ Checkout error:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to create checkout session",
+      );
+      setCurrentStep("review");
+    } finally {
+      setLoading(false);
     }
-  }, [cartData.total, getCartItemCount, toast]);
+  };
 
-  // If Stripe is not available, show the form without payment processing
-  if (!stripeAvailable || !stripePromise) {
+  // ==========================================
+  // PRICE CALCULATION
+  // ==========================================
+
+  const calculatePricing = () => {
+    return {
+      flightBase: cartItem.pricing.flightBase,
+      seats: cartItem.pricing.seats || 0,
+      baggage: cartItem.pricing.baggage || 0,
+      subtotal:
+        cartItem.pricing.flightBase +
+        (cartItem.pricing.seats || 0) +
+        (cartItem.pricing.baggage || 0),
+      tax: 0, // Add tax calculation if needed
+      total: cartItem.pricing.total,
+      currency: cartItem.pricing.currency,
+    };
+  };
+
+  const pricing = calculatePricing();
+
+  // ==========================================
+  // RENDER: PASSENGERS STEP
+  // ==========================================
+
+  if (currentStep === "passengers") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
-          <div className="text-center mb-12 animate-luxury-fade-in">
-            <div className="inline-flex items-center bg-luxury-gradient-subtle rounded-full px-4 py-2 mb-6">
-              <Calendar className="w-4 h-4 text-accent mr-2" />
-              <span className="font-accent font-semibold text-accent text-sm tracking-wide uppercase">Trip Review</span>
-            </div>
-            <h1 className="font-display text-4xl lg:text-5xl font-bold text-primary mb-4 tracking-tight" data-testid="text-checkout-title">
-              Review Your
-              <span className="text-luxury block">Premium Journey</span>
-            </h1>
-          </div>
-          <div className="glass-card p-6 mb-8 animate-luxury-slide-in">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-amber-500/20 rounded-full flex items-center justify-center">
-                <Shield className="w-5 h-5 text-amber-500" />
-              </div>
-              <div>
-                <p className="font-accent font-semibold text-amber-600 dark:text-amber-400">
-                  ⚠ Payment processing is temporarily unavailable
-                </p>
-                <p className="text-muted-foreground font-accent text-sm">
-                  You can review your luxury trip details below. Payment will be processed once available.
-                </p>
-              </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+        {/* Header */}
+        <div className="bg-white shadow-sm border-b">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <Button
+                variant="ghost"
+                onClick={() => navigate("/")}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Search
+              </Button>
+              <h1 className="text-xl font-semibold text-gray-900">
+                Complete Your Booking
+              </h1>
             </div>
           </div>
-          <CheckoutForm 
-            cartData={cartData} 
-            appliedPoints={appliedPoints}
-            userEmail={localStorage.getItem('userEmail') || undefined}
-          />
+        </div>
+
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Progress Steps */}
+          <div className="mb-8">
+            <div className="flex items-center justify-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-semibold">
+                  1
+                </div>
+                <span className="font-medium text-blue-600">
+                  Passenger Details
+                </span>
+              </div>
+              <div className="w-16 h-1 bg-gray-200"></div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-semibold">
+                  2
+                </div>
+                <span className="text-gray-600">Review & Pay</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Error Alert */}
+          {error && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Info Alert */}
+          <Alert className="mb-6 bg-blue-50 border-blue-200">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-800">
+              Please ensure passenger names match exactly with their passport or
+              ID.
+            </AlertDescription>
+          </Alert>
+
+          {/* Passenger Forms */}
+          <div className="space-y-6 mb-8">
+            {passengerForms.map((passenger, idx) => (
+              <Card key={idx}>
+                <CardHeader className="bg-gray-50">
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    <span>
+                      Passenger {idx + 1}
+                      {passenger.type === "child" && " (Child)"}
+                      {passenger.type === "infant_without_seat" && " (Infant)"}
+                    </span>
+                    {idx === 0 && (
+                      <span className="ml-2 text-sm font-normal text-blue-600">
+                        (Primary Contact)
+                      </span>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Title */}
+                    <div>
+                      <Label htmlFor={`title-${idx}`} className="font-semibold">
+                        Title <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        value={passenger.title}
+                        onValueChange={(value) =>
+                          updatePassenger(idx, "title", value)
+                        }
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select title" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mr">Mr</SelectItem>
+                          <SelectItem value="ms">Ms</SelectItem>
+                          <SelectItem value="mrs">Mrs</SelectItem>
+                          <SelectItem value="miss">Miss</SelectItem>
+                          <SelectItem value="dr">Dr</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Gender */}
+                    <div>
+                      <Label
+                        htmlFor={`gender-${idx}`}
+                        className="font-semibold"
+                      >
+                        Gender <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        value={passenger.gender}
+                        onValueChange={(value) =>
+                          updatePassenger(idx, "gender", value as "m" | "f")
+                        }
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="m">Male</SelectItem>
+                          <SelectItem value="f">Female</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* First Name */}
+                    <div>
+                      <Label
+                        htmlFor={`given_name-${idx}`}
+                        className="font-semibold"
+                      >
+                        First Name <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id={`given_name-${idx}`}
+                        value={passenger.given_name}
+                        onChange={(e) =>
+                          updatePassenger(idx, "given_name", e.target.value)
+                        }
+                        placeholder="John"
+                        className={`mt-1 ${passenger.errors?.given_name ? "border-red-500" : ""}`}
+                      />
+                      {passenger.errors?.given_name && (
+                        <p className="text-sm text-red-600 mt-1">
+                          {passenger.errors.given_name}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Last Name */}
+                    <div>
+                      <Label
+                        htmlFor={`family_name-${idx}`}
+                        className="font-semibold"
+                      >
+                        Last Name <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id={`family_name-${idx}`}
+                        value={passenger.family_name}
+                        onChange={(e) =>
+                          updatePassenger(idx, "family_name", e.target.value)
+                        }
+                        placeholder="Smith"
+                        className={`mt-1 ${passenger.errors?.family_name ? "border-red-500" : ""}`}
+                      />
+                      {passenger.errors?.family_name && (
+                        <p className="text-sm text-red-600 mt-1">
+                          {passenger.errors.family_name}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Date of Birth */}
+                    <div>
+                      <Label
+                        htmlFor={`born_on-${idx}`}
+                        className="font-semibold flex items-center gap-2"
+                      >
+                        <Calendar className="h-4 w-4" />
+                        Date of Birth <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id={`born_on-${idx}`}
+                        type="date"
+                        value={passenger.born_on}
+                        onChange={(e) =>
+                          updatePassenger(idx, "born_on", e.target.value)
+                        }
+                        max={new Date().toISOString().split("T")[0]}
+                        className={`mt-1 ${passenger.errors?.born_on ? "border-red-500" : ""}`}
+                      />
+                      {passenger.errors?.born_on && (
+                        <p className="text-sm text-red-600 mt-1">
+                          {passenger.errors.born_on}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <Label
+                        htmlFor={`email-${idx}`}
+                        className="font-semibold flex items-center gap-2"
+                      >
+                        <Mail className="h-4 w-4" />
+                        Email{" "}
+                        {idx === 0 && <span className="text-red-500">*</span>}
+                      </Label>
+                      <Input
+                        id={`email-${idx}`}
+                        type="email"
+                        value={passenger.email}
+                        onChange={(e) =>
+                          updatePassenger(idx, "email", e.target.value)
+                        }
+                        placeholder="john@example.com"
+                        className={`mt-1 ${passenger.errors?.email ? "border-red-500" : ""}`}
+                      />
+                      {passenger.errors?.email && (
+                        <p className="text-sm text-red-600 mt-1">
+                          {passenger.errors.email}
+                        </p>
+                      )}
+                      {idx === 0 && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Booking confirmation will be sent to this email
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Phone */}
+                    <div>
+                      <Label
+                        htmlFor={`phone-${idx}`}
+                        className="font-semibold flex items-center gap-2"
+                      >
+                        <Phone className="h-4 w-4" />
+                        Phone Number{" "}
+                        {idx === 0 && <span className="text-red-500">*</span>}
+                      </Label>
+                      <Input
+                        id={`phone-${idx}`}
+                        type="tel"
+                        value={passenger.phone_number}
+                        onChange={(e) =>
+                          updatePassenger(idx, "phone_number", e.target.value)
+                        }
+                        placeholder="+61412345678"
+                        className={`mt-1 ${passenger.errors?.phone_number ? "border-red-500" : ""}`}
+                      />
+                      {passenger.errors?.phone_number && (
+                        <p className="text-sm text-red-600 mt-1">
+                          {passenger.errors.phone_number}
+                        </p>
+                      )}
+                      {idx === 0 && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Include country code (e.g., +61 for Australia)
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Price Summary Card */}
+          <Card className="mb-8 border-2 border-blue-200">
+            <CardHeader className="bg-blue-50">
+              <CardTitle>Price Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="space-y-3">
+                <div className="flex justify-between text-gray-700">
+                  <span>Flight</span>
+                  <span className="font-semibold">
+                    ${pricing.flightBase.toFixed(2)}
+                  </span>
+                </div>
+                {pricing.seats > 0 && (
+                  <div className="flex justify-between text-gray-700">
+                    <span>Seats</span>
+                    <span className="font-semibold">
+                      ${pricing.seats.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                {pricing.baggage > 0 && (
+                  <div className="flex justify-between text-gray-700">
+                    <span>Baggage</span>
+                    <span className="font-semibold">
+                      ${pricing.baggage.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                <div className="border-t pt-3 flex justify-between text-xl font-bold text-gray-900">
+                  <span>Total</span>
+                  <span className="text-blue-600">
+                    ${pricing.total.toFixed(2)} {pricing.currency}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Continue Button */}
+          <Button
+            onClick={handleContinueToReview}
+            className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700"
+            size="lg"
+          >
+            Continue to Review
+          </Button>
         </div>
       </div>
     );
   }
 
-  if (!clientSecret) {
+  // ==========================================
+  // RENDER: REVIEW STEP
+  // ==========================================
+
+  if (currentStep === "review") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
-        <div className="glass-card p-12 text-center">
-          <div className="w-16 h-16 bg-luxury-gradient rounded-full flex items-center justify-center mx-auto mb-6 animate-luxury-pulse">
-            <CreditCard className="w-8 h-8 text-white" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+        {/* Header */}
+        <div className="bg-white shadow-sm border-b">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <Button
+                variant="ghost"
+                onClick={handleBackToPassengers}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Passenger Details
+              </Button>
+              <h1 className="text-xl font-semibold text-gray-900">
+                Review Your Booking
+              </h1>
+            </div>
           </div>
-          <h2 className="font-display text-2xl font-semibold text-primary mb-4">Preparing Secure Payment</h2>
-          <p className="font-accent text-muted-foreground mb-6">Setting up your premium checkout experience...</p>
-          <div className="animate-spin w-6 h-6 border-2 border-accent border-t-transparent rounded-full mx-auto" aria-label="Loading" />
         </div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
-        <div className="text-center mb-12 animate-luxury-fade-in">
-          <div className="inline-flex items-center bg-luxury-gradient-subtle rounded-full px-4 py-2 mb-6">
-            <Calendar className="w-4 h-4 text-accent mr-2" />
-            <span className="font-accent font-semibold text-accent text-sm tracking-wide uppercase">Premium Checkout</span>
-          </div>
-          <h1 className="font-display text-4xl lg:text-5xl font-bold text-primary mb-4 tracking-tight" data-testid="text-checkout-title">
-            Complete Your
-            <span className="text-luxury block">Luxury Experience</span>
-          </h1>
-          <p className="font-accent text-muted-foreground text-lg max-w-2xl mx-auto">
-            Secure your premium travel package with our luxury concierge service
-          </p>
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-          {/* Premium Booking Form */}
-          <div className="lg:col-span-2">
-            {stripePromise !== null && clientSecret ? (
-              <Elements stripe={stripePromise} options={{ clientSecret }}>
-                <CheckoutForm 
-                  cartData={cartData} 
-                  appliedPoints={appliedPoints}
-                  userEmail={localStorage.getItem('userEmail') || undefined}
-                />
-              </Elements>
-            ) : (
-              <CheckoutForm 
-                cartData={cartData} 
-                appliedPoints={appliedPoints}
-                userEmail={localStorage.getItem('userEmail') || undefined}
-              />
-            )}
-          </div>
-
-          {/* Premium Booking Summary */}
-          <div className="lg:col-span-1">
-            <div className="glass-card p-8 sticky top-24 animate-luxury-scale-in">
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="font-display text-2xl font-bold text-primary">Trip Summary</h2>
-                <div className="inline-flex items-center bg-luxury-gradient-subtle rounded-full px-4 py-2">
-                  <Star className="w-4 h-4 text-accent mr-2" />
-                  <span className="font-accent font-semibold text-accent text-sm">Premium</span>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Progress Steps */}
+          <div className="mb-8">
+            <div className="flex items-center justify-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center">
+                  âœ"
                 </div>
+                <span className="font-medium text-green-600">
+                  Passenger Details
+                </span>
               </div>
-              
-              {/* Cart Items */}
-              {cartData.items.map((item: any, index: number) => (
-                <div key={item.id} className="mb-8 p-4 glass rounded-xl" data-testid={`cart-item-${index}`}>
-                  <div className="flex items-center space-x-3 mb-3">
-                    <div className="w-10 h-10 bg-luxury-gradient rounded-full flex items-center justify-center">
-                      {item.type === 'flight' && <Plane className="w-5 h-5 text-white" />}
-                      {item.type === 'hotel' && <Bed className="w-5 h-5 text-white" />}
-                      {item.type === 'event' && <Calendar className="w-5 h-5 text-white" />}
-                    </div>
-                    <div className="flex-1">
-                      {item.type === 'flight' && (
-                        <>
-                          <h3 className="font-accent font-semibold text-primary" data-testid={`text-flight-name-${index}`}>
-                            {item.outboundFlight && item.returnFlight ? 'Round-trip Flights' : 'One-way Flight'}
-                          </h3>
-                          <p className="text-sm text-muted-foreground font-accent" data-testid={`text-flight-route-${index}`}>
-                            {item.outboundFlight?.departure} → {item.outboundFlight?.arrival}
-                            {item.returnFlight && ` → ${item.returnFlight.departure}`}
-                          </p>
-                        </>
-                      )}
-                      {item.type === 'hotel' && item.hotel && (
-                        <>
-                          <h3 className="font-accent font-semibold text-primary" data-testid={`text-hotel-name-${index}`}>
-                            {item.hotel.name}
-                          </h3>
-                          <p className="text-sm text-muted-foreground font-accent" data-testid={`text-hotel-location-${index}`}>
-                            {item.hotel.location}
-                          </p>
-                        </>
-                      )}
-                      {item.type === 'event' && item.event && (
-                        <>
-                          <h3 className="font-accent font-semibold text-primary" data-testid={`text-event-name-${index}`}>
-                            {item.event.title}
-                          </h3>
-                          <p className="text-sm text-muted-foreground font-accent" data-testid={`text-event-date-${index}`}>
-                            {item.event.date}
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2 mb-3">
-                    <p className="text-sm text-muted-foreground font-accent" data-testid={`text-item-passengers-${index}`}>
-                      {item.passengers} passenger{item.passengers !== 1 ? 's' : ''}
-                    </p>
-                    
-                    {/* Selected Seats */}
-                    {item.type === 'flight' && item.selectedSeats && (item.selectedSeats.outbound.length > 0 || item.selectedSeats.return.length > 0) && (
-                      <div className="text-xs text-muted-foreground">
-                        {item.selectedSeats.outbound.length > 0 && (
-                          <p>Outbound seats: {item.selectedSeats.outbound.map((seat: any) => seat.designator).join(', ')}</p>
-                        )}
-                        {item.selectedSeats.return.length > 0 && (
-                          <p>Return seats: {item.selectedSeats.return.map((seat: any) => seat.designator).join(', ')}</p>
-                        )}
-                      </div>
-                    )}
-                    
-                    {/* Selected Baggage */}
-                    {item.type === 'flight' && item.selectedBaggage && item.selectedBaggage.length > 0 && (
-                      <div className="text-xs text-muted-foreground">
-                        <p>Baggage: {item.selectedBaggage.map((bag: any) => `${bag.type} (${bag.weight})`).join(', ')}</p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <p className="text-right font-accent font-bold text-primary text-lg" data-testid={`text-item-price-${index}`}>
-                    {formatCurrency(item.subtotal)}
-                  </p>
+              <div className="w-16 h-1 bg-blue-600"></div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-semibold">
+                  2
                 </div>
+                <span className="font-medium text-blue-600">Review & Pay</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Error Alert */}
+          {error && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Column: Flight & Passenger Details */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Flight Details */}
+              <Card>
+                <CardHeader className="bg-gray-50">
+                  <CardTitle className="flex items-center gap-2">
+                    <Plane className="h-5 w-5" />
+                    Flight Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Route:</span>
+                      <span className="font-semibold">
+                        {cartItem.flight.origin} → {cartItem.flight.destination}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Departure:</span>
+                      <span className="font-semibold">
+                        {new Date(
+                          cartItem.flight.departureDate,
+                        ).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {cartItem.flight.returnDate && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Return:</span>
+                        <span className="font-semibold">
+                          {new Date(
+                            cartItem.flight.returnDate,
+                          ).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Airline:</span>
+                      <span className="font-semibold">
+                        {cartItem.flight.airline}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Passenger Details */}
+              {passengerForms.map((passenger, idx) => (
+                <Card key={idx}>
+                  <CardHeader className="bg-gray-50">
+                    <CardTitle className="flex items-center gap-2">
+                      <User className="h-5 w-5" />
+                      Passenger {idx + 1}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600">Name:</span>
+                        <p className="font-semibold">
+                          {passenger.title}. {passenger.given_name}{" "}
+                          {passenger.family_name}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Date of Birth:</span>
+                        <p className="font-semibold">
+                          {new Date(passenger.born_on).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {idx === 0 && (
+                        <>
+                          <div>
+                            <span className="text-gray-600">Email:</span>
+                            <p className="font-semibold">{passenger.email}</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Phone:</span>
+                            <p className="font-semibold">
+                              {passenger.phone_number}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
 
-              {/* Promo Code Input */}
-              <div className="mb-6">
-                <PromoCodeInput
-                  bookingType="hotel"
-                  bookingAmount={cartData.subtotal + cartData.taxes}
-                  onPromoApplied={handlePromoApplied}
-                />
-              </div>
-
-              {/* Points Redemption Widget */}
-              <div className="mb-6">
-                <PointsRedemptionWidget
-                  bookingType={bookingType}
-                  onPointsApplied={handlePointsApplied}
-                  appliedPoints={appliedPoints}
-                  onRemovePoints={handleRemovePoints}
-                />
-              </div>
-
-              {/* Cart Total */}
-              <div className="glass p-6 rounded-xl">
-                <div className="space-y-3 mb-4">
-                  <div className="flex justify-between items-center font-accent">
-                    <span className="text-muted-foreground">Subtotal</span>
-                    <span className="font-medium text-primary" data-testid="text-subtotal">{formatCurrency(cartData.subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between items-center font-accent">
-                    <span className="text-muted-foreground">Taxes & Fees</span>
-                    <span className="font-medium text-primary" data-testid="text-taxes">{formatCurrency(cartData.taxes)}</span>
-                  </div>
-                  {promoDiscount > 0 && (
-                    <div className="flex justify-between items-center font-accent">
-                      <span className="text-green-600 dark:text-green-400">Promo Discount</span>
-                      <span className="font-medium text-green-600 dark:text-green-400" data-testid="text-promo-discount">-{formatCurrency(promoDiscount)}</span>
+              {/* Selected Services */}
+              {(cartItem.selectedSeats?.length > 0 ||
+                cartItem.selectedBaggage?.length > 0) && (
+                <Card>
+                  <CardHeader className="bg-gray-50">
+                    <CardTitle>Selected Services</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="space-y-3 text-sm">
+                      {cartItem.selectedSeats?.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-gray-900 mb-2">
+                            Seats:
+                          </p>
+                          <ul className="space-y-1 text-gray-700">
+                            {cartItem.selectedSeats.map((seat, idx) => (
+                              <li key={idx} className="flex justify-between">
+                                <span>Seat {seat.designator}</span>
+                                <span>
+                                  ${parseFloat(seat.amount).toFixed(2)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {cartItem.selectedBaggage?.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-gray-900 mb-2">
+                            Baggage:
+                          </p>
+                          <ul className="space-y-1 text-gray-700">
+                            {cartItem.selectedBaggage.map((bag, idx) => (
+                              <li key={idx} className="flex justify-between">
+                                <span>{bag.quantity}x Extra Bag</span>
+                                <span>
+                                  $
+                                  {(
+                                    parseFloat(bag.amount) * bag.quantity
+                                  ).toFixed(2)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {pointsDiscount > 0 && (
-                    <div className="flex justify-between items-center font-accent">
-                      <span className="text-purple-600 dark:text-purple-400">Points Discount</span>
-                      <span className="font-medium text-purple-600 dark:text-purple-400" data-testid="text-points-discount">-{formatCurrency(pointsDiscount)}</span>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* Right Column: Payment */}
+            <div className="lg:col-span-1">
+              <Card className="sticky top-6 border-2 border-blue-200">
+                <CardHeader className="bg-blue-50">
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5" />
+                    Payment
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-3 mb-6">
+                    <div className="flex justify-between text-sm text-gray-700">
+                      <span>Flight</span>
+                      <span className="font-semibold">
+                        ${pricing.flightBase.toFixed(2)}
+                      </span>
                     </div>
-                  )}
-                </div>
-                <div className="border-t border-accent/20 pt-4">
-                  <div className="flex justify-between items-center">
-                    <span className="font-display text-xl font-bold text-primary">Total</span>
-                    <span className="font-display text-2xl font-bold text-luxury" data-testid="text-total">{formatCurrency(cartData.total)}</span>
+                    {pricing.seats > 0 && (
+                      <div className="flex justify-between text-sm text-gray-700">
+                        <span>Seats</span>
+                        <span className="font-semibold">
+                          ${pricing.seats.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    {pricing.baggage > 0 && (
+                      <div className="flex justify-between text-sm text-gray-700">
+                        <span>Baggage</span>
+                        <span className="font-semibold">
+                          ${pricing.baggage.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="border-t pt-3 flex justify-between text-xl font-bold text-gray-900">
+                      <span>Total</span>
+                      <span className="text-blue-600">
+                        ${pricing.total.toFixed(2)} {pricing.currency}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </div>
+
+                  <Button
+                    onClick={handleCompleteBooking}
+                    disabled={loading}
+                    className="w-full h-12 bg-blue-600 hover:bg-blue-700"
+                    size="lg"
+                  >
+                    {loading ? (
+                      <span className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Processing...
+                      </span>
+                    ) : (
+                      <>
+                        Pay ${pricing.total.toFixed(2)} {pricing.currency}
+                      </>
+                    )}
+                  </Button>
+
+                  <p className="text-xs text-gray-600 text-center mt-4">
+                    You will be redirected to Stripe for secure payment
+                  </p>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  // ==========================================
+  // RENDER: PROCESSING STEP
+  // ==========================================
+
+  if (currentStep === "processing") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-6"></div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            Processing Your Booking
+          </h2>
+          <p className="text-gray-600">
+            Please wait while we redirect you to secure payment...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }

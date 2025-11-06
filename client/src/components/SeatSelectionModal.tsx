@@ -1,205 +1,379 @@
-import React, { useState, useEffect } from "react";
-import { X } from "lucide-react";
+// src/components/SeatSelectionModal.tsx
+import { useState, useEffect } from "react";
+import { X, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-interface SeatSelectionProps {
+// âœ… Import API function instead of direct fetch
+import { getSeatMaps, type SeatMap } from "../lib/supabase";
+
+interface SeatSelectionModalProps {
   offerId: string;
   passengers: Array<{ id: string; type: string }>;
-  availableServices: any[]; // passed from AncillaryChoicePage
   onSeatsSelected: (seats: any[]) => void;
   onClose: () => void;
   onSkip: () => void;
 }
 
-export const SeatSelectionModal: React.FC<SeatSelectionProps> = ({
+interface SelectedSeat {
+  serviceId: string;
+  designator: string;
+  passengerId: string;
+  segmentId: string;
+  amount: string;
+}
+
+export function SeatSelectionModal({
   offerId,
   passengers,
-  availableServices = [],
   onSeatsSelected,
   onClose,
   onSkip,
-}) => {
-  const [selectedSeats, setSelectedSeats] = useState<Record<string, any>>({});
+}: SeatSelectionModalProps) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [seatMaps, setSeatMaps] = useState<SeatMap[]>([]);
+  const [selectedSeats, setSelectedSeats] = useState<
+    Record<number, SelectedSeat>
+  >({});
+  const [currentPassengerIndex, setCurrentPassengerIndex] = useState(0);
 
-  // Automatically group available seats by segment
-  const seatSegments = React.useMemo(() => {
-    const segments: Record<string, any[]> = {};
-    availableServices.forEach((service) => {
-      const segmentIds = service.segmentIds || service.segment_ids || [];
-      segmentIds.forEach((segId: string) => {
-        if (!segments[segId]) segments[segId] = [];
-        segments[segId].push(service);
-      });
-    });
-    return segments;
-  }, [availableServices]);
+  // âœ… Load seat maps using API layer
+  useEffect(() => {
+    loadSeatMaps();
+  }, [offerId]);
 
-  const handleSeatClick = (
-    service: any,
-    segmentId: string,
-    passengerId: string,
-  ) => {
-    const key = `${segmentId}-${passengerId}`;
-    if (selectedSeats[key]) {
-      const copy = { ...selectedSeats };
-      delete copy[key];
-      setSelectedSeats(copy);
-    } else {
-      setSelectedSeats({
-        ...selectedSeats,
-        [key]: {
-          serviceId: service.id,
-          designator: service.metadata?.designator || "Seat",
-          amount: service.totalAmount || service.total_amount,
-          currency: service.totalCurrency || service.total_currency || "AUD",
-          passengerId,
-          segmentId,
-        },
-      });
+  const loadSeatMaps = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log("💺 Loading seat maps for offer:", offerId);
+
+      // âœ… Call API layer (no direct fetch!)
+      const result = await getSeatMaps(offerId);
+
+      if (result.success && result.seat_maps) {
+        console.log("✅ Seat maps loaded:", result.seat_maps.length);
+        setSeatMaps(result.seat_maps);
+      } else {
+        throw new Error("No seat maps available");
+      }
+    } catch (err) {
+      console.error("❌ Failed to load seat maps:", err);
+      setError(err instanceof Error ? err.message : "Failed to load seat maps");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getTotalPrice = (): number =>
-    Object.values(selectedSeats).reduce(
-      (sum, s) => sum + parseFloat(s.amount || 0),
-      0,
-    );
+  /**
+   * âš ï¸ CRITICAL: Extract service ID using passenger index
+   * This is THE MOST IMPORTANT function for multi-passenger seat selection
+   */
+  const getSeatServiceIdForPassenger = (
+    seatElement: any,
+    passengerIndex: number,
+  ): string | null => {
+    if (
+      !seatElement.services ||
+      seatElement.services.length <= passengerIndex
+    ) {
+      console.warn(
+        `Seat ${seatElement.designator} not available for passenger ${passengerIndex}`,
+      );
+      return null;
+    }
 
-  const handleContinue = () => {
+    // âœ… CORRECT: Use passenger index to get service from array
+    return seatElement.services[passengerIndex].id;
+  };
+
+  const getSeatPrice = (seatElement: any, passengerIndex: number): string => {
+    if (
+      !seatElement.services ||
+      seatElement.services.length <= passengerIndex
+    ) {
+      return "0";
+    }
+    return seatElement.services[passengerIndex].total_amount || "0";
+  };
+
+  const handleSeatClick = (seatElement: any, segmentId: string) => {
+    if (!seatElement.available) return;
+
+    const serviceId = getSeatServiceIdForPassenger(
+      seatElement,
+      currentPassengerIndex,
+    );
+    if (!serviceId) {
+      alert(
+        `This seat is not available for passenger ${currentPassengerIndex + 1}`,
+      );
+      return;
+    }
+
+    const price = getSeatPrice(seatElement, currentPassengerIndex);
+
+    setSelectedSeats((prev) => ({
+      ...prev,
+      [currentPassengerIndex]: {
+        serviceId,
+        designator: seatElement.designator,
+        passengerId: passengers[currentPassengerIndex].id,
+        segmentId,
+        amount: price,
+      },
+    }));
+
+    console.log(
+      `✅ Passenger ${currentPassengerIndex + 1} selected seat ${seatElement.designator} (service index ${currentPassengerIndex})`,
+    );
+  };
+
+  const handleNextPassenger = () => {
+    if (currentPassengerIndex < passengers.length - 1) {
+      setCurrentPassengerIndex(currentPassengerIndex + 1);
+    } else {
+      handleComplete();
+    }
+  };
+
+  const handleComplete = () => {
     const seatsArray = Object.values(selectedSeats);
-    console.log("🎫 Seats selected (from Supabase):", seatsArray);
+
+    // Verify all seats have amounts
+    const invalidSeats = seatsArray.filter(
+      (seat) => !seat.amount || seat.amount === "0",
+    );
+    if (invalidSeats.length > 0) {
+      console.error("❌ Some seats missing prices:", invalidSeats);
+    }
+
+    console.log("💺 Completing seat selection:", seatsArray);
     onSeatsSelected(seatsArray);
   };
 
-  // --------------------------------------------------------
-  // RENDER
-  // --------------------------------------------------------
+  if (loading) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <div className="flex justify-center items-center py-12">
+            <div className="flex flex-col items-center gap-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <p className="text-gray-600">Loading seat maps...</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (error) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Seat Selection Error</DialogTitle>
+          </DialogHeader>
+          <div className="py-6">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <p className="text-red-800">{error}</p>
+            </div>
+            <div className="flex gap-3">
+              <Button onClick={onSkip} variant="outline" className="flex-1">
+                Skip Seat Selection
+              </Button>
+              <Button onClick={onClose} className="flex-1">
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  const currentSeatMap = seatMaps[0]; // For now, show first seat map
+  if (!currentSeatMap) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>No Seat Maps Available</DialogTitle>
+          </DialogHeader>
+          <div className="py-6">
+            <p className="text-gray-600 mb-4">
+              No seat maps available for this flight.
+            </p>
+            <Button onClick={onSkip} className="w-full">
+              Skip Seat Selection
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  const currentPassenger = passengers[currentPassengerIndex];
+  const isLastPassenger = currentPassengerIndex === passengers.length - 1;
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full my-8 max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="border-b px-6 py-4 flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-xl">
-          <div>
-            <h2 className="text-2xl font-bold">Select Your Seats</h2>
-            <p className="text-blue-100 text-sm mt-1">
-              {Object.keys(seatSegments).length} segment
-              {Object.keys(seatSegments).length !== 1 ? "s" : ""} •{" "}
-              {passengers.length} passenger
-              {passengers.length !== 1 ? "s" : ""}
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between">
+            <span>Select Seat for Passenger {currentPassengerIndex + 1}</span>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="py-4">
+          {/* Passenger Progress */}
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              {passengers.map((_, idx) => (
+                <div
+                  key={idx}
+                  className={`flex-1 h-2 rounded ${
+                    idx < currentPassengerIndex
+                      ? "bg-green-500"
+                      : idx === currentPassengerIndex
+                        ? "bg-blue-500"
+                        : "bg-gray-200"
+                  }`}
+                />
+              ))}
+            </div>
+            <p className="text-sm text-gray-600">
+              Passenger {currentPassengerIndex + 1} of {passengers.length}
+              {selectedSeats[currentPassengerIndex] && (
+                <span className="ml-2 text-green-600">
+                  (Selected: {selectedSeats[currentPassengerIndex].designator})
+                </span>
+              )}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-white hover:bg-blue-800 rounded-full w-10 h-10 flex items-center justify-center transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {Object.keys(seatSegments).length === 0 ? (
-            <div className="p-8 text-center text-gray-600">
-              No seat maps or seat services available for this fare.
-            </div>
-          ) : (
-            Object.entries(seatSegments).map(([segmentId, seats], idx) => (
-              <div key={segmentId} className="p-6 border-b border-gray-200">
-                <h3 className="font-semibold text-gray-700 mb-4">
-                  Segment {idx + 1} ({seats.length} seats available)
+          {/* Seat Map */}
+          <div className="border rounded-lg p-6 bg-gray-50">
+            {currentSeatMap.cabins.map((cabin, cabinIdx) => (
+              <div key={cabinIdx} className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase">
+                  {cabin.cabin_class}
                 </h3>
-                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
-                  {seats.map((s: any, i: number) => {
-                    const isSelected = Object.values(selectedSeats).some(
-                      (sel) => sel.serviceId === s.id,
-                    );
-                    return (
-                      <button
-                        key={i}
-                        onClick={() =>
-                          handleSeatClick(s, segmentId, passengers[0]?.id)
-                        }
-                        className={`p-3 rounded-lg text-xs font-semibold transition ${
-                          isSelected
-                            ? "bg-green-500 text-white border-2 border-green-600 shadow-md"
-                            : "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300"
-                        }`}
-                        title={`Seat ${s.metadata?.designator || ""} - ${s.totalAmount || s.total_amount} ${s.totalCurrency || s.total_currency}`}
+
+                {cabin.rows.map((row, rowIdx) => (
+                  <div key={rowIdx} className="mb-2">
+                    {row.sections.map((section, sectionIdx) => (
+                      <div
+                        key={sectionIdx}
+                        className="flex justify-center gap-1 mb-1"
                       >
-                        {s.metadata?.designator || s.id.slice(0, 4)}
-                        <div className="text-[10px] text-gray-500">
-                          $
-                          {parseFloat(
-                            s.totalAmount || s.total_amount || 0,
-                          ).toFixed(0)}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+                        {section.elements.map((element, elementIdx) => {
+                          if (element.type === "seat") {
+                            const isSelected =
+                              selectedSeats[currentPassengerIndex]
+                                ?.designator === element.designator;
+                            const isAvailable = element.available;
+                            const price = getSeatPrice(
+                              element,
+                              currentPassengerIndex,
+                            );
 
-        {/* Footer */}
-        <div className="border-t bg-gray-50 px-6 py-6 rounded-b-xl">
-          <div className="flex justify-between items-start mb-6">
-            <div className="flex-1">
-              <h4 className="font-bold text-gray-800 mb-3">Selected Seats</h4>
-              {Object.keys(selectedSeats).length === 0 ? (
-                <p className="text-sm text-gray-500 italic">
-                  No seats selected yet
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {Object.values(selectedSeats).map((seat: any, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-3 text-sm bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm"
-                    >
-                      <span className="font-bold text-green-600">
-                        {seat.designator}
-                      </span>
-                      <span className="text-gray-400">•</span>
-                      <span className="font-semibold text-gray-800">
-                        {seat.currency} ${seat.amount}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+                            return (
+                              <button
+                                key={elementIdx}
+                                onClick={() =>
+                                  handleSeatClick(
+                                    element,
+                                    currentSeatMap.segment_id,
+                                  )
+                                }
+                                disabled={!isAvailable}
+                                className={`
+                                  w-12 h-12 rounded text-xs font-medium transition-all
+                                  ${
+                                    isSelected
+                                      ? "bg-blue-500 text-white ring-2 ring-blue-600"
+                                      : isAvailable
+                                        ? "bg-white hover:bg-blue-50 border border-gray-300"
+                                        : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                  }
+                                `}
+                                title={`${element.designator} - $${price}`}
+                              >
+                                <div>{element.designator}</div>
+                                {isAvailable && price !== "0" && (
+                                  <div className="text-[10px]">${price}</div>
+                                )}
+                                {isSelected && (
+                                  <Check className="h-3 w-3 mx-auto" />
+                                )}
+                              </button>
+                            );
+                          } else if (element.type === "empty") {
+                            return (
+                              <div key={elementIdx} className="w-12 h-12" />
+                            );
+                          } else {
+                            return (
+                              <div
+                                key={elementIdx}
+                                className="w-12 h-12 flex items-center justify-center text-xs text-gray-400"
+                              >
+                                {element.type === "lavatory" ? "🚻" : "🚪"}
+                              </div>
+                            );
+                          }
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center justify-center gap-6 mt-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-white border border-gray-300 rounded"></div>
+              <span>Available</span>
             </div>
-            <div className="text-right ml-6">
-              <div className="text-sm text-gray-600 mb-1">
-                Total Seat Charges
-              </div>
-              <div className="text-3xl font-bold text-green-600">
-                {Object.values(selectedSeats)[0]?.currency || "AUD"} $
-                {getTotalPrice().toFixed(2)}
-              </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-blue-500 rounded"></div>
+              <span>Selected</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gray-200 rounded"></div>
+              <span>Unavailable</span>
             </div>
           </div>
 
-          <div className="flex gap-4">
-            <button
-              onClick={onSkip}
-              className="flex-1 bg-white border-2 border-gray-300 text-gray-700 py-4 rounded-lg hover:bg-gray-50 font-semibold transition-colors"
-            >
-              Skip Seat Selection
-            </button>
-            <button
-              onClick={handleContinue}
-              disabled={Object.keys(selectedSeats).length === 0}
-              className="flex-1 bg-green-600 text-white py-4 rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold transition-colors shadow-lg"
-            >
-              {Object.keys(selectedSeats).length === 0
-                ? "Select at least one seat"
-                : `Continue with ${Object.keys(selectedSeats).length} Seat(s)`}
-            </button>
+          {/* Actions */}
+          <div className="flex gap-3 mt-6">
+            <Button onClick={onSkip} variant="outline" className="flex-1">
+              Skip All Seats
+            </Button>
+            {selectedSeats[currentPassengerIndex] && (
+              <Button
+                onClick={handleNextPassenger}
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              >
+                {isLastPassenger ? "Complete Selection" : "Next Passenger"}
+              </Button>
+            )}
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
-};
-
-export default SeatSelectionModal;
+}

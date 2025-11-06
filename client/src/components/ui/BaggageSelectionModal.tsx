@@ -1,22 +1,32 @@
-import { useState, useMemo } from "react";
+// src/components/ui/BaggageSelectionModal.tsx
+import { useState, useEffect } from "react";
 import { X, Luggage, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+// âœ… Import API function instead of direct fetch
+import { getBaggageServices, type BaggageService } from "../../lib/supabase";
 
 interface BaggageSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   offerId: string;
-  passengers: any[];
-  availableServices: any[]; // ✅ New prop from AncillaryChoicePage
-  onComplete: (selectedBaggage: SelectedBaggage[]) => void;
+  passengers: Array<{ id: string; type: string }>;
+  onComplete: (baggage: any[]) => void;
 }
 
 interface SelectedBaggage {
   serviceId: string;
-  quantity: number;
   passengerId: string;
-  segmentId: string;
+  type: "checked" | "carry_on";
+  quantity: number;
   amount: string;
+  maxQuantity: number;
 }
 
 export function BaggageSelectionModal({
@@ -24,198 +34,321 @@ export function BaggageSelectionModal({
   onClose,
   offerId,
   passengers,
-  availableServices = [],
   onComplete,
 }: BaggageSelectionModalProps) {
-  const [selections, setSelections] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [availableBaggage, setAvailableBaggage] = useState<BaggageService[]>(
+    [],
+  );
+  const [includedBaggage, setIncludedBaggage] = useState<any[]>([]);
+  const [selectedBaggage, setSelectedBaggage] = useState<
+    Record<string, SelectedBaggage>
+  >({});
 
-  // Memoize baggage data (parsed from availableServices)
-  const baggageServices = useMemo(() => {
-    return availableServices.filter((s) => s.type === "baggage");
-  }, [availableServices]);
+  // âœ… Load baggage services using API layer
+  useEffect(() => {
+    if (isOpen && offerId) {
+      loadBaggageServices();
+    }
+  }, [isOpen, offerId]);
 
-  const updateQuantity = (
-    serviceId: string,
-    delta: number,
-    maxQuantity: number,
-  ) => {
-    setSelections((prev) => {
-      const current = prev[serviceId] || 0;
-      const newValue = Math.max(0, Math.min(maxQuantity, current + delta));
-      return { ...prev, [serviceId]: newValue };
-    });
+  const loadBaggageServices = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log("🧳 Loading baggage services for offer:", offerId);
+
+      // âœ… Call API layer (no direct fetch!)
+      const result = await getBaggageServices(offerId);
+
+      if (result.success) {
+        console.log("✅ Baggage services loaded");
+        console.log(
+          "Available baggage:",
+          result.available_services.baggage.length,
+        );
+        console.log("Included baggage:", result.included_baggage.length);
+
+        setAvailableBaggage(result.available_services.baggage || []);
+        setIncludedBaggage(result.included_baggage || []);
+      } else {
+        throw new Error("Failed to load baggage services");
+      }
+    } catch (err) {
+      console.error("❌ Failed to load baggage services:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to load baggage services",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const getTotalCost = (): number => {
-    return Object.entries(selections).reduce((sum, [serviceId, quantity]) => {
-      const service = baggageServices.find((s) => s.id === serviceId);
-      if (service && quantity > 0) {
-        return sum + parseFloat(service.totalAmount || service.total_amount);
+  const handleQuantityChange = (service: BaggageService, delta: number) => {
+    const key = `${service.passenger_id}-${service.id}`;
+    const current = selectedBaggage[key];
+
+    if (!current && delta > 0) {
+      // Add new selection
+      setSelectedBaggage((prev) => ({
+        ...prev,
+        [key]: {
+          serviceId: service.id,
+          passengerId: service.passenger_id,
+          type: service.metadata.type,
+          quantity: 1,
+          amount: service.price,
+          maxQuantity: service.maximum_quantity,
+        },
+      }));
+    } else if (current) {
+      const newQuantity = Math.max(
+        0,
+        Math.min(current.quantity + delta, service.maximum_quantity),
+      );
+
+      if (newQuantity === 0) {
+        // Remove selection
+        setSelectedBaggage((prev) => {
+          const newState = { ...prev };
+          delete newState[key];
+          return newState;
+        });
+      } else {
+        // Update quantity
+        setSelectedBaggage((prev) => ({
+          ...prev,
+          [key]: { ...current, quantity: newQuantity },
+        }));
       }
-      return sum;
-    }, 0);
+    }
   };
 
   const handleComplete = () => {
-    const selected: SelectedBaggage[] = Object.entries(selections)
-      .filter(([_, qty]) => qty > 0)
-      .map(([serviceId, quantity]) => {
-        const service = baggageServices.find((s) => s.id === serviceId);
-        return {
-          serviceId,
-          quantity,
-          passengerId: service?.passengerIds?.[0] || passengers[0]?.id || "",
-          segmentId: service?.segmentIds?.[0] || "0",
-          amount: service?.totalAmount || service?.total_amount || "0",
-        };
-      });
+    const baggageArray = Object.values(selectedBaggage).map((item) => ({
+      id: item.serviceId,
+      type: "baggage",
+      amount: parseFloat(item.amount),
+      quantity: item.quantity,
+      passenger_id: item.passengerId,
+    }));
 
-    console.log("🧳 Final baggage selection:", selected);
-    onComplete(selected);
+    console.log("🧳 Completing baggage selection:", baggageArray);
+    onComplete(baggageArray);
   };
 
-  const handleSkip = () => {
-    console.log("🧳 Baggage skipped");
-    onComplete([]);
+  const getTotalCost = () => {
+    return Object.values(selectedBaggage).reduce((sum, item) => {
+      return sum + parseFloat(item.amount) * item.quantity;
+    }, 0);
   };
 
   if (!isOpen) return null;
 
-  const totalCost = getTotalCost();
-  const currency =
-    baggageServices[0]?.totalCurrency ||
-    baggageServices[0]?.total_currency ||
-    "AUD";
+  if (loading) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent className="max-w-3xl">
+          <div className="flex justify-center items-center py-12">
+            <div className="flex flex-col items-center gap-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <p className="text-gray-600">Loading baggage options...</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (error) {
+    return (
+      <Dialog open={true} onOpenChange={onClose}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Baggage Selection Error</DialogTitle>
+          </DialogHeader>
+          <div className="py-6">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <p className="text-red-800">{error}</p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => onComplete([])}
+                variant="outline"
+                className="flex-1"
+              >
+                Skip Baggage
+              </Button>
+              <Button onClick={onClose} className="flex-1">
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Add Baggage</h2>
-            <p className="text-sm text-gray-600 mt-1">
-              Select additional checked baggage for your flight
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-2"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-6">
-          {baggageServices.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-              <Luggage className="w-16 h-16 text-gray-400 mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                No Additional Baggage Available
-              </h3>
-              <p className="text-gray-600 mb-6 text-center max-w-md">
-                This flight does not offer additional baggage options at this
-                time. You can proceed with the standard baggage allowance
-                included in your ticket.
-              </p>
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Luggage className="h-5 w-5" />
+              <span>Add Baggage</span>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {baggageServices.map((service, index) => {
-                const quantity = selections[service.id] || 0;
-                const maxQuantity = service.maximumQuantity || 3;
-                const baggageType = service.metadata?.type || "Checked Bag";
-                const weight = service.metadata?.maximum_weight_kg;
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="py-4">
+          {/* Included Baggage */}
+          {includedBaggage.length > 0 && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <h3 className="font-semibold text-green-900 mb-2">
+                ✅ Included with Your Ticket
+              </h3>
+              <ul className="space-y-1 text-sm text-green-800">
+                {includedBaggage.map((bag, idx) => (
+                  <li key={idx}>
+                    {bag.quantity} {bag.type} bag{bag.quantity > 1 ? "s" : ""}{" "}
+                    per passenger
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Available Baggage by Passenger */}
+          {availableBaggage.length > 0 ? (
+            <div className="space-y-6">
+              {passengers.map((passenger, passengerIdx) => {
+                const passengerBaggage = availableBaggage.filter(
+                  (bag) => bag.passenger_id === passenger.id,
+                );
+
+                if (passengerBaggage.length === 0) return null;
 
                 return (
-                  <div
-                    key={service.id}
-                    className="border rounded-lg p-4 hover:border-blue-300 transition-colors"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Luggage className="w-5 h-5 text-gray-600" />
-                          <h4 className="font-semibold text-gray-900">
-                            {baggageType}
-                          </h4>
-                        </div>
-                        {weight && (
-                          <p className="text-sm text-gray-600 mb-1">
-                            Up to {weight}kg
-                          </p>
-                        )}
-                        <p className="text-lg font-bold text-blue-600">
-                          {currency.toUpperCase()} $
-                          {parseFloat(
-                            service.totalAmount || service.total_amount,
-                          ).toFixed(2)}{" "}
-                          <span className="text-sm font-normal text-gray-600">
-                            per bag
-                          </span>
-                        </p>
-                      </div>
+                  <div key={passenger.id} className="border rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-900 mb-4">
+                      Passenger {passengerIdx + 1}
+                    </h3>
 
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-                          <button
-                            onClick={() =>
-                              updateQuantity(service.id, -1, maxQuantity)
-                            }
-                            disabled={quantity === 0}
-                            className="w-8 h-8 bg-white rounded flex items-center justify-center hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    <div className="space-y-3">
+                      {passengerBaggage.map((service) => {
+                        const key = `${service.passenger_id}-${service.id}`;
+                        const selected = selectedBaggage[key];
+                        const quantity = selected?.quantity || 0;
+
+                        return (
+                          <div
+                            key={service.id}
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                           >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <span className="w-8 text-center font-semibold">
-                            {quantity}
-                          </span>
-                          <button
-                            onClick={() =>
-                              updateQuantity(service.id, 1, maxQuantity)
-                            }
-                            disabled={quantity >= maxQuantity}
-                            className="w-8 h-8 bg-white rounded flex items-center justify-center hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-gray-900">
+                                Additional{" "}
+                                {service.metadata.type === "checked"
+                                  ? "Checked"
+                                  : "Carry-on"}{" "}
+                                Bag
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                {service.metadata.maximum_weight_kg && (
+                                  <span>
+                                    Up to {service.metadata.maximum_weight_kg}kg
+                                  </span>
+                                )}
+                                {" • "}
+                                <span className="font-semibold text-blue-600">
+                                  ${service.price} {service.currency}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  handleQuantityChange(service, -1)
+                                }
+                                disabled={quantity === 0}
+                              >
+                                <Minus className="h-4 w-4" />
+                              </Button>
+
+                              <span className="w-8 text-center font-semibold">
+                                {quantity}
+                              </span>
+
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleQuantityChange(service, 1)}
+                                disabled={quantity >= service.maximum_quantity}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })}
             </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-gray-50 border-t px-6 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm text-gray-600">Total Baggage Cost</div>
-            <div className="text-2xl font-bold text-gray-900">
-              {currency.toUpperCase()} ${totalCost.toFixed(2)}
+          ) : (
+            <div className="text-center py-8">
+              <Luggage className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600">
+                No additional baggage options available for this flight.
+              </p>
             </div>
-          </div>
+          )}
 
-          <div className="flex gap-3">
+          {/* Total Cost */}
+          {Object.keys(selectedBaggage).length > 0 && (
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-gray-900">
+                  Total Baggage Cost:
+                </span>
+                <span className="text-xl font-bold text-blue-600">
+                  ${getTotalCost().toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-3 mt-6">
             <Button
-              onClick={handleSkip}
+              onClick={() => onComplete([])}
               variant="outline"
-              className="flex-1 border-2 border-gray-300 text-gray-700 hover:bg-gray-100"
+              className="flex-1"
             >
               Skip Baggage
             </Button>
             <Button
               onClick={handleComplete}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
             >
-              Continue {totalCost > 0 ? `+$${totalCost.toFixed(2)}` : ""}
+              Continue
+              {Object.keys(selectedBaggage).length > 0 && (
+                <span className="ml-2">(${getTotalCost().toFixed(2)})</span>
+              )}
             </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

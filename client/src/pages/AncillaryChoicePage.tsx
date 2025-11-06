@@ -6,6 +6,9 @@ import { Plane, Luggage, ArrowRight, Loader2, ArrowLeft } from "lucide-react";
 import { SeatSelectionModal } from "@/components/SeatSelectionModal";
 import { BaggageSelectionModal } from "@/components/ui/BaggageSelectionModal";
 
+// âœ… Import API function
+import { saveAncillaries } from "../lib/supabase";
+
 export default function AncillaryChoicePage() {
   const [, params] = useRoute("/ancillaries/:offerId");
   const [, navigate] = useLocation();
@@ -124,7 +127,7 @@ export default function AncillaryChoicePage() {
     proceedToCheckout();
   };
 
-  // ✅ Replace sessionStorage logic with backend persistence
+  // âœ… Backend persistence + navigate to NEW checkout
   const proceedToCheckout = async () => {
     try {
       setSaving(true);
@@ -136,6 +139,7 @@ export default function AncillaryChoicePage() {
           0,
         );
 
+      // âœ… Call API layer to save ancillaries
       const res = await saveAncillaries({
         offerId,
         passengers,
@@ -147,7 +151,7 @@ export default function AncillaryChoicePage() {
 
       console.log("✅ Ancillaries saved to Supabase:", res);
 
-      // Still store services locally for UI reference
+      // Store services locally in cart for UI reference
       const servicesWithDetails = [
         ...selectedSeats.map((s) => ({
           id: s.serviceId || s.id,
@@ -165,7 +169,8 @@ export default function AncillaryChoicePage() {
 
       setServicesForOffer(offerId, servicesWithDetails);
 
-      navigate(`/passenger-details/${offerId}`);
+      // âœ… Navigate to NEW checkout (not old passenger-details)
+      navigate(`/checkout/${offerId}`);
     } catch (err) {
       console.error("❌ Failed to save ancillaries:", err);
       alert("Could not save your selections. Please try again.");
@@ -174,7 +179,8 @@ export default function AncillaryChoicePage() {
     }
   };
 
-  const handleSkip = () => navigate(`/passenger-details/${offerId}`);
+  // âœ… Updated skip handler - goes to NEW checkout
+  const handleSkip = () => navigate(`/checkout/${offerId}`);
 
   // ----------------------------------------------------
   // UI STATES
@@ -202,7 +208,7 @@ export default function AncillaryChoicePage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 py-12 px-4">
       <div className="max-w-2xl mx-auto">
         <button
-          onClick={() => navigate("/flight-results")}
+          onClick={() => navigate("/flights")}
           className="flex items-center text-blue-200 hover:text-white mb-6 transition-colors"
         >
           <ArrowLeft className="w-5 h-5 mr-2" />
