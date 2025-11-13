@@ -79,7 +79,7 @@ const handler = async (req: Request) => {
             gender: p.gender,
             born_on: p.born_on,
             email: p.email,
-            phone_number: p.phone_number,
+            phone_number: p.phone_number_full || p.phone_number,
           };
 
           if (p.identity_documents?.length > 0) {

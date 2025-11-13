@@ -38,14 +38,17 @@ const ImprovedTripSummary: React.FC<ImprovedTripSummaryProps> = ({
   selectedBaggage = []
 }) => {
   // Calculate per-passenger pricing
-  const passengerCount = offer.passengers.length;
-  const totalAmount = parseFloat(offer.total_amount);
-  const baseAmount = parseFloat(offer.base_amount);
-  const taxAmount = parseFloat(offer.tax_amount);
+  const passengerCount = offer.passengers.length || 1;
+  const totalAmount = parseFloat(offer.total_amount || '0') || 0;
+  const baseAmountRaw = offer.base_amount ? parseFloat(offer.base_amount) : NaN;
+  const taxAmountRaw = offer.tax_amount ? parseFloat(offer.tax_amount) : NaN;
+  const hasBreakdown = !isNaN(baseAmountRaw) && !isNaN(taxAmountRaw);
+  const baseAmount = hasBreakdown ? baseAmountRaw : 0;
+  const taxAmount = hasBreakdown ? taxAmountRaw : 0;
   
-  const perPersonTotal = totalAmount / passengerCount;
-  const perPersonBase = baseAmount / passengerCount;
-  const perPersonTax = taxAmount / passengerCount;
+  const perPersonTotal = passengerCount > 0 ? totalAmount / passengerCount : 0;
+  const perPersonBase = hasBreakdown ? baseAmount / passengerCount : 0;
+  const perPersonTax = hasBreakdown ? taxAmount / passengerCount : 0;
 
   // Calculate services costs
   const seatsCost = selectedSeats.reduce((sum, seat) => {
@@ -118,40 +121,33 @@ const ImprovedTripSummary: React.FC<ImprovedTripSummaryProps> = ({
               Traveller {index + 1}: {getPassengerTypeLabel(passenger.type)}
             </h3>
             
-            <div className="space-y-2 ml-4">
-              {/* Flight Cost */}
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Flight</span>
-                <span className="text-gray-900 font-medium">
-                  {offer.total_currency}${perPersonBase.toFixed(2)}
-                </span>
-              </div>
-
-              {/* Taxes and Fees */}
-              <div className="flex justify-between text-sm">
-                <div className="flex items-center gap-1">
-                  <span className="text-gray-600">Taxes, fees, and charges</span>
-                  <button 
-                    className="text-gray-400 hover:text-gray-600"
-                    title="Includes government taxes and airline fees"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                  </button>
+            {hasBreakdown ? (
+              <div className="space-y-2 ml-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Base fare</span>
+                  <span className="text-gray-900 font-medium">
+                    {offer.total_currency}${perPersonBase.toFixed(2)}
+                  </span>
                 </div>
-                <span className="text-gray-900 font-medium">
-                  {offer.total_currency}${perPersonTax.toFixed(2)}
-                </span>
-              </div>
 
-              {/* Per-Passenger Total */}
-              <div className="flex justify-between text-sm pt-2 border-t border-gray-100">
-                <span className="text-gray-900 font-semibold">Subtotal</span>
-                <span className="text-gray-900 font-bold">
-                  {offer.total_currency}${perPersonTotal.toFixed(2)}
-                </span>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Taxes & fees</span>
+                  <span className="text-gray-900 font-medium">
+                    {offer.total_currency}${perPersonTax.toFixed(2)}
+                  </span>
+                </div>
               </div>
+            ) : (
+              <div className="ml-4 text-sm text-gray-500">
+                Price includes all taxes and fees
+              </div>
+            )}
+
+            <div className="ml-4 flex justify-between text-sm pt-2 border-t border-gray-100">
+              <span className="text-gray-900 font-semibold">Passenger Total</span>
+              <span className="text-gray-900 font-bold">
+                {offer.total_currency}${perPersonTotal.toFixed(2)}
+              </span>
             </div>
           </div>
         ))}

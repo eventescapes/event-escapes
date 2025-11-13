@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -76,6 +76,23 @@ export default function BaggageSelection() {
   const [includedBaggage, setIncludedBaggage] = useState<IncludedBaggage[]>([]);
   const [selectedBaggage, setSelectedBaggage] = useState<SelectedBaggageEntry[]>([]);
   const [slices, setSlices] = useState<Slice[]>([]);
+  const [storedOffer, setStoredOffer] = useState<any | null>(null);
+  const baggageCardsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const offerData = sessionStorage.getItem('flightOfferData');
+      if (offerData) {
+        try {
+          const parsed = JSON.parse(offerData);
+          setStoredOffer(parsed);
+          console.log('📦 Loaded stored flight offer data:', parsed);
+        } catch (error) {
+          console.error('⚠️ Failed to parse stored flight offer data:', error);
+        }
+      }
+    }
+  }, []);
+
 
   // Load data on mount
   useEffect(() => {
@@ -372,14 +389,19 @@ export default function BaggageSelection() {
 
     try {
       const seats = JSON.parse(seatsData);
+      if (Array.isArray(seats)) {
+        return seats.reduce((total: number, seat: any) => {
+          return total + parseFloat(seat.amount || seat.price || seat.total_amount || 0);
+        }, 0);
+      }
+
       let total = 0;
-      
       Object.values(seats).forEach((flightSeats: any) => {
         Object.values(flightSeats).forEach((seat: any) => {
           total += parseFloat(seat.price || seat.amount || seat.total_amount || 0);
         });
       });
-      
+
       return total;
     } catch {
       return 0;
@@ -402,12 +424,27 @@ export default function BaggageSelection() {
     console.log('📤 Continuing with baggage:', selectedBaggage);
 
     // Save selected baggage to localStorage
-    const baggageForStorage = selectedBaggage.map(entry => ({
-      ...entry.bag,
-      __sliceIndex: entry.sliceIndex,
-      __passengerNumber: entry.passengerNumber,
-    }));
+    const baggageForStorage = selectedBaggage.map(entry => {
+      const bag = entry.bag;
+      const amountValue = parseFloat((bag.price as any) || (bag.total_amount as any) || (bag.amount as any) || '0') || 0;
 
+      return {
+        id: bag.id,
+        type: 'baggage',
+        amount: amountValue,
+        total_amount: amountValue,
+        quantity: 1,
+        passenger_id: bag.passenger_id,
+        currency: bag.currency || bag.total_currency || storedOffer?.total_currency || 'AUD',
+        slice_index: entry.sliceIndex,
+        passenger_number: entry.passengerNumber,
+        description: bag.metadata?.type ? `${bag.metadata.type} bag` : 'Baggage'
+      };
+    });
+
+    console.log('💾 Saving services:', baggageForStorage);
+    console.log('Each service amount:', baggageForStorage.map(service => service.amount));
+ 
     localStorage.setItem('selected_baggage', JSON.stringify(baggageForStorage));
     localStorage.setItem('baggage_total', calculateBaggageTotal().toFixed(2));
 
@@ -418,7 +455,25 @@ export default function BaggageSelection() {
     });
 
     // Navigate to passenger details
-    setLocation('/passenger-details');
+    const target = offerId ? `/passenger-details?offer_id=${offerId}` : '/passenger-details';
+    setLocation(target);
+  };
+
+  const handleBackToSeats = () => {
+    const target = offerId ? `/seat-selection?offer_id=${offerId}` : '/seat-selection';
+    setLocation(target);
+  };
+
+  const handleSkipBaggage = () => {
+    console.log('⏭️ Skipping baggage selection');
+    const target = offerId ? `/passenger-details?offer_id=${offerId}` : '/passenger-details';
+    setLocation(target);
+  };
+
+  const scrollToBaggage = () => {
+    if (baggageCardsRef.current) {
+      baggageCardsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   // Loading state
@@ -461,11 +516,69 @@ export default function BaggageSelection() {
   const baggageBySlice = getBaggageBySlice();
   const hasAnyBaggage = Object.values(baggageBySlice).some(slice => slice.baggage.length > 0);
 
+  const storedSlices: any[] = storedOffer?.slices || [];
+  const primarySlice = storedSlices[0];
+  const secondarySlice = storedSlices[1];
+  const offerId = storedOffer?.id || outbound?.offerId || '';
+  const routeOriginLabel =
+    primarySlice?.origin?.iata_code ||
+    primarySlice?.origin?.city_name ||
+    outbound?.origin ||
+    'Origin';
+  const routeDestinationLabel =
+    primarySlice?.destination?.iata_code ||
+    primarySlice?.destination?.city_name ||
+    outbound?.destination ||
+    'Destination';
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4">
+        <button
+          onClick={handleBackToSeats}
+          className="mb-6 flex items-center gap-2 text-gray-600 hover:text-gray-800 font-medium transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Seats
+        </button>
+
+        {/* Optional Messaging */}
+        <div className="max-w-4xl mx-auto mb-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">
+                🧳 Additional Baggage (Optional)
+              </h2>
+              <p className="text-gray-700 mb-4">
+                Add extra baggage below, or skip to continue with the included baggage allowance only.
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <button
+                  type="button"
+                  onClick={handleSkipBaggage}
+                  className="px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:border-gray-400 hover:bg-gray-50 font-medium transition-all"
+                >
+                  Skip to Passenger Details →
+                </button>
+                <button
+                  type="button"
+                  onClick={scrollToBaggage}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-all"
+                >
+                  Add Baggage Below ↓
+                </button>
+              </div>
+            </div>
+            <div className="text-sm text-gray-600 space-y-1 md:text-right">
+              <div>🧳 Extra bag: $40.27 each</div>
+              <div>✅ Free to skip</div>
+            </div>
+          </div>
+        </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div ref={baggageCardsRef} className="baggage-cards grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* Main Content */}
           <div className="lg:col-span-2">
@@ -517,15 +630,16 @@ export default function BaggageSelection() {
 
             {/* CRITICAL FIX: Baggage Grouped by Flight */}
             {hasAnyBaggage ? (
-              <div className="space-y-8">
+              <div className="space-y-8" ref={baggageCardsRef}>
                 {Object.entries(baggageBySlice).map(([sliceIndex, { slice, baggage }]) => {
                   if (baggage.length === 0) return null;
                   
                   const isOutbound = parseInt(sliceIndex) === 0;
-                  const originIata = slice.origin?.iata_code || slice.origin?.city_name || 'Origin';
-                  const destinationIata = slice.destination?.iata_code || slice.destination?.city_name || 'Destination';
-                  const originCity = slice.origin?.city_name;
-                  const destinationCity = slice.destination?.city_name;
+                  const storedSlice = storedOffer?.slices?.[parseInt(sliceIndex)];
+                  const originIata = storedSlice?.origin?.iata_code || storedSlice?.origin?.city_name || (isOutbound ? routeOriginLabel : routeDestinationLabel);
+                  const destinationIata = storedSlice?.destination?.iata_code || storedSlice?.destination?.city_name || (isOutbound ? routeDestinationLabel : routeOriginLabel);
+                  const originCity = storedSlice?.origin?.city_name || primarySlice?.origin?.city_name || storedSlice?.origin?.iata_code;
+                  const destinationCity = storedSlice?.destination?.city_name || primarySlice?.destination?.city_name || storedSlice?.destination?.iata_code;
                   const departureDate = slice.departure_datetime;
                   
                   return (
@@ -669,37 +783,6 @@ export default function BaggageSelection() {
               </Card>
             )}
 
-            {/* Navigation Buttons */}
-            <div className="mt-8 space-y-4">
-              <div className="flex gap-4">
-                <Button
-                  onClick={() => setLocation('/seat-selection')}
-                  variant="outline"
-                  className="flex-1 py-6 text-base"
-                >
-                  ← Back to Seats
-                </Button>
-                <Button
-                  onClick={handleContinue}
-                  className="flex-1 py-6 bg-green-500 hover:bg-green-600 text-white text-base font-semibold"
-                >
-                  Continue to Passenger Details →
-                </Button>
-              </div>
-
-              {/* Skip Option */}
-              {hasAnyBaggage && (
-                <div className="text-center">
-                  <button
-                    onClick={handleContinue}
-                    className="text-gray-500 hover:text-gray-700 text-sm underline"
-                  >
-                    Skip - Continue without extra baggage
-                  </button>
-                </div>
-              )}
-            </div>
-
           </div>
 
           {/* Sidebar - Trip Summary */}
@@ -711,11 +794,11 @@ export default function BaggageSelection() {
               <div className="mb-6 pb-6 border-b">
                 <div className="text-sm text-gray-600 mb-2">Route</div>
                 <div className="font-semibold text-gray-900">
-                  {outbound?.origin} → {outbound?.destination}
+                  {primarySlice?.origin?.iata_code || routeOriginLabel} → {primarySlice?.destination?.iata_code || routeDestinationLabel}
                 </div>
-                {returnFlight && (
+                {secondarySlice && (
                   <div className="text-sm text-gray-600 mt-1">
-                    Round trip
+                    {secondarySlice.origin?.iata_code || secondarySlice.origin?.city_name || routeDestinationLabel} → {secondarySlice.destination?.iata_code || secondarySlice.destination?.city_name || routeOriginLabel}
                   </div>
                 )}
               </div>
@@ -769,10 +852,11 @@ export default function BaggageSelection() {
                       if (sliceEntries.length === 0) return null;
                       
                       const isOutbound = sliceIdx === 0;
-                      const originIata = slice.origin?.iata_code || slice.origin?.city_name || 'Origin';
-                      const destinationIata = slice.destination?.iata_code || slice.destination?.city_name || 'Destination';
-                      const originCity = slice.origin?.city_name;
-                      const destinationCity = slice.destination?.city_name;
+                      const storedSlice = storedOffer?.slices?.[sliceIdx];
+                      const originIata = storedSlice?.origin?.iata_code || slice.origin?.iata_code || slice.origin?.city_name || 'Origin';
+                      const destinationIata = storedSlice?.destination?.iata_code || slice.destination?.iata_code || slice.destination?.city_name || 'Destination';
+                      const originCity = storedSlice?.origin?.city_name || slice.origin?.city_name;
+                      const destinationCity = storedSlice?.destination?.city_name || slice.destination?.city_name;
                       const sliceTotal = sliceEntries.reduce((sum, entry) => 
                         sum + parseFloat(entry.bag.price || entry.bag.total_amount || entry.bag.amount || '0'), 0
                       );
@@ -789,8 +873,8 @@ export default function BaggageSelection() {
                             </div>
                           )}
                           {sliceEntries.map((entry) => (
-                            <div key={entry.bag.id} className="flex justify-between text-gray-600 ml-5 text-xs mb-1">
-                              <span>• Passenger {entry.passengerNumber}</span>
+                            <div key={entry.bag.id} className="text-gray-600 ml-5 text-xs mb-1 flex justify-between">
+                              <span>Passenger {entry.passengerNumber}</span>
                               <span>${getPrice(entry.bag)}</span>
                             </div>
                           ))}
@@ -806,16 +890,38 @@ export default function BaggageSelection() {
               )}
 
               {/* Grand Total */}
-              <div className="flex justify-between items-center">
-                <span className="text-xl font-bold text-gray-900">Total</span>
-                <span className="text-3xl font-bold text-green-600">
-                  ${calculateGrandTotal().toFixed(2)}
-                </span>
-              </div>
-              <div className="text-right text-xs text-gray-500 mt-1">
-                {outbound?.currency || 'AUD'}
+              <div className="border-t border-gray-300 pt-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-xl font-bold text-gray-900">Total</span>
+                  <span className="text-3xl font-bold text-green-600">
+                    ${calculateGrandTotal().toFixed(2)}
+                  </span>
+                </div>
+                <div className="text-right text-xs text-gray-500 mt-1">
+                  {outbound?.currency || 'AUD'}
+                </div>
+
+                <div className="space-y-3 mt-6">
+                  <Button
+                    onClick={handleContinue}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    Continue to Passenger Details
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Button>
+
+                  <button
+                    onClick={handleSkipBaggage}
+                    className="w-full text-center text-gray-600 hover:text-gray-800 font-medium py-2 transition-colors"
+                  >
+                    Skip baggage
+                  </button>
+                </div>
               </div>
             </Card>
+
           </div>
 
         </div>

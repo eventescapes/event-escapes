@@ -1,9 +1,260 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Select from "react-select";
 import { countries } from "@/lib/countries";
 import ImprovedTripSummary from "@/components/ImprovedTripSummary";
+import { supabase } from "@/lib/supabase";
+// ========================================
+// CONSTANTS - Must be defined before component
+// ========================================
+const DEFAULT_PHONE_COUNTRY_CODE = "";
+const COUNTRIES = [
+  { code: "+93", name: "Afghanistan", flag: "🇦🇫" },
+  { code: "+355", name: "Albania", flag: "🇦🇱" },
+  { code: "+213", name: "Algeria", flag: "🇩🇿" },
+  { code: "+1-684", name: "American Samoa", flag: "🇦🇸" },
+  { code: "+376", name: "Andorra", flag: "🇦🇩" },
+  { code: "+244", name: "Angola", flag: "🇦🇴" },
+  { code: "+1-264", name: "Anguilla", flag: "🇦🇮" },
+  { code: "+672", name: "Antarctica", flag: "🇦🇶" },
+  { code: "+1-268", name: "Antigua and Barbuda", flag: "🇦🇬" },
+  { code: "+54", name: "Argentina", flag: "🇦🇷" },
+  { code: "+374", name: "Armenia", flag: "🇦🇲" },
+  { code: "+297", name: "Aruba", flag: "🇦🇼" },
+  { code: "+61", name: "Australia", flag: "🇦🇺" },
+  { code: "+43", name: "Austria", flag: "🇦🇹" },
+  { code: "+994", name: "Azerbaijan", flag: "🇦🇿" },
+  { code: "+1-242", name: "Bahamas", flag: "🇧🇸" },
+  { code: "+973", name: "Bahrain", flag: "🇧🇭" },
+  { code: "+880", name: "Bangladesh", flag: "🇧🇩" },
+  { code: "+1-246", name: "Barbados", flag: "🇧🇧" },
+  { code: "+375", name: "Belarus", flag: "🇧🇾" },
+  { code: "+32", name: "Belgium", flag: "🇧🇪" },
+  { code: "+501", name: "Belize", flag: "🇧🇿" },
+  { code: "+229", name: "Benin", flag: "🇧🇯" },
+  { code: "+1-441", name: "Bermuda", flag: "🇧🇲" },
+  { code: "+975", name: "Bhutan", flag: "🇧🇹" },
+  { code: "+591", name: "Bolivia", flag: "🇧🇴" },
+  { code: "+387", name: "Bosnia and Herzegovina", flag: "🇧🇦" },
+  { code: "+267", name: "Botswana", flag: "🇧🇼" },
+  { code: "+55", name: "Brazil", flag: "🇧🇷" },
+  { code: "+246", name: "British Indian Ocean Territory", flag: "🇮🇴" },
+  { code: "+1-284", name: "British Virgin Islands", flag: "🇻🇬" },
+  { code: "+673", name: "Brunei", flag: "🇧🇳" },
+  { code: "+359", name: "Bulgaria", flag: "🇧🇬" },
+  { code: "+226", name: "Burkina Faso", flag: "🇧🇫" },
+  { code: "+257", name: "Burundi", flag: "🇧🇮" },
+  { code: "+855", name: "Cambodia", flag: "🇰🇭" },
+  { code: "+237", name: "Cameroon", flag: "🇨🇲" },
+  { code: "+1", name: "Canada", flag: "🇨🇦" },
+  { code: "+238", name: "Cape Verde", flag: "🇨🇻" },
+  { code: "+1-345", name: "Cayman Islands", flag: "🇰🇾" },
+  { code: "+236", name: "Central African Republic", flag: "🇨🇫" },
+  { code: "+235", name: "Chad", flag: "🇹🇩" },
+  { code: "+56", name: "Chile", flag: "🇨🇱" },
+  { code: "+86", name: "China", flag: "🇨🇳" },
+  { code: "+61", name: "Christmas Island", flag: "🇨🇽" },
+  { code: "+61", name: "Cocos Islands", flag: "🇨🇨" },
+  { code: "+57", name: "Colombia", flag: "🇨🇴" },
+  { code: "+269", name: "Comoros", flag: "🇰🇲" },
+  { code: "+682", name: "Cook Islands", flag: "🇨🇰" },
+  { code: "+506", name: "Costa Rica", flag: "🇨🇷" },
+  { code: "+385", name: "Croatia", flag: "🇭🇷" },
+  { code: "+53", name: "Cuba", flag: "🇨🇺" },
+  { code: "+599", name: "Curacao", flag: "🇨🇼" },
+  { code: "+357", name: "Cyprus", flag: "🇨🇾" },
+  { code: "+420", name: "Czech Republic", flag: "🇨🇿" },
+  { code: "+243", name: "Democratic Republic of the Congo", flag: "🇨🇩" },
+  { code: "+45", name: "Denmark", flag: "🇩🇰" },
+  { code: "+253", name: "Djibouti", flag: "🇩🇯" },
+  { code: "+1-767", name: "Dominica", flag: "🇩🇲" },
+  { code: "+1-809", name: "Dominican Republic", flag: "🇩🇴" },
+  { code: "+670", name: "East Timor", flag: "🇹🇱" },
+  { code: "+593", name: "Ecuador", flag: "🇪🇨" },
+  { code: "+20", name: "Egypt", flag: "🇪🇬" },
+  { code: "+503", name: "El Salvador", flag: "🇸🇻" },
+  { code: "+240", name: "Equatorial Guinea", flag: "🇬🇶" },
+  { code: "+291", name: "Eritrea", flag: "🇪🇷" },
+  { code: "+372", name: "Estonia", flag: "🇪🇪" },
+  { code: "+251", name: "Ethiopia", flag: "🇪🇹" },
+  { code: "+500", name: "Falkland Islands", flag: "🇫🇰" },
+  { code: "+298", name: "Faroe Islands", flag: "🇫🇴" },
+  { code: "+679", name: "Fiji", flag: "🇫🇯" },
+  { code: "+358", name: "Finland", flag: "🇫🇮" },
+  { code: "+33", name: "France", flag: "🇫🇷" },
+  { code: "+689", name: "French Polynesia", flag: "🇵🇫" },
+  { code: "+241", name: "Gabon", flag: "🇬🇦" },
+  { code: "+220", name: "Gambia", flag: "🇬🇲" },
+  { code: "+995", name: "Georgia", flag: "🇬🇪" },
+  { code: "+49", name: "Germany", flag: "🇩🇪" },
+  { code: "+233", name: "Ghana", flag: "🇬🇭" },
+  { code: "+350", name: "Gibraltar", flag: "🇬🇮" },
+  { code: "+30", name: "Greece", flag: "🇬🇷" },
+  { code: "+299", name: "Greenland", flag: "🇬🇱" },
+  { code: "+1-473", name: "Grenada", flag: "🇬🇩" },
+  { code: "+1-671", name: "Guam", flag: "🇬🇺" },
+  { code: "+502", name: "Guatemala", flag: "🇬🇹" },
+  { code: "+44-1481", name: "Guernsey", flag: "🇬🇬" },
+  { code: "+224", name: "Guinea", flag: "🇬🇳" },
+  { code: "+245", name: "Guinea-Bissau", flag: "🇬🇼" },
+  { code: "+592", name: "Guyana", flag: "🇬🇾" },
+  { code: "+509", name: "Haiti", flag: "🇭🇹" },
+  { code: "+504", name: "Honduras", flag: "🇭🇳" },
+  { code: "+852", name: "Hong Kong", flag: "🇭🇰" },
+  { code: "+36", name: "Hungary", flag: "🇭🇺" },
+  { code: "+354", name: "Iceland", flag: "🇮🇸" },
+  { code: "+91", name: "India", flag: "🇮🇳" },
+  { code: "+62", name: "Indonesia", flag: "🇮🇩" },
+  { code: "+98", name: "Iran", flag: "🇮🇷" },
+  { code: "+964", name: "Iraq", flag: "🇮🇶" },
+  { code: "+353", name: "Ireland", flag: "🇮🇪" },
+  { code: "+44-1624", name: "Isle of Man", flag: "🇮🇲" },
+  { code: "+972", name: "Israel", flag: "🇮🇱" },
+  { code: "+39", name: "Italy", flag: "🇮🇹" },
+  { code: "+225", name: "Ivory Coast", flag: "🇨🇮" },
+  { code: "+1-876", name: "Jamaica", flag: "🇯🇲" },
+  { code: "+81", name: "Japan", flag: "🇯🇵" },
+  { code: "+44-1534", name: "Jersey", flag: "🇯🇪" },
+  { code: "+962", name: "Jordan", flag: "🇯🇴" },
+  { code: "+7", name: "Kazakhstan", flag: "🇰🇿" },
+  { code: "+254", name: "Kenya", flag: "🇰🇪" },
+  { code: "+686", name: "Kiribati", flag: "🇰🇮" },
+  { code: "+383", name: "Kosovo", flag: "🇽🇰" },
+  { code: "+965", name: "Kuwait", flag: "🇰🇼" },
+  { code: "+996", name: "Kyrgyzstan", flag: "🇰🇬" },
+  { code: "+856", name: "Laos", flag: "🇱🇦" },
+  { code: "+371", name: "Latvia", flag: "🇱🇻" },
+  { code: "+961", name: "Lebanon", flag: "🇱🇧" },
+  { code: "+266", name: "Lesotho", flag: "🇱🇸" },
+  { code: "+231", name: "Liberia", flag: "🇱🇷" },
+  { code: "+218", name: "Libya", flag: "🇱🇾" },
+  { code: "+423", name: "Liechtenstein", flag: "🇱🇮" },
+  { code: "+370", name: "Lithuania", flag: "🇱🇹" },
+  { code: "+352", name: "Luxembourg", flag: "🇱🇺" },
+  { code: "+853", name: "Macau", flag: "🇲🇴" },
+  { code: "+389", name: "Macedonia", flag: "🇲🇰" },
+  { code: "+261", name: "Madagascar", flag: "🇲🇬" },
+  { code: "+265", name: "Malawi", flag: "🇲🇼" },
+  { code: "+60", name: "Malaysia", flag: "🇲🇾" },
+  { code: "+960", name: "Maldives", flag: "🇲🇻" },
+  { code: "+223", name: "Mali", flag: "🇲🇱" },
+  { code: "+356", name: "Malta", flag: "🇲🇹" },
+  { code: "+692", name: "Marshall Islands", flag: "🇲🇭" },
+  { code: "+222", name: "Mauritania", flag: "🇲🇷" },
+  { code: "+230", name: "Mauritius", flag: "🇲🇺" },
+  { code: "+262", name: "Mayotte", flag: "🇾🇹" },
+  { code: "+52", name: "Mexico", flag: "🇲🇽" },
+  { code: "+691", name: "Micronesia", flag: "🇫🇲" },
+  { code: "+373", name: "Moldova", flag: "🇲🇩" },
+  { code: "+377", name: "Monaco", flag: "🇲🇨" },
+  { code: "+976", name: "Mongolia", flag: "🇲🇳" },
+  { code: "+382", name: "Montenegro", flag: "🇲🇪" },
+  { code: "+1-664", name: "Montserrat", flag: "🇲🇸" },
+  { code: "+212", name: "Morocco", flag: "🇲🇦" },
+  { code: "+258", name: "Mozambique", flag: "🇲🇿" },
+  { code: "+95", name: "Myanmar", flag: "🇲🇲" },
+  { code: "+264", name: "Namibia", flag: "🇳🇦" },
+  { code: "+674", name: "Nauru", flag: "🇳🇷" },
+  { code: "+977", name: "Nepal", flag: "🇳🇵" },
+  { code: "+31", name: "Netherlands", flag: "🇳🇱" },
+  { code: "+599", name: "Netherlands Antilles", flag: "🇧🇶" },
+  { code: "+687", name: "New Caledonia", flag: "🇳🇨" },
+  { code: "+64", name: "New Zealand", flag: "🇳🇿" },
+  { code: "+505", name: "Nicaragua", flag: "🇳🇮" },
+  { code: "+227", name: "Niger", flag: "🇳🇪" },
+  { code: "+234", name: "Nigeria", flag: "🇳🇬" },
+  { code: "+683", name: "Niue", flag: "🇳🇺" },
+  { code: "+850", name: "North Korea", flag: "🇰🇵" },
+  { code: "+1-670", name: "Northern Mariana Islands", flag: "🇲🇵" },
+  { code: "+47", name: "Norway", flag: "🇳🇴" },
+  { code: "+968", name: "Oman", flag: "🇴🇲" },
+  { code: "+92", name: "Pakistan", flag: "🇵🇰" },
+  { code: "+680", name: "Palau", flag: "🇵🇼" },
+  { code: "+970", name: "Palestine", flag: "🇵🇸" },
+  { code: "+507", name: "Panama", flag: "🇵🇦" },
+  { code: "+675", name: "Papua New Guinea", flag: "🇵🇬" },
+  { code: "+595", name: "Paraguay", flag: "🇵🇾" },
+  { code: "+51", name: "Peru", flag: "🇵🇪" },
+  { code: "+63", name: "Philippines", flag: "🇵🇭" },
+  { code: "+64", name: "Pitcairn", flag: "🇵🇳" },
+  { code: "+48", name: "Poland", flag: "🇵🇱" },
+  { code: "+351", name: "Portugal", flag: "🇵🇹" },
+  { code: "+1-787", name: "Puerto Rico", flag: "🇵🇷" },
+  { code: "+974", name: "Qatar", flag: "🇶🇦" },
+  { code: "+242", name: "Republic of the Congo", flag: "🇨🇬" },
+  { code: "+262", name: "Reunion", flag: "🇷🇪" },
+  { code: "+40", name: "Romania", flag: "🇷🇴" },
+  { code: "+7", name: "Russia", flag: "🇷🇺" },
+  { code: "+250", name: "Rwanda", flag: "🇷🇼" },
+  { code: "+590", name: "Saint Barthelemy", flag: "🇧🇱" },
+  { code: "+290", name: "Saint Helena", flag: "🇸🇭" },
+  { code: "+1-869", name: "Saint Kitts and Nevis", flag: "🇰🇳" },
+  { code: "+1-758", name: "Saint Lucia", flag: "🇱🇨" },
+  { code: "+590", name: "Saint Martin", flag: "🇲🇫" },
+  { code: "+508", name: "Saint Pierre and Miquelon", flag: "🇵🇲" },
+  { code: "+1-784", name: "Saint Vincent and the Grenadines", flag: "🇻🇨" },
+  { code: "+685", name: "Samoa", flag: "🇼🇸" },
+  { code: "+378", name: "San Marino", flag: "🇸🇲" },
+  { code: "+239", name: "Sao Tome and Principe", flag: "🇸🇹" },
+  { code: "+966", name: "Saudi Arabia", flag: "🇸🇦" },
+  { code: "+221", name: "Senegal", flag: "🇸🇳" },
+  { code: "+381", name: "Serbia", flag: "🇷🇸" },
+  { code: "+248", name: "Seychelles", flag: "🇸🇨" },
+  { code: "+232", name: "Sierra Leone", flag: "🇸🇱" },
+  { code: "+65", name: "Singapore", flag: "🇸🇬" },
+  { code: "+1-721", name: "Sint Maarten", flag: "🇸🇽" },
+  { code: "+421", name: "Slovakia", flag: "🇸🇰" },
+  { code: "+386", name: "Slovenia", flag: "🇸🇮" },
+  { code: "+677", name: "Solomon Islands", flag: "🇸🇧" },
+  { code: "+252", name: "Somalia", flag: "🇸🇴" },
+  { code: "+27", name: "South Africa", flag: "🇿🇦" },
+  { code: "+82", name: "South Korea", flag: "🇰🇷" },
+  { code: "+211", name: "South Sudan", flag: "🇸🇸" },
+  { code: "+34", name: "Spain", flag: "🇪🇸" },
+  { code: "+94", name: "Sri Lanka", flag: "🇱🇰" },
+  { code: "+249", name: "Sudan", flag: "🇸🇩" },
+  { code: "+597", name: "Suriname", flag: "🇸🇷" },
+  { code: "+47", name: "Svalbard and Jan Mayen", flag: "🇸🇯" },
+  { code: "+268", name: "Swaziland", flag: "🇸🇿" },
+  { code: "+46", name: "Sweden", flag: "🇸🇪" },
+  { code: "+41", name: "Switzerland", flag: "🇨🇭" },
+  { code: "+963", name: "Syria", flag: "🇸🇾" },
+  { code: "+886", name: "Taiwan", flag: "🇹🇼" },
+  { code: "+992", name: "Tajikistan", flag: "🇹🇯" },
+  { code: "+255", name: "Tanzania", flag: "🇹🇿" },
+  { code: "+66", name: "Thailand", flag: "🇹🇭" },
+  { code: "+228", name: "Togo", flag: "🇹🇬" },
+  { code: "+690", name: "Tokelau", flag: "🇹🇰" },
+  { code: "+676", name: "Tonga", flag: "🇹🇴" },
+  { code: "+1-868", name: "Trinidad and Tobago", flag: "🇹🇹" },
+  { code: "+216", name: "Tunisia", flag: "🇹🇳" },
+  { code: "+90", name: "Turkey", flag: "🇹🇷" },
+  { code: "+993", name: "Turkmenistan", flag: "🇹🇲" },
+  { code: "+1-649", name: "Turks and Caicos Islands", flag: "🇹🇨" },
+  { code: "+688", name: "Tuvalu", flag: "🇹🇻" },
+  { code: "+1-340", name: "U.S. Virgin Islands", flag: "🇻🇮" },
+  { code: "+256", name: "Uganda", flag: "🇺🇬" },
+  { code: "+380", name: "Ukraine", flag: "🇺🇦" },
+  { code: "+971", name: "United Arab Emirates", flag: "🇦🇪" },
+  { code: "+44", name: "United Kingdom", flag: "🇬🇧" },
+  { code: "+1", name: "United States", flag: "🇺🇸" },
+  { code: "+598", name: "Uruguay", flag: "🇺🇾" },
+  { code: "+998", name: "Uzbekistan", flag: "🇺🇿" },
+  { code: "+678", name: "Vanuatu", flag: "🇻🇺" },
+  { code: "+379", name: "Vatican", flag: "🇻🇦" },
+  { code: "+58", name: "Venezuela", flag: "🇻🇪" },
+  { code: "+84", name: "Vietnam", flag: "🇻🇳" },
+  { code: "+681", name: "Wallis and Futuna", flag: "🇼🇫" },
+  { code: "+212", name: "Western Sahara", flag: "🇪🇭" },
+  { code: "+967", name: "Yemen", flag: "🇾🇪" },
+  { code: "+260", name: "Zambia", flag: "🇿🇲" },
+  { code: "+263", name: "Zimbabwe", flag: "🇿🇼" },
+].sort((a, b) => a.name.localeCompare(b.name));
+
+// ========================================
+// COMPONENT STARTS HERE
+// ========================================
 
 interface FlightData {
   id: string;
@@ -79,11 +330,32 @@ export default function PassengerDetails() {
   const [baggageTotal, setBaggageTotal] = useState<number>(0);
   const [passengersData, setPassengersData] = useState<PassengerData[]>([]);
   const [errors, setErrors] = useState<ValidationErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showSpecialRequests, setShowSpecialRequests] = useState(false);
   const [showPriceBreakdown, setShowPriceBreakdown] = useState(false);
-  const [isVerifyingPrice, setIsVerifyingPrice] = useState(false);
+  const [storedOffer, setStoredOffer] = useState<any | null>(null);
+  const [flightTotalAmount, setFlightTotalAmount] = useState<number>(0);
+  const [flightCurrency, setFlightCurrency] = useState<string>('AUD');
+  const [phoneCountryCode, setPhoneCountryCode] = useState<string>(DEFAULT_PHONE_COUNTRY_CODE);
+  const [phoneLocal, setPhoneLocal] = useState<string>('');
+  const [countrySearch, setCountrySearch] = useState<string>('');
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState<boolean>(false);
+
+  const filteredCountries = useMemo(() => {
+    const query = countrySearch.trim().toLowerCase();
+    if (!query) {
+      return COUNTRIES;
+    }
+
+    const normalizedQuery = query.replace(/\s+/g, '');
+
+    return COUNTRIES.filter((country) => {
+      const nameMatch = country.name.toLowerCase().includes(query);
+      const codeMatch = country.code.replace(/\s+/g, '').toLowerCase().includes(normalizedQuery);
+      return nameMatch || codeMatch;
+    });
+  }, [countrySearch]);
 
   // Helper function to determine if flight is international
   const isInternationalFlight = () => {
@@ -114,6 +386,7 @@ export default function PassengerDetails() {
       // Load all data from localStorage
       const outboundData = localStorage.getItem('selected_outbound');
       const returnData = localStorage.getItem('selected_return');
+      const seatDetailsData = localStorage.getItem('selected_seat_details');
       const seatsData = localStorage.getItem('selected_seats');
       const baggageData = localStorage.getItem('selected_baggage');
       const seatsTotalData = localStorage.getItem('seats_total');
@@ -122,6 +395,7 @@ export default function PassengerDetails() {
       console.log('LocalStorage contents:');
       console.log('- selected_outbound:', outboundData ? 'EXISTS' : 'MISSING');
       console.log('- selected_return:', returnData ? 'EXISTS' : 'MISSING');
+      console.log('- selected_seat_details:', seatDetailsData ? 'EXISTS' : 'MISSING');
       console.log('- selected_seats:', seatsData ? 'EXISTS' : 'MISSING');
       console.log('- selected_baggage:', baggageData ? 'EXISTS' : 'MISSING');
       
@@ -200,8 +474,11 @@ export default function PassengerDetails() {
         setReturnFlight(JSON.parse(returnData));
       }
       
-      if (seatsData) {
-        setSelectedSeats(JSON.parse(seatsData));
+      if (seatDetailsData) {
+        setSelectedSeats(JSON.parse(seatDetailsData));
+      } else if (seatsData) {
+        const parsedSeats = JSON.parse(seatsData);
+        setSelectedSeats(parsedSeats);
       }
       
       if (baggageData) {
@@ -224,6 +501,91 @@ export default function PassengerDetails() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const offerData = sessionStorage.getItem('flightOfferData');
+      if (offerData) {
+        try {
+          const parsed = JSON.parse(offerData);
+          setStoredOffer(parsed);
+          console.log('💰 Stored offer loaded for passenger details:', parsed);
+        } catch (error) {
+          console.error('⚠️ Failed to parse stored offer data:', error);
+        }
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    let total: number | null = null;
+    let currency = flightCurrency;
+
+    if (storedOffer?.total_amount) {
+      const parsedTotal = parseFloat(storedOffer.total_amount);
+      if (!Number.isNaN(parsedTotal)) {
+        total = parsedTotal;
+        currency = storedOffer.total_currency || currency;
+      }
+    }
+
+    if (total === null) {
+      if (outbound) {
+        const outboundAmount = parseFloat(outbound.total_amount || outbound.price?.toString() || '0');
+        const returnAmount = returnFlight ? parseFloat(returnFlight.total_amount || returnFlight.price?.toString() || '0') : 0;
+        total = outboundAmount + returnAmount;
+        currency = outbound.total_currency || outbound.currency || returnFlight?.total_currency || returnFlight?.currency || currency;
+      } else {
+        total = 0;
+      }
+    }
+
+    const safeTotal = total ?? 0;
+    setFlightTotalAmount(safeTotal);
+    setFlightCurrency(currency || 'AUD');
+
+  }, [storedOffer, outbound, returnFlight]);
+
+  useEffect(() => {
+    if (passengersData.length === 0) return;
+
+    const primaryPassenger = passengersData[0];
+    const initialCode = primaryPassenger.country_code || DEFAULT_PHONE_COUNTRY_CODE;
+
+    const derivedLocal =
+      primaryPassenger.phone_number ||
+      (primaryPassenger.phone_number_full && primaryPassenger.phone_number_full.startsWith(initialCode)
+        ? primaryPassenger.phone_number_full.slice(initialCode.length)
+        : primaryPassenger.phone_number_full || '');
+
+    setPhoneCountryCode(initialCode);
+    setPhoneLocal(derivedLocal);
+
+    const digitsOnly = derivedLocal.replace(/[^\d]/g, '');
+    const normalizedLocal = digitsOnly.startsWith('0') ? digitsOnly.substring(1) : digitsOnly;
+    const combined = `${initialCode}${normalizedLocal}`;
+
+    setPassengersData((prev) => {
+      if (prev.length === 0) return prev;
+      const current = prev[0];
+      if (
+        current.country_code === initialCode &&
+        current.phone_number === derivedLocal &&
+        current.phone_number_full === combined
+      ) {
+        return prev;
+      }
+
+      const updated = [...prev];
+      updated[0] = {
+        ...current,
+        country_code: initialCode,
+        phone_number: derivedLocal,
+        phone_number_full: combined,
+      };
+      return updated;
+    });
+  }, [passengersData]);
 
   const handlePassengerInput = (passengerIndex: number, field: string, value: string) => {
     setPassengersData(prev => {
@@ -296,6 +658,10 @@ export default function PassengerDetails() {
       
       // Contact validation (first passenger only)
       if (index === 0) {
+        if (!passenger.country_code || passenger.country_code.trim() === '') {
+          newErrors[`passenger_${index}_country_code`] = 'Country/territory code required';
+        }
+
         if (!passenger.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(passenger.email)) {
           newErrors[`passenger_${index}_email`] = 'Valid email required';
         }
@@ -334,194 +700,259 @@ export default function PassengerDetails() {
   };
 
   const handleContinue = async () => {
-    console.log('🔍 VALIDATING ALL PASSENGERS...');
-    
-    // Step 1: Validate form
-    if (!validateForm()) {
-      alert('⚠️ Please complete all required fields for all passengers');
-      // Scroll to first error
-      const firstErrorKey = Object.keys(errors)[0];
-      if (firstErrorKey) {
-        const element = document.querySelector(`[data-error="${firstErrorKey}"]`);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }
+    console.log('🟢 ========== HANDLE CONTINUE STARTED ==========');
+
+    const selectedOffer = storedOffer || outbound;
+
+    if (!selectedOffer || !selectedOffer.id) {
+      alert('Flight offer data missing. Please restart your booking.');
       return;
     }
-    
-    setIsVerifyingPrice(true);
-    
+
+    if (!phoneCountryCode || phoneCountryCode.trim() === '') {
+      const message = 'Please select a country/territory code for Passenger 1.';
+      setCheckoutError(message);
+      alert(message);
+      console.warn('🔴 Phone validation failed: missing country code');
+      return;
+    }
+
+    if (!phoneLocal || phoneLocal.trim() === '') {
+      const message = 'Please enter a phone number for Passenger 1.';
+      setCheckoutError(message);
+      alert(message);
+      console.warn('🔴 Phone validation failed: missing local number');
+      return;
+    }
+
+    const sanitizedLocalNumber = phoneLocal.replace(/[^\d]/g, '');
+    if (sanitizedLocalNumber.length < 8) {
+      const message = 'Please enter a valid phone number (at least 8 digits).';
+      setCheckoutError(message);
+      alert(message);
+      console.warn('🔴 Phone validation failed:', {
+        phoneCountryCode,
+        phoneLocal,
+        sanitizedLocalNumber,
+        sanitizedLength: sanitizedLocalNumber.length,
+      });
+      return;
+    }
+
+    const fullPhoneNumber = combinePhoneNumber(phoneCountryCode, phoneLocal);
+
     try {
-      // Step 2: Verify price with Duffel (if offerId exists)
-      if (outbound?.offerId || outbound?.id) {
-        const offerId = outbound.offerId || outbound.id;
-        console.log('🔄 Verifying current price with Duffel...');
-        console.log(`Offer ID: ${offerId}`);
-        
-        try {
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/duffel_get_offer`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
-              },
-              body: JSON.stringify({
-                offer_id: offerId
-              })
-            }
-          );
-          
-          const result = await response.json();
-          
-          // Handle expired or unavailable offers
-          if (!result.success) {
-            if (result.error === 'offer_expired') {
-              alert('⚠️ This offer has expired. Please search for flights again.');
-              window.location.href = '/flights';
-              return;
-            }
-            
-            console.warn('⚠️ Could not verify price, proceeding with cached data');
-          } else {
-            const freshOffer = result.offer;
-            
-            // Check if offer expired
-            const expiresAt = new Date(freshOffer.expires_at);
-            const now = new Date();
-            
-            if (expiresAt < now) {
-              alert('⚠️ This offer has expired. Please search for flights again.');
-              window.location.href = '/flights';
-              return;
-            }
-            
-            // Check for price changes
-            const oldPrice = parseFloat(outbound.total_amount || outbound.price?.toString() || '0');
-            const newPrice = parseFloat(freshOffer.total_amount || '0');
-            const priceDifference = newPrice - oldPrice;
-            
-            if (Math.abs(priceDifference) > 0.01) {
-              console.log(`💰 Price changed: ${oldPrice} → ${newPrice}`);
-              
-              let message;
-              if (priceDifference > 0) {
-                message = `⚠️ PRICE INCREASED\n\nThe flight price has increased by $${priceDifference.toFixed(2)}.\n\nOld Price: $${oldPrice.toFixed(2)}\nNew Price: $${newPrice.toFixed(2)}\n\nDo you want to continue with the new price?`;
-              } else {
-                message = `✅ GOOD NEWS!\n\nThe flight price has decreased by $${Math.abs(priceDifference).toFixed(2)}!\n\nOld Price: $${oldPrice.toFixed(2)}\nNew Price: $${newPrice.toFixed(2)}\n\nContinue with the lower price?`;
-              }
-              
-              if (!confirm(message)) {
-                console.log('❌ User declined price change');
-                setIsVerifyingPrice(false);
-                return;
-              }
-              
-              console.log('✅ User accepted price change');
-              
-              // Save fresh offer
-              localStorage.setItem('fresh_offer', JSON.stringify(freshOffer));
-            } else {
-              console.log('✅ Price unchanged');
-              localStorage.setItem('fresh_offer', JSON.stringify(freshOffer));
+      setCheckoutError(null);
+      setIsCheckoutLoading(true);
+
+      const primaryEmail = passengersData?.[0]?.email?.trim() || '';
+
+      console.log('🟢 STEP 1: Initial Values', {
+        phoneCountryCode,
+        phoneLocal,
+        passengersCount: passengersData?.length || 0,
+        primaryEmail,
+        fullPhoneNumber,
+      });
+
+      console.log('🟢 STEP 2: Phone After Combine', {
+        input_country: phoneCountryCode,
+        input_local: phoneLocal,
+        output: fullPhoneNumber,
+        length: fullPhoneNumber.length,
+        hasPlus: fullPhoneNumber.startsWith('+'),
+        onlyDigitsAfterPlus: /^\+\d+$/.test(fullPhoneNumber),
+      });
+
+      // Read seats and baggage from localStorage
+      let seatsData: any[] = [];
+      let baggageData: any[] = [];
+
+      try {
+        const storedSeatServices = localStorage.getItem('selected_seat_services');
+        if (storedSeatServices) {
+          const parsed = JSON.parse(storedSeatServices);
+          if (Array.isArray(parsed)) {
+            seatsData = parsed;
+          } else if (parsed && typeof parsed === 'object') {
+            seatsData = Object.values(parsed);
+          }
+        } else {
+          const storedSeats = localStorage.getItem('selected_seats');
+          if (storedSeats) {
+            const parsedSeats = JSON.parse(storedSeats);
+            if (Array.isArray(parsedSeats)) {
+              seatsData = parsedSeats;
+            } else if (parsedSeats && typeof parsedSeats === 'object') {
+              seatsData = Object.values(parsedSeats).flatMap((flightSeats: any) =>
+                Object.values(flightSeats || {})
+              ).map((seat: any) => ({
+                id: seat.serviceId,
+                type: 'seat',
+                amount: parseFloat(seat.price || seat.amount || seat.total_amount || 0) || 0,
+                quantity: 1,
+                passenger_id: seat.passengerId || seat.passenger_id || null,
+              }));
             }
           }
-        } catch (priceCheckError) {
-          console.warn('⚠️ Price verification failed, proceeding with cached data:', priceCheckError);
         }
+      } catch (e) {
+        console.warn('Failed to parse seats:', e);
+        seatsData = [];
       }
-      
-      // Step 3: Format passenger data
-      const formattedPassengers = passengersData.map((passenger, index) => {
-        const formatted: any = {
-          id: passenger.id,  // CRITICAL: Keep original ID from offer
-          type: passenger.type,
-          title: passenger.title,
-          // Combine first and middle name if middle name provided
-          given_name: passenger.middle_name?.trim() 
-            ? `${passenger.given_name} ${passenger.middle_name}`.trim()
-            : passenger.given_name,
-          family_name: passenger.family_name,
-          gender: passenger.gender,
-          born_on: passenger.born_on,
-          email: index === 0 ? passenger.email : passengersData[0].email,
-          phone_number: index === 0 ? passenger.phone_number_full : passengersData[0].phone_number_full
-        };
-        
-        // Add loyalty programme accounts if provided (SENT TO DUFFEL!)
-        if (passenger.loyalty_airline && passenger.loyalty_number) {
-          formatted.loyalty_programme_accounts = [{
-            airline_iata_code: passenger.loyalty_airline,
-            account_number: passenger.loyalty_number
-          }];
-          
-          console.log(`✈️ Loyalty account for Passenger ${index + 1} (${passenger.given_name}):`, {
-            airline: passenger.loyalty_airline,
-            number: passenger.loyalty_number
-          });
+
+      try {
+        const storedBaggage = localStorage.getItem('selected_baggage');
+        if (storedBaggage) {
+          const parsed = JSON.parse(storedBaggage);
+          baggageData = Array.isArray(parsed) ? parsed : [];
         }
-        
-        // Add identity documents only if passport provided
-        const hasPassport = passenger.identity_documents[0].unique_identifier?.trim();
-        if (hasPassport) {
-          formatted.identity_documents = passenger.identity_documents;
-        }
-        
-        return formatted;
+      } catch (e) {
+        console.warn('Failed to parse baggage');
+      }
+
+      const allServices = [...seatsData, ...baggageData];
+
+      if (!primaryEmail) {
+        setCheckoutError('Primary passenger must include an email address before continuing.');
+        setIsCheckoutLoading(false);
+        console.warn('🔴 Missing primary email.');
+        return;
+      }
+
+      console.log('✅ Primary contact info:', {
+        email: primaryEmail,
+        phone: fullPhoneNumber,
+        phoneFull: fullPhoneNumber,
       });
-      
-      console.log('✅ ALL PASSENGERS FORMATTED FOR DUFFEL:');
-      console.log('═══════════════════════════════════════════');
-      console.log(JSON.stringify(formattedPassengers, null, 2));
-      console.log('═══════════════════════════════════════════');
-      
-      // Step 4: Save data
-      localStorage.setItem('passenger_data', JSON.stringify(formattedPassengers));
-      
-      // Save emergency contacts for your DB
-      localStorage.setItem('passenger_extras', JSON.stringify(
-        passengersData.map(p => ({
-          emergency_contact_name: p.emergency_contact_name || '',
-          emergency_contact_relationship: p.emergency_contact_relationship || '',
-          emergency_contact_phone: p.emergency_contact_country_code && p.emergency_contact_phone 
-            ? `${p.emergency_contact_country_code}${p.emergency_contact_phone.replace(/\s/g, '')}`
-            : '',
-          special_requests_notes: p.special_requests || ''
-        }))
-      ));
-      
-      // Log complete checkout summary
-      const flightsSubtotal = (outbound?.price || 0) + (returnFlight?.price || 0);
-      const grandTotal = flightsSubtotal + seatsTotal + baggageTotal;
-      
-      const checkoutSummary = {
-        offer_id: outbound?.offerId || outbound?.id,
-        passengers: formattedPassengers,
-        seats: selectedSeats,
-        baggage: selectedBaggage,
-        totals: {
-          flights: flightsSubtotal,
-          seats: seatsTotal,
-          baggage: baggageTotal,
-          grand_total: grandTotal
+      console.log('📞 Combined phone number:', fullPhoneNumber);
+
+      const passengersForCheckout = (passengersData || []).map((passenger, index) => {
+        const prepared = {
+          ...passenger,
+          email: index === 0 ? (passenger.email?.trim() || primaryEmail) : primaryEmail,
+          country_code: phoneCountryCode,
+          phone_number: fullPhoneNumber,
+          phone_number_full: fullPhoneNumber,
+        };
+
+        console.log(`🟢 STEP 3.${index}: Passenger ${index + 1} prepared`, {
+          name: prepared.given_name,
+          email: prepared.email,
+          phone: prepared.phone_number_full || prepared.phone_number,
+          has_all_fields: !!(
+            prepared.given_name &&
+            prepared.family_name &&
+            prepared.born_on
+          ),
+        });
+
+        return prepared;
+      });
+
+      const passengerPhoneErrors: string[] = [];
+      passengersForCheckout.forEach((passenger, index) => {
+        const code = passenger.country_code || '';
+        const fullPhone = passenger.phone_number_full || passenger.phone_number || '';
+        if (!code) {
+          passengerPhoneErrors.push(`Passenger ${index + 1}: Please select country/territory code`);
         }
-      };
-      
-      console.log('📦 COMPLETE CHECKOUT DATA:');
-      console.log(JSON.stringify(checkoutSummary, null, 2));
-      console.log('✅ All data saved, redirecting to checkout...');
-      
-      // Step 5: Navigate to checkout
-      setTimeout(() => {
-        window.location.href = '/checkout';
-      }, 300);
-      
-    } catch (error) {
-      console.error('❌ Error in handleContinue:', error);
-      alert('⚠️ Error processing request. Please try again.');
-      setIsVerifyingPrice(false);
+        if (!fullPhone) {
+          passengerPhoneErrors.push(`Passenger ${index + 1}: Please enter phone number`);
+        } else if (!/^\+\d{10,15}$/.test(fullPhone)) {
+          passengerPhoneErrors.push(`Passenger ${index + 1}: Invalid phone number format`);
+        }
+      });
+
+      if (passengerPhoneErrors.length > 0) {
+        const message = 'Please fix the following phone details:\n\n' + passengerPhoneErrors.join('\n');
+        alert(message);
+        setCheckoutError(message);
+        setIsCheckoutLoading(false);
+        console.warn('🔴 Phone validation errors:', passengerPhoneErrors);
+        return;
+      }
+
+      console.log('🟢 STEP 4: All Passengers Ready', {
+        count: passengersForCheckout.length,
+        phones: passengersForCheckout.map((p) => p.phone_number_full || p.phone_number),
+        allSamePhone: passengersForCheckout.every(
+          (p) => (p.phone_number_full || p.phone_number) === fullPhoneNumber
+        ),
+      });
+
+      console.log('📋 Passengers payload:', passengersForCheckout);
+      console.log('✅ All have email?', passengersForCheckout.every((p) => !!p.email));
+      console.log('✅ All have phone?', passengersForCheckout.every((p) => !!p.phone_number));
+      console.log(
+        '📞 All passengers with phone:',
+        passengersForCheckout.map((p: any) => ({
+          name: `${p.given_name || ''} ${p.family_name || ''}`.trim(),
+          phone: p.phone_number_full || p.phone_number,
+        }))
+      );
+
+      const roundedTotalAmount = parseFloat(grandTotal.toFixed(2));
+      console.log('💰 Amount Precision Fix:', {
+        original: grandTotal,
+        rounded: roundedTotalAmount,
+        difference: grandTotal - roundedTotalAmount,
+        matchesWebhook: roundedTotalAmount === parseFloat(grandTotal.toFixed(2))
+      });
+
+      console.log('🟢 STEP 5: Checkout Data', {
+        offerId: selectedOffer.id,
+        passengerCount: passengersForCheckout.length,
+        servicesCount: allServices.length,
+        totalAmount: roundedTotalAmount,
+        currency: 'AUD',
+        appBaseUrl: window?.location?.origin || 'http://localhost:3000',
+      });
+
+      console.log('🚀 CHECKOUT DATA:');
+      console.log('Offer ID:', selectedOffer?.id);
+      console.log('Passengers:', passengersData?.length);
+      console.log('Services:', allServices);
+      console.log('Total Amount:', grandTotal);
+      console.log('Passengers payload:', passengersForCheckout);
+
+      console.log('🟢 STEP 6: Calling API...');
+
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: {
+          offerId: selectedOffer.id,
+          passengers: passengersForCheckout,
+          services: allServices,
+          totalAmount: roundedTotalAmount,
+          currency: 'AUD',
+          appBaseUrl: window?.location?.origin || 'http://localhost:3000'
+        }
+      });
+
+      console.log('🟢 STEP 7: API Response', {
+        error,
+        hasData: !!data,
+      });
+
+      if (error) {
+        console.error('API Error:', error);
+        throw error;
+      }
+
+      console.log('✅ Success, redirecting to:', data?.url);
+
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
+
+    } catch (error: any) {
+      console.error('💥 Checkout failed:', error);
+      setCheckoutError(error.message || 'Failed to create checkout. Please try again.');
+    } finally {
+      setIsCheckoutLoading(false);
+      console.log('🟢 ========== HANDLE CONTINUE ENDED ==========');
     }
   };
 
@@ -615,12 +1046,60 @@ export default function PassengerDetails() {
     return calculateSubtotal();
   };
 
-  if (loading) {
+  const combinePhoneNumber = (countryCode: string, localNumber: string): string => {
+    console.log('📞 ========== COMBINE PHONE START ==========');
+    console.log('📞 INPUT:', { countryCode, localNumber });
+
+    const cleaned = localNumber.replace(/[^\d]/g, '');
+    console.log('📞 After removing non-digits:', cleaned);
+
+    const withoutLeadingZero = cleaned.startsWith('0') ? cleaned.substring(1) : cleaned;
+    console.log('📞 After removing leading 0:', withoutLeadingZero);
+
+    const result = `${countryCode}${withoutLeadingZero}`;
+    console.log('📞 FINAL RESULT:', result);
+    console.log('📞 Result analysis:', {
+      length: result.length,
+      startsWithPlus: result.startsWith('+'),
+      hasOnlyValidChars: /^[+\d]+$/.test(result),
+      hasSpaces: result.includes(' '),
+      hasDashes: result.includes('-'),
+      hasLetters: /[a-zA-Z]/.test(result),
+    });
+    console.log('📞 ========== COMBINE PHONE END ==========');
+
+    return result;
+  };
+
+  const primaryEmail = passengersData[0]?.email || '';
+  const primaryPhone =
+    passengersData[0]?.phone_number_full ||
+    passengersData[0]?.phone_number ||
+    '';
+
+  const isFormComplete =
+    passengersData.length > 0 &&
+    passengersData.every((passenger, index) => {
+      const email = passenger.email || primaryEmail;
+      const phone = passenger.phone_number_full || passenger.phone_number || primaryPhone;
+
+      return (
+        Boolean(passenger.title) &&
+        Boolean(passenger.given_name) &&
+        Boolean(passenger.family_name) &&
+        Boolean(passenger.gender) &&
+        Boolean(passenger.born_on) &&
+        Boolean(email) &&
+        Boolean(phone)
+      );
+    });
+
+  if (loading && !isCheckoutLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center py-12">
           <div className="text-6xl mb-4 animate-bounce">✈️</div>
-          <div className="text-2xl font-semibold mb-2">Loading passenger form...</div>
+          <div className="text-2xl font-semibold mb-2">Preparing your secure checkout...</div>
           <div className="text-gray-600">Preparing details</div>
         </div>
       </div>
@@ -655,6 +1134,12 @@ export default function PassengerDetails() {
           <h1 className="text-3xl font-bold mb-2">Passenger Information</h1>
           <p className="text-gray-600">Complete details for all travelers</p>
         </div>
+
+        {checkoutError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-600">{checkoutError}</p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content - Passenger Forms */}
@@ -858,54 +1343,87 @@ export default function PassengerDetails() {
                         )}
                       </div>
                       
+                      <div data-error={`passenger_${passengerIndex}_phone_number_full`}>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Country/Territory Code <span className="text-red-500">*</span>
+                        </label>
+
+                        <input
+                          type="text"
+                          placeholder="🔍 Search country..."
+                          value={countrySearch}
+                          onChange={(e) => setCountrySearch(e.target.value)}
+                          className="w-full px-4 py-2 mb-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white"
+                        />
+
+                        <select
+                          value={phoneCountryCode}
+                          onChange={(e) => {
+                            const newCode = e.target.value;
+                            setPhoneCountryCode(newCode);
+                            setCountrySearch('');
+
+                            handlePassengerInput(passengerIndex, 'country_code', newCode);
+                            handlePassengerInput(passengerIndex, 'phone_number', phoneLocal);
+                            handlePassengerInput(
+                              passengerIndex,
+                              'phone_number_full',
+                              combinePhoneNumber(newCode, phoneLocal)
+                            );
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white"
+                          required
+                        >
+                          <option value="" disabled>Select country code</option>
+                          {filteredCountries.map((country) => (
+                            <option key={`${country.code}-${country.name}`} value={country.code}>
+                              {country.flag} {country.name} {country.code}
+                            </option>
+                          ))}
+                        </select>
+
+                        <p className="text-xs text-gray-500 mt-1">
+                          {filteredCountries.length} of {COUNTRIES.length} countries
+                        </p>
+
+                        {errors[`passenger_${passengerIndex}_country_code`] && (
+                          <p className="text-red-600 text-sm mt-1">
+                            {errors[`passenger_${passengerIndex}_country_code`]}
+                          </p>
+                        )}
+                      </div>
+
                       <div>
-                        <label className="block text-sm font-medium mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
                           Phone Number <span className="text-red-500">*</span>
                         </label>
-                        <div className="flex gap-3">
-                          {/* Country Code Input */}
-                          <input
-                            type="text"
-                            value={passenger.country_code || ''}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              // Only allow + and numbers
-                              const cleaned = value.replace(/[^\d+]/g, '');
-                              handlePassengerInput(passengerIndex, 'country_code', cleaned);
-                              
-                              // Update full phone number
-                              const fullPhone = cleaned + (passenger.phone_number || '').replace(/\s/g, '');
-                              handlePassengerInput(passengerIndex, 'phone_number_full', fullPhone);
-                            }}
-                            placeholder="+61"
-                            className={`w-24 px-3 py-3 border rounded-lg text-center font-mono focus:ring-2 focus:ring-blue-500 bg-white ${
-                              errors[`passenger_${passengerIndex}_phone_number_full`] ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                            maxLength={4}
-                          />
-                          
-                          {/* Phone Number Input */}
+                        <div className="flex gap-2">
+                          <div className="px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-700 font-medium min-w-[110px] flex items-center justify-center">
+                            {phoneCountryCode || 'Select code'}
+                          </div>
                           <input
                             type="tel"
-                            value={passenger.phone_number || ''}
+                            value={phoneLocal}
                             onChange={(e) => {
-                              const value = e.target.value;
-                              // Only allow numbers and spaces
-                              const cleaned = value.replace(/[^\d\s]/g, '');
+                              const cleaned = e.target.value.replace(/[^\d\s-]/g, '');
+                              setPhoneLocal(cleaned);
                               handlePassengerInput(passengerIndex, 'phone_number', cleaned);
-                              
-                              // Update full phone number
-                              const fullPhone = (passenger.country_code || '') + cleaned.replace(/\s/g, '');
-                              handlePassengerInput(passengerIndex, 'phone_number_full', fullPhone);
+                              handlePassengerInput(
+                                passengerIndex,
+                                'phone_number_full',
+                                combinePhoneNumber(phoneCountryCode, cleaned)
+                              );
                             }}
                             placeholder="412 345 678"
-                            className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white ${
+                            className={`flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white ${
                               errors[`passenger_${passengerIndex}_phone_number_full`] ? 'border-red-500' : 'border-gray-300'
                             }`}
+                            required
+                            minLength={8}
                           />
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          Enter country code (e.g., +61, +1, +44) and phone number
+                          Enter phone number without country code (e.g., 412 345 678)
                         </p>
                         {errors[`passenger_${passengerIndex}_phone_number_full`] && (
                           <p className="text-red-600 text-sm mt-1">
@@ -914,6 +1432,13 @@ export default function PassengerDetails() {
                         )}
                       </div>
                     </div>
+                  </div>
+                )}
+                {passengerIndex > 0 && (
+                  <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <p className="text-sm text-gray-600">
+                      📞 Contact phone will be copied from Passenger 1
+                    </p>
                   </div>
                 )}
 
@@ -1274,49 +1799,90 @@ export default function PassengerDetails() {
             <div className="sticky top-4 space-y-4">
               {/* Improved Trip Summary Component */}
               {outbound && (() => {
-                // Prepare offer object for ImprovedTripSummary
-                const offer = {
-                  id: outbound.id || outbound.offerId || '',
-                  total_amount: outbound.total_amount || outbound.price?.toString() || '0',
-                  total_currency: outbound.total_currency || outbound.currency || 'AUD',
-                  base_amount: outbound.base_amount || '',
-                  tax_amount: outbound.tax_amount || '',
-                  passengers: passengersData.map(p => ({
-                    id: p.id,
-                    type: p.type as 'adult' | 'child' | 'infant_without_seat' | 'infant_with_seat'
-                  })),
-                  slices: [{
-                    id: outbound.sliceId || '',
+                const totalAmountNumber = flightTotalAmount > 0
+                  ? flightTotalAmount
+                  : parseFloat(outbound.total_amount || outbound.price?.toString() || '0') +
+                    (returnFlight ? parseFloat(returnFlight.total_amount || returnFlight.price?.toString() || '0') : 0);
+
+                const currency = flightCurrency || outbound.total_currency || outbound.currency || 'AUD';
+
+                const seatsArray = Object.values(selectedSeats)
+                  .flatMap((flightSeats: any) => Object.values(flightSeats))
+                  .filter(Boolean);
+
+                const baggageArray = selectedBaggage || [];
+
+                const normalizedSlices = (storedOffer?.slices || []).map((slice: any, idx: number) => {
+                  const relatedFlight = idx === 0 ? outbound : returnFlight;
+                  return {
+                    id: slice.id || relatedFlight?.sliceId || `slice_${idx}`,
+                    origin: { iata_code: slice.origin?.iata_code || slice.origin?.city_name || relatedFlight?.origin || (idx === 0 ? outbound?.origin : returnFlight?.origin) || 'Origin' },
+                    destination: { iata_code: slice.destination?.iata_code || slice.destination?.city_name || relatedFlight?.destination || (idx === 0 ? outbound?.destination : returnFlight?.destination) || 'Destination' },
+                    departure_time: slice.departure_time || relatedFlight?.departure_datetime,
+                    arrival_time: slice.arrival_time || relatedFlight?.arrival_datetime,
+                    duration: slice.duration || relatedFlight?.duration
+                  };
+                });
+
+                if (normalizedSlices.length === 0 && outbound) {
+                  normalizedSlices.push({
+                    id: outbound.sliceId || 'outbound',
                     origin: { iata_code: outbound.origin },
                     destination: { iata_code: outbound.destination },
                     departure_time: outbound.departure_datetime,
                     arrival_time: outbound.arrival_datetime,
                     duration: outbound.duration
-                  }]
-                };
-
-                // Ensure base_amount and tax_amount exist (estimate if missing)
-                if (!offer.base_amount || !offer.tax_amount) {
-                  const total = parseFloat(offer.total_amount);
-                  offer.base_amount = (total * 0.75).toFixed(2);
-                  offer.tax_amount = (total * 0.25).toFixed(2);
-                  console.warn('base_amount/tax_amount not in offer, using estimated split');
+                  });
+                  if (returnFlight) {
+                    normalizedSlices.push({
+                      id: returnFlight.sliceId || 'return',
+                      origin: { iata_code: returnFlight.origin },
+                      destination: { iata_code: returnFlight.destination },
+                      departure_time: returnFlight.departure_datetime,
+                      arrival_time: returnFlight.arrival_datetime,
+                      duration: returnFlight.duration
+                    });
+                  }
                 }
 
-                // Prepare seats and baggage arrays
-                // selectedSeats structure: {0: {0: seat, 1: seat}, 1: {0: seat, 1: seat}}
-                // We need to flatten all seats from all flights and passengers
-                const seatsArray = Object.values(selectedSeats)
-                  .flatMap((flightSeats: any) => Object.values(flightSeats))
-                  .filter(Boolean);
-                
-                const baggageArray = selectedBaggage || [];
-                
-                console.log('🎫 Trip Summary Data:');
-                console.log('- Seats:', seatsArray.length, 'seats');
-                console.log('- Seats total:', seatsArray.reduce((sum: number, s: any) => sum + (parseFloat(s.price || s.amount || s.total_amount || 0)), 0));
-                console.log('- Baggage:', baggageArray.length, 'items');
-                console.log('- Baggage total:', baggageArray.reduce((sum: number, b: any) => sum + (parseFloat(b.total_amount || b.amount || 0)), 0));
+                const passengerSummaryData = passengersData.length > 0
+                  ? passengersData.map(p => ({
+                      id: p.id,
+                      type: p.type as 'adult' | 'child' | 'infant_without_seat' | 'infant_with_seat'
+                    }))
+                  : (outbound.passengers || []).map(p => ({
+                      id: p.id,
+                      type: p.type as 'adult' | 'child' | 'infant_without_seat' | 'infant_with_seat'
+                    }));
+
+                const totalAmountString = totalAmountNumber.toFixed(2);
+                const baseAmounts: number[] = [];
+                const taxAmounts: number[] = [];
+
+                if (storedOffer?.base_amount) baseAmounts.push(parseFloat(storedOffer.base_amount));
+                if (outbound.base_amount) baseAmounts.push(parseFloat(outbound.base_amount));
+                if (returnFlight?.base_amount) baseAmounts.push(parseFloat(returnFlight.base_amount));
+
+                if (storedOffer?.tax_amount) taxAmounts.push(parseFloat(storedOffer.tax_amount));
+                if (outbound.tax_amount) taxAmounts.push(parseFloat(outbound.tax_amount));
+                if (returnFlight?.tax_amount) taxAmounts.push(parseFloat(returnFlight.tax_amount));
+
+                const baseAmountNumber = baseAmounts.length
+                  ? baseAmounts.reduce((sum, value) => sum + value, 0)
+                  : null;
+                const taxAmountNumber = taxAmounts.length
+                  ? taxAmounts.reduce((sum, value) => sum + value, 0)
+                  : null;
+
+                const offer = {
+                  id: storedOffer?.id || outbound.id || outbound.offerId || '',
+                  total_amount: totalAmountNumber.toFixed(2),
+                  total_currency: currency,
+                  base_amount: baseAmountNumber !== null ? baseAmountNumber.toFixed(2) : '',
+                  tax_amount: taxAmountNumber !== null ? taxAmountNumber.toFixed(2) : '',
+                  passengers: passengerSummaryData,
+                  slices: normalizedSlices
+                };
 
                 return (
                   <ImprovedTripSummary 
@@ -1329,37 +1895,51 @@ export default function PassengerDetails() {
               
               {/* Continue Button Card */}
               <Card className="p-6">
-                <Button
-                  size="lg"
-                  className="w-full py-6 text-lg flex items-center justify-center gap-2"
+                <button
                   onClick={handleContinue}
-                  disabled={isVerifyingPrice}
+                  disabled={!isFormComplete || loading || isCheckoutLoading}
+                  className={`w-full py-3 px-6 rounded-lg font-medium transition-colors ${
+                    !isFormComplete || loading || isCheckoutLoading
+                      ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                      : 'bg-amber-500 hover:bg-amber-600 text-white'
+                  }`}
                 >
-                  {isVerifyingPrice ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  {isCheckoutLoading ? (
+                    <span className="flex items-center justify-center">
+                      <svg
+                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
                       </svg>
-                      <span>Verifying Price...</span>
-                    </>
+                      Processing...
+                    </span>
                   ) : (
-                    <>
-                      <span>Continue to Checkout</span>
-                      <span>→</span>
-                    </>
+                    'Continue to Payment'
                   )}
-                </Button>
-                
-                {isVerifyingPrice && (
+                </button>
+
+                {isCheckoutLoading ? (
                   <p className="text-xs text-center text-gray-500 mt-3">
-                    🔍 Checking for price changes...
+                    🔒 Redirecting to Stripe Checkout...
                   </p>
-                )}
-                
-                {!isVerifyingPrice && (
+                ) : (
                   <p className="text-xs text-center text-gray-500 mt-3">
-                    All passenger details must be completed
+                    All passenger details must be completed before payment
                   </p>
                 )}
               </Card>

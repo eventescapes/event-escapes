@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -54,6 +54,7 @@ interface SelectedSeat {
   seatDesignator: string;
   serviceId: string;
   price: number;
+  amount: number;
   currency: string;
 }
 
@@ -87,6 +88,7 @@ export default function SeatSelection() {
   const [loading, setLoading] = useState(true);
   const [selectedSeats, setSelectedSeats] = useState<SelectedSeatsState>({});
   const [passengers, setPassengers] = useState<Passenger[]>([]);
+  const seatSectionRef = useRef<HTMLDivElement | null>(null);
   
   // Get passenger count from loaded passengers
   const passengerCount = passengers.length || 1;
@@ -253,6 +255,202 @@ export default function SeatSelection() {
     }
   }, [seatMaps, baggageServices]);
 
+  const scrollToSeats = () => {
+    if (seatSectionRef.current) {
+      seatSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const storeFlightOfferDataForBaggage = () => {
+    try {
+      const slicesPayload: any[] = [];
+
+      if (baggageServices?.slices && Array.isArray(baggageServices.slices)) {
+        baggageServices.slices.forEach((slice: any) => {
+          slicesPayload.push({
+            id: slice.id,
+            origin: {
+              iata_code: slice.origin?.iata_code ?? slice.origin?.airport?.iata_code ?? null,
+              city_name: slice.origin?.city_name ?? slice.origin?.airport?.city ?? null,
+            },
+            destination: {
+              iata_code: slice.destination?.iata_code ?? slice.destination?.airport?.iata_code ?? null,
+              city_name: slice.destination?.city_name ?? slice.destination?.airport?.city ?? null,
+            },
+          });
+        });
+      }
+
+      if (slicesPayload.length === 0) {
+        if (outbound) {
+          slicesPayload.push({
+            id: outbound.sliceId || 'outbound',
+            origin: {
+              iata_code: outbound.origin,
+              city_name: outbound.origin,
+            },
+            destination: {
+              iata_code: outbound.destination,
+              city_name: outbound.destination,
+            },
+          });
+        }
+        if (returnFlight) {
+          slicesPayload.push({
+            id: returnFlight.sliceId || 'return',
+            origin: {
+              iata_code: returnFlight.origin,
+              city_name: returnFlight.origin,
+            },
+            destination: {
+              iata_code: returnFlight.destination,
+              city_name: returnFlight.destination,
+            },
+          });
+        }
+      }
+
+      if (slicesPayload.length > 0) {
+        const outboundAmount = parseFloat(outbound?.total_amount || outbound?.price?.toString() || '0');
+        const returnAmount = returnFlight ? parseFloat(returnFlight.total_amount || returnFlight.price?.toString() || '0') : 0;
+        const totalAmount = outboundAmount + returnAmount;
+        const currency = outbound?.total_currency || outbound?.currency || returnFlight?.total_currency || returnFlight?.currency || 'AUD';
+
+        const baseAmounts: number[] = [];
+        const taxAmounts: number[] = [];
+
+        if (outbound?.base_amount) baseAmounts.push(parseFloat(outbound.base_amount));
+        if (returnFlight?.base_amount) baseAmounts.push(parseFloat(returnFlight.base_amount));
+
+        if (outbound?.tax_amount) taxAmounts.push(parseFloat(outbound.tax_amount));
+        if (returnFlight?.tax_amount) taxAmounts.push(parseFloat(returnFlight.tax_amount));
+
+        const offerPayload: Record<string, any> = {
+          id: outbound?.offerId || baggageServices?.offer_id || '',
+          total_amount: totalAmount ? totalAmount.toFixed(2) : undefined,
+          total_currency: currency,
+          slices: slicesPayload,
+        };
+
+        if (baseAmounts.length > 0) {
+          offerPayload.base_amount = baseAmounts.reduce((sum, value) => sum + value, 0).toFixed(2);
+          offerPayload.base_currency = currency;
+        }
+
+        if (taxAmounts.length > 0) {
+          offerPayload.tax_amount = taxAmounts.reduce((sum, value) => sum + value, 0).toFixed(2);
+          offerPayload.tax_currency = currency;
+        }
+
+        sessionStorage.setItem('flightOfferData', JSON.stringify(offerPayload));
+        console.log('💾 Stored flight offer data for baggage page:', offerPayload);
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to store flight offer data for baggage page:', error);
+    }
+  };
+
+  const clearStoredSeatData = () => {
+    localStorage.removeItem('selected_seats');
+    localStorage.removeItem('selected_seat_services');
+    localStorage.removeItem('selected_seat_details');
+    localStorage.removeItem('seats_total');
+  };
+
+  const buildSeatServicesPayload = () => {
+    const services: Array<{ id: string; type: string; amount: number; quantity: number }> = [];
+    const flightsCount = returnFlight ? 2 : 1;
+
+    for (let flightIdx = 0; flightIdx < flightsCount; flightIdx++) {
+      const flightSeats = selectedSeats[flightIdx] || {};
+      Object.values(flightSeats).forEach((seat: any) => {
+        if (!seat || !seat.serviceId) return;
+        const amountValue = parseFloat((seat.price as any) || (seat.total_amount as any) || (seat.amount as any) || '0') || 0;
+        services.push({
+          id: seat.serviceId,
+          type: 'seat',
+          amount: amountValue,
+          quantity: 1,
+        });
+      });
+    }
+
+    return services;
+  };
+
+  const handleSkipSeats = () => {
+    storeFlightOfferDataForBaggage();
+    clearStoredSeatData();
+    setSelectedSeats({});
+    console.log('⏭️ Skipping seat selection');
+    window.location.href = '/baggage-selection';
+  };
+
+  const handleContinueToBaggage = () => {
+    const services = buildSeatServicesPayload();
+
+    // Validate duplicate seats per flight
+    const flightsCount = returnFlight ? 2 : 1;
+    for (let flightIdx = 0; flightIdx < flightsCount; flightIdx++) {
+      const flightSeats = selectedSeats[flightIdx] || {};
+      const seatDesignators = Object.values(flightSeats)
+        .filter((seat: any) => seat && seat.seatDesignator)
+        .map((seat: any) => seat.seatDesignator);
+      const uniqueSeats = new Set(seatDesignators);
+
+      if (seatDesignators.length !== uniqueSeats.size) {
+        console.error('❌ DUPLICATE SEATS DETECTED on flight', flightIdx);
+        console.error('Seats:', seatDesignators);
+        alert('❌ Error: Multiple passengers cannot select the same seat! Please review your seat selections.');
+        return;
+      }
+    }
+
+    for (const service of services) {
+      if (!service.id?.startsWith('ase_')) {
+        console.error('❌ INVALID SERVICE ID - Must start with "ase_":', service.id);
+        alert('Error: Invalid seat service ID. Please try selecting the seat again.');
+        return;
+      }
+      if (typeof service.amount !== 'number' || isNaN(service.amount)) {
+        console.error('❌ INVALID AMOUNT - Must be a number:', service.amount, typeof service.amount);
+        alert('Error: Invalid seat amount. Please try selecting the seat again.');
+        return;
+      }
+    }
+
+    if (services.length > 0) {
+      console.log('✅ VALIDATION PASSED - Data saved to localStorage');
+      console.log('Services array:', JSON.stringify(services, null, 2));
+      console.log('📊 Trip Summary:', {
+        flights: flightTotal,
+        seats: seatsCost,
+        total: grandTotal
+      });
+
+      console.log('💾 Saving services:', services);
+      console.log('Each service amount:', services.map(s => s.amount));
+
+      const flatSeatServices = services.map(service => ({
+        id: service.id,
+        type: 'seat' as const,
+        amount: Number(service.amount),
+        quantity: service.quantity,
+      }));
+
+      localStorage.setItem('selected_seat_details', JSON.stringify(selectedSeats));
+      localStorage.setItem('selected_seats', JSON.stringify(flatSeatServices));
+      localStorage.setItem('selected_seat_services', JSON.stringify(flatSeatServices));
+      localStorage.setItem('seats_total', seatsCost.toFixed(2));
+    } else {
+      clearStoredSeatData();
+    }
+
+    storeFlightOfferDataForBaggage();
+    console.log('🎉 Navigating to baggage selection...');
+    window.location.href = '/baggage-selection';
+  };
+
   /**
    * CRITICAL: Extract seat service ID for specific passenger
    * The service index MUST match passenger index!
@@ -327,6 +525,9 @@ export default function SeatSelection() {
       return;
     }
     
+    const priceValue = parseFloat((service.price as any) || (service.total_amount as any) || (service.amount as any) || '0') || 0;
+    const currencyValue = service.currency || service.total_currency || outbound?.currency || 'AUD';
+
     setSelectedSeats(prev => ({
       ...prev,
       [flightIndex]: {
@@ -334,8 +535,9 @@ export default function SeatSelection() {
         [passengerIndex]: {
           seatDesignator: seatDesignator,
           serviceId: service.id,
-          price: service.price,
-          currency: service.currency
+          price: priceValue,
+          amount: priceValue,
+          currency: currencyValue
         }
       }
     }));
@@ -345,7 +547,8 @@ export default function SeatSelection() {
       passenger: passengerIndex + 1,
       seat: seatDesignator,
       serviceId: service.id,
-      price: service.price
+      price: priceValue,
+      currency: currencyValue
     });
   };
 
@@ -476,8 +679,42 @@ export default function SeatSelection() {
           )}
         </div>
 
+        {/* Seat Selection Guidance */}
+        <div className="max-w-4xl mx-auto mb-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">
+                ✈️ Seat Selection (Optional)
+              </h2>
+              <p className="text-gray-700 mb-4">
+                Choose the seats you prefer below, or skip this step to continue without selecting seats. You can always pick seats later if you prefer.
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <button
+                  type="button"
+                  onClick={handleSkipSeats}
+                  className="px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:border-gray-400 hover:bg-gray-50 font-medium transition-all"
+                >
+                  Skip to Baggage →
+                </button>
+                <button
+                  type="button"
+                  onClick={scrollToSeats}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-all"
+                >
+                  Select Seats Below ↓
+                </button>
+              </div>
+            </div>
+            <div className="text-sm text-gray-600 space-y-1 md:text-right">
+              <div>💺 Seat selection fee: $40.27 per seat</div>
+              <div>✅ Free to skip</div>
+            </div>
+          </div>
+        </div>
+
         {/* Seat Selection UI */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div ref={seatSectionRef} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content - Seat Maps */}
           <div className="lg:col-span-2">
             {seatMaps.length > 0 ? (
@@ -789,117 +1026,27 @@ export default function SeatSelection() {
                 
                 {/* Continue Button */}
                 {outbound && (
-                  <Button
-                    size="lg"
-                    className="w-full py-6 text-lg"
-                    onClick={() => {
-                      // Validate both seats selected (for round trip)
-                      const outboundSeat = selectedSeats[0]?.[0]; // Flight 0, Passenger 0
-                      const returnSeat = selectedSeats[1]?.[0];   // Flight 1, Passenger 0
-                      
-                      if (!outboundSeat) {
-                        alert('Please select a seat for the outbound flight');
-                        return;
-                      }
-                      
-                      if (returnFlight && !returnSeat) {
-                        alert('Please select a seat for the return flight');
-                        return;
-                      }
-                      
-                      // Format services array for Duffel
-                      const services = [];
-                      
-                      // Add outbound seat
-                      services.push({
-                        id: outboundSeat.serviceId,
-                        type: "seat",
-                        amount: outboundSeat.price,
-                        quantity: 1
-                      });
-                      
-                      // Add return seat if exists
-                      if (returnFlight && returnSeat) {
-                        services.push({
-                          id: returnSeat.serviceId,
-                          type: "seat",
-                          amount: returnSeat.price,
-                          quantity: 1
-                        });
-                      }
-                      
-                      // CRITICAL VALIDATION
-                      console.log('💾 VALIDATING SEAT DATA FOR DUFFEL:');
-                      console.log('─────────────────────────────────────');
-                      console.log('Outbound Seat:', outboundSeat.seatDesignator);
-                      console.log('Outbound Service ID:', services[0].id);
-                      console.log('Outbound Amount:', services[0].amount, typeof services[0].amount);
-                      
-                      if (returnFlight && returnSeat) {
-                        console.log('');
-                        console.log('Return Seat:', returnSeat.seatDesignator);
-                        console.log('Return Service ID:', services[1].id);
-                        console.log('Return Amount:', services[1].amount, typeof services[1].amount);
-                      }
-                      
-                      console.log('');
-                      console.log('Total Seats Cost:', seatsCost.toFixed(2));
-                      console.log('─────────────────────────────────────');
-                      
-                      // CRITICAL: Validate no duplicate seats per flight
-                      console.log('🔍 Checking for duplicate seats...');
-                      for (let flightIdx = 0; flightIdx < (returnFlight ? 2 : 1); flightIdx++) {
-                        const flightSeats = selectedSeats[flightIdx] || {};
-                        const seatDesignators = Object.values(flightSeats).map(seat => seat.seatDesignator);
-                        const uniqueSeats = new Set(seatDesignators);
-                        
-                        if (seatDesignators.length !== uniqueSeats.size) {
-                          console.error('❌ DUPLICATE SEATS DETECTED on flight', flightIdx);
-                          console.error('Seats:', seatDesignators);
-                          alert('❌ Error: Multiple passengers cannot select the same seat! Please review your seat selections.');
-                          return;
-                        }
-                      }
-                      console.log('✅ No duplicate seats found');
-                      
-                      // Validate service IDs start with "ase_"
-                      for (const service of services) {
-                        if (!service.id?.startsWith('ase_')) {
-                          console.error('❌ INVALID SERVICE ID - Must start with "ase_":', service.id);
-                          alert('Error: Invalid seat service ID. Please try selecting the seat again.');
-                          return;
-                        }
-                      }
-                      
-                      // Validate amounts are numbers
-                      for (const service of services) {
-                        if (typeof service.amount !== 'number' || isNaN(service.amount)) {
-                          console.error('❌ INVALID AMOUNT - Must be a number:', service.amount, typeof service.amount);
-                          alert('Error: Invalid seat amount. Please try selecting the seat again.');
-                          return;
-                        }
-                      }
-                      
-                      // Save to localStorage
-                      localStorage.setItem('selected_seats', JSON.stringify(selectedSeats));
-                      localStorage.setItem('selected_seat_services', JSON.stringify(services));
-                      localStorage.setItem('seats_total', seatsCost.toFixed(2));
-                      
-                      console.log('✅ VALIDATION PASSED - Data saved to localStorage');
-                      console.log('Services array:', JSON.stringify(services, null, 2));
-                      console.log('📊 Trip Summary:', {
-                        flights: flightTotal,
-                        seats: seatsCost,
-                        total: grandTotal
-                      });
-                      
-                      // Navigate to baggage page
-                      console.log('🎉 Navigating to baggage selection...');
-                      window.location.href = '/baggage-selection';
-                    }}
-                  >
-                    Continue to Baggage →
-                  </Button>
+                  <div className="border-t-2 border-gray-300 mt-6 pt-6">
+                    <div className="space-y-3">
+                      <Button
+                        type="button"
+                        className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
+                        onClick={handleContinueToBaggage}
+                      >
+                        Continue to Baggage
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={handleSkipSeats}
+                        className="w-full text-center text-gray-600 hover:text-gray-800 font-medium py-2 transition-colors"
+                      >
+                        Skip seats
+                      </button>
+                    </div>
+                  </div>
                 )}
                 
                 {!outbound && (

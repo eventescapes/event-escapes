@@ -16,7 +16,7 @@ const handler = async (req: Request) => {
   }
 
   try {
-    const { offerId, passengers, services, servicesWithDetails, flightPrice, seatsTotal, baggageTotal, totalAmount, currency, offerData } = await req.json();
+    const { offerId, passengers, services, servicesWithDetails, flightPrice, seatsTotal, baggageTotal, totalAmount, currency, offerData, appBaseUrl } = await req.json();
 
     if (!offerId || !passengers || !totalAmount || !currency) {
       return new Response(
@@ -78,12 +78,18 @@ const handler = async (req: Request) => {
       });
     }
 
+    const originHeader = req.headers.get('origin') || '';
+    const envAppUrl = Deno.env.get('APP_BASE_URL') || '';
+    const baseUrl = [appBaseUrl, originHeader, envAppUrl, 'http://localhost:3000']
+      .find((url) => url && /^https?:\/\//.test(url)) || 'http://localhost:3000';
+    const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: lineItems,
       mode: 'payment',
-      success_url: `${req.headers.get('origin')}/booking-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.get('origin')}/passenger-details?canceled=true`,
+      success_url: `${normalizedBaseUrl}/booking-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${normalizedBaseUrl}/passenger-details?canceled=true`,
       metadata: {
         offerId,
         passengers: JSON.stringify(passengers),

@@ -184,6 +184,7 @@ export default function CheckoutCancel() {
                 localStorage.removeItem('selected_return');
                 localStorage.removeItem('selected_seats');
                 localStorage.removeItem('selected_seat_services');
+                localStorage.removeItem('selected_seat_details');
                 localStorage.removeItem('selected_baggage');
                 localStorage.removeItem('passenger_data');
                 setLocation('/');

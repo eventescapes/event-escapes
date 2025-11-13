@@ -150,7 +150,11 @@ const FlightSearchForm = () => {
       localStorage.removeItem('selected_outbound');
       localStorage.removeItem('selected_return');
       localStorage.removeItem('selected_seats');
+      localStorage.removeItem('selected_seat_services');
+      localStorage.removeItem('selected_seat_details');
+      localStorage.removeItem('seats_total');
       localStorage.removeItem('selected_baggage');
+      localStorage.removeItem('baggage_total');
       localStorage.removeItem('round_trip_offers'); // Clear stored round-trip offers
       console.log('🔵 Cleared old trip data - starting fresh');
     } catch (err) {
