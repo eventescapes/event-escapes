@@ -285,6 +285,23 @@ export default function Checkout() {
         });
       }
 
+      // Calculate services total
+      const servicesTotal = (services || []).reduce((sum, service) => {
+        const amount = parseFloat((service as any).amount) || 0;
+        const quantity = service.quantity || 1;
+        return sum + amount * quantity;
+      }, 0);
+
+      // Calculate final total (base + services)
+      const basePrice = parseFloat(cartItem.pricing.total);
+      const finalTotal = parseFloat((basePrice + servicesTotal).toFixed(2));
+
+      console.log("💰 Price calculation:", {
+        base: basePrice,
+        services: servicesTotal,
+        total: finalTotal,
+      });
+
       // Build checkout request
       const checkoutData: CheckoutRequest = {
         offerId: cartItem.offerId,
@@ -299,8 +316,8 @@ export default function Checkout() {
           email: p.email || passengerForms[0].email, // Use primary passenger's email if not provided
           phone_number: p.phone_number || passengerForms[0].phone_number, // Use primary passenger's phone if not provided
         })),
-        services: services,
-        totalAmount: cartItem.pricing.total,
+        services,
+        totalAmount: finalTotal,
         currency: cartItem.pricing.currency,
       };
 

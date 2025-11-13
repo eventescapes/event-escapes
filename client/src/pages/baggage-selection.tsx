@@ -286,76 +286,79 @@ export default function BaggageSelection() {
 
   // PROPER IMPLEMENTATION: Group baggage by flight per Duffel docs
   const getBaggageBySlice = () => {
-    const grouped: Record<number, { slice: Slice; baggage: BaggageService[] }> = {};
-    
-      console.log('📦 Total baggage services:', baggageServices.length);
-      console.log('✈️ Total slices:', slices.length);
-    
+    const grouped: Record<number, { slice: Slice; baggage: BaggageService[]; baggageByPassenger: Record<string, BaggageService[]> }> = {};
+    const usedBagIds = new Set<string>();
+
+    console.log('📦 Total baggage services:', baggageServices.length);
+    console.log('✈️ Total slices:', slices.length);
+
+    const assignBagToSlice = (sliceIndex: number, slice: Slice, bag: BaggageService) => {
+      if (!grouped[sliceIndex]) {
+        grouped[sliceIndex] = {
+          slice,
+          baggage: [],
+          baggageByPassenger: {},
+        };
+      }
+
+      grouped[sliceIndex].baggage.push(bag);
+      const passengerId = bag.passenger_id || 'unknown';
+      if (!grouped[sliceIndex].baggageByPassenger[passengerId]) {
+        grouped[sliceIndex].baggageByPassenger[passengerId] = [];
+      }
+      grouped[sliceIndex].baggageByPassenger[passengerId].push(bag);
+      usedBagIds.add(bag.id);
+    };
+
     slices.forEach((slice, sliceIndex) => {
       const sliceSegmentIds = extractSliceSegmentIds(slice);
       console.log(`\n📍 Processing slice ${sliceIndex}:`, {
         slice_id: slice.id,
-        segment_ids: sliceSegmentIds
+        segment_ids: sliceSegmentIds,
       });
-      
-      // Find baggage services that match ANY of this slice's segments
-      const sliceBaggage = baggageServices.filter(bag => {
-        // Each bag has segment_ids indicating which segments (flights) it applies to
-        if (!bag.segment_ids || !Array.isArray(bag.segment_ids)) {
-          console.log(`⚠️ Bag ${bag.id} has no segment_ids, defaulting to slice 0`);
-          return sliceIndex === 0; // Put in first slice by default
+
+      baggageServices.forEach((bag) => {
+        if (usedBagIds.has(bag.id)) return;
+
+        const bagSegmentIds = Array.isArray(bag.segment_ids) ? bag.segment_ids : [];
+        const bagSliceId = bag.metadata?.slice_id;
+
+        const matchesSliceId =
+          !!bagSliceId && segmentIdsMatch(bagSliceId, slice.id || '');
+
+        const matchesSegments =
+          bagSegmentIds.length > 0 &&
+          bagSegmentIds.some((bagSegId) =>
+            sliceSegmentIds.some((sliceSegId) => segmentIdsMatch(bagSegId, sliceSegId))
+          );
+
+        if (matchesSliceId || matchesSegments) {
+          console.log(`✅ Bag ${bag.id} assigned to slice ${sliceIndex}`);
+          assignBagToSlice(sliceIndex, slice, bag);
         }
-        
-        // CRITICAL MATCHING LOGIC: Compare bag's segment_ids against slice's segment IDs
-        console.log(`🔍 Checking bag ${bag.id}:`);
-        console.log(`   Bag segment_ids: [${bag.segment_ids.join(', ')}]`);
-        console.log(`   Slice segment_ids: [${sliceSegmentIds.join(', ')}]`);
-        
-        // Check if ANY of the bag's segment_ids match ANY of this slice's segments
-        const hasMatch = bag.segment_ids.some(bagSegId => {
-          const matchedSliceSeg = sliceSegmentIds.find(sliceSegId => segmentIdsMatch(bagSegId, sliceSegId));
-          if (matchedSliceSeg) {
-            const isExact = bagSegId === matchedSliceSeg;
-            console.log(`   ✅ MATCH FOUND: Bag segment "${bagSegId}" ${isExact ? 'exactly matches' : `~approximately matches~ "${matchedSliceSeg}"`}`);
-            return true;
-          }
-          return false;
-        });
-        
-        if (hasMatch) {
-          console.log(`✅ Bag ${bag.id} MATCHED to slice ${sliceIndex}`);
-        } else {
-          console.log(`❌ Bag ${bag.id} NO MATCH for slice ${sliceIndex}`);
-        }
-        
-        return hasMatch;
       });
-      
-      console.log(`📋 Slice ${sliceIndex} has ${sliceBaggage.length} baggage services`);
-      
-      grouped[sliceIndex] = {
-        slice: slice,
-        baggage: sliceBaggage
-      };
     });
-    
-    // FALLBACK: If no baggage matched any slices, divide evenly
-    const totalMatched = Object.values(grouped).reduce((sum, g) => sum + g.baggage.length, 0);
-    
-    if (totalMatched === 0 && baggageServices.length > 0) {
-      console.log('⚠️ No baggage matched segments, falling back to even distribution');
-      
-      const bagsPerSlice = Math.ceil(baggageServices.length / slices.length);
-      slices.forEach((slice, sliceIndex) => {
-        const startIdx = sliceIndex * bagsPerSlice;
-        const endIdx = Math.min(startIdx + bagsPerSlice, baggageServices.length);
-        grouped[sliceIndex] = {
-          slice: slice,
-          baggage: baggageServices.slice(startIdx, endIdx)
-        };
+
+    // Fall back: any unassigned baggage goes to first slice only
+    const unassignedBags = baggageServices.filter((bag) => !usedBagIds.has(bag.id));
+    if (unassignedBags.length > 0 && slices.length > 0) {
+      console.log('⚠️ Unassigned baggage detected, assigning to outbound flight:', unassignedBags.map((bag) => bag.id));
+      unassignedBags.forEach((bag) => {
+        assignBagToSlice(0, slices[0], bag);
       });
     }
-    
+
+    // Ensure every slice key exists even if no baggage
+    slices.forEach((slice, index) => {
+      if (!grouped[index]) {
+        grouped[index] = {
+          slice,
+          baggage: [],
+          baggageByPassenger: {},
+        };
+      }
+    });
+
     return grouped;
   };
 
@@ -437,6 +440,7 @@ export default function BaggageSelection() {
         passenger_id: bag.passenger_id,
         currency: bag.currency || bag.total_currency || storedOffer?.total_currency || 'AUD',
         slice_index: entry.sliceIndex,
+        slice_id: slices[entry.sliceIndex]?.id || null,
         passenger_number: entry.passengerNumber,
         description: bag.metadata?.type ? `${bag.metadata.type} bag` : 'Baggage'
       };
@@ -631,8 +635,8 @@ export default function BaggageSelection() {
             {/* CRITICAL FIX: Baggage Grouped by Flight */}
             {hasAnyBaggage ? (
               <div className="space-y-8" ref={baggageCardsRef}>
-                {Object.entries(baggageBySlice).map(([sliceIndex, { slice, baggage }]) => {
-                  if (baggage.length === 0) return null;
+                {Object.entries(baggageBySlice).map(([sliceIndex, sliceData]) => {
+                  if (sliceData.baggage.length === 0) return null;
                   
                   const isOutbound = parseInt(sliceIndex) === 0;
                   const storedSlice = storedOffer?.slices?.[parseInt(sliceIndex)];
@@ -640,7 +644,7 @@ export default function BaggageSelection() {
                   const destinationIata = storedSlice?.destination?.iata_code || storedSlice?.destination?.city_name || (isOutbound ? routeDestinationLabel : routeOriginLabel);
                   const originCity = storedSlice?.origin?.city_name || primarySlice?.origin?.city_name || storedSlice?.origin?.iata_code;
                   const destinationCity = storedSlice?.destination?.city_name || primarySlice?.destination?.city_name || storedSlice?.destination?.iata_code;
-                  const departureDate = slice.departure_datetime;
+                  const departureDate = sliceData.slice.departure_datetime;
                   
                   return (
                     <div key={sliceIndex} className="border-2 border-gray-300 rounded-lg p-6 bg-white shadow-sm">
@@ -678,92 +682,104 @@ export default function BaggageSelection() {
                           Select Additional Baggage for This Flight
                         </h4>
                         
-                        {baggage.map((bag, bagIndex) => {
+                        {passengers.map((passenger, passengerIdx) => {
                           const sliceIdx = parseInt(sliceIndex);
-                          const selected = isBagSelected(bag.id, sliceIdx);
-                          const passengerNum = getPassengerNumber(bag.passenger_id);
-                          const passengerDisplayNumber = passengerNum !== '?' ? passengerNum : bagIndex + 1;
-                          console.log('💰 Baggage service pricing check:', {
-                            bag_id: bag.id,
-                            price: bag.price,
-                            currency: bag.currency,
-                            total_amount: bag.total_amount,
-                            amount: bag.amount,
-                            total_currency: bag.total_currency,
-                            metadata: bag.metadata
-                          });
-                          const displayPrice = getPrice(bag);
-                          const displayCurrency = bag.currency || bag.total_currency || outbound?.currency || 'USD';
-                          const weightLimit = bag.metadata?.maximum_weight_kg || 23;
-                          const lengthLimit = bag.metadata?.maximum_length_cm;
-                          
+                          const passengerBags = sliceData.baggageByPassenger[passenger.id] || [];
+                          const passengerDisplayNumber = passengerIdx + 1;
+
                           return (
-                            <Card
-                              key={bag.id}
-                              className={`
-                                flex flex-col md:flex-row md:items-center justify-between p-5 transition-all
-                                ${selected 
-                                  ? 'border-2 border-green-500 bg-green-50 shadow-md' 
-                                  : 'border-2 border-gray-200 bg-gray-50 hover:border-green-300 hover:shadow-sm'
-                                }
-                              `}
-                            >
-                              {/* Bag Info */}
-                              <div className="flex-1 mb-4 md:mb-0">
-                                <div className="flex items-start gap-3 mb-2">
-                                  <div className="text-2xl">🎒</div>
-                                  <div>
-                                    <h5 className="font-semibold text-gray-800 text-base">
-                                      Extra {bag.metadata?.type || 'Checked'} Bag
-                                    </h5>
-                                    <p className="text-sm text-gray-600">
-                                      For Passenger {passengerDisplayNumber}
-                                    </p>
-                                    {/* CRITICAL WARNING */}
-                                    <p className="text-xs text-orange-600 font-semibold mt-1 flex items-center gap-1">
-                                      <span>⚠️</span>
-                                      <span>For this flight only</span>
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="text-sm text-gray-600 ml-11 space-y-0.5">
-                                  <div>• Up to {weightLimit}kg</div>
-                                  {lengthLimit && <div>• Max {lengthLimit}cm</div>}
-                                </div>
-                              </div>
-
-                              {/* Price & Button */}
-                              <div className="flex items-center gap-4 md:ml-4">
-                                {/* Price */}
-                                <div className="text-right">
-                                  <div className="text-2xl font-bold text-green-600">
-                                    ${displayPrice}
-                                  </div>
-                                  <div className="text-xs text-gray-500">
-                                    {displayCurrency}
-                                  </div>
-                                </div>
-
-                                {/* Button */}
+                            <div key={passenger.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                              <div className="flex items-start gap-3 mb-3">
+                                <div className="text-xl">🧍</div>
                                 <div>
-                                  {selected ? (
-                                    <Button
-                                      onClick={() => toggleBaggageSelection(bag, sliceIdx, passengerDisplayNumber)}
-                                      className="px-5 py-5 bg-red-500 text-white hover:bg-red-600 transition-colors font-medium"
-                                    >
-                                      Remove
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      onClick={() => toggleBaggageSelection(bag, sliceIdx, passengerDisplayNumber)}
-                                      className="px-5 py-5 bg-green-500 text-white hover:bg-green-600 transition-colors font-medium"
-                                    >
-                                      + Add
-                                    </Button>
-                                  )}
+                                  <h5 className="font-semibold text-gray-800">
+                                    Passenger {passengerDisplayNumber}
+                                  </h5>
+                                  <p className="text-sm text-gray-600">
+                                    {passenger.type === 'adult' ? 'Adult' : passenger.type.replace('_', ' ')}
+                                  </p>
                                 </div>
                               </div>
-                            </Card>
+
+                              {passengerBags.length === 0 ? (
+                                <p className="text-sm text-gray-500 pl-8">
+                                  No additional baggage available for this passenger on this flight.
+                                </p>
+                              ) : (
+                                <div className="space-y-3">
+                                  {passengerBags.map((bag) => {
+                                    const selected = isBagSelected(bag.id, sliceIdx);
+                                    const displayPrice = getPrice(bag);
+                                    const displayCurrency = bag.currency || bag.total_currency || outbound?.currency || 'USD';
+                                    const weightLimit = bag.metadata?.maximum_weight_kg || 23;
+                                    const lengthLimit = bag.metadata?.maximum_length_cm;
+
+                                    return (
+                                      <Card
+                                        key={bag.id}
+                                        className={`
+                                          flex flex-col md:flex-row md:items-center justify-between p-5 transition-all
+                                          ${selected
+                                            ? 'border-2 border-green-500 bg-green-50 shadow-md'
+                                            : 'border-2 border-gray-200 bg-gray-50 hover:border-green-300 hover:shadow-sm'
+                                          }
+                                        `}
+                                      >
+                                        <div className="flex-1 mb-4 md:mb-0">
+                                          <div className="flex items-start gap-3 mb-2">
+                                            <div className="text-2xl">🎒</div>
+                                            <div>
+                                              <h5 className="font-semibold text-gray-800 text-base">
+                                                Extra {bag.metadata?.type || 'Checked'} Bag
+                                              </h5>
+                                              <p className="text-sm text-gray-600">
+                                                For Passenger {passengerDisplayNumber}
+                                              </p>
+                                              <p className="text-xs text-orange-600 font-semibold mt-1 flex items-center gap-1">
+                                                <span>⚠️</span>
+                                                <span>For this flight only</span>
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <div className="text-sm text-gray-600 ml-11 space-y-0.5">
+                                            <div>• Up to {weightLimit}kg</div>
+                                            {lengthLimit && <div>• Max {lengthLimit}cm</div>}
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-4 md:ml-4">
+                                          <div className="text-right">
+                                            <div className="text-2xl font-bold text-green-600">
+                                              ${displayPrice}
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                              {displayCurrency}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            {selected ? (
+                                              <Button
+                                                onClick={() => toggleBaggageSelection(bag, sliceIdx, passengerDisplayNumber)}
+                                                className="px-5 py-5 bg-red-500 text-white hover:bg-red-600 transition-colors font-medium"
+                                              >
+                                                Remove
+                                              </Button>
+                                            ) : (
+                                              <Button
+                                                onClick={() => toggleBaggageSelection(bag, sliceIdx, passengerDisplayNumber)}
+                                                className="px-5 py-5 bg-green-500 text-white hover:bg-green-600 transition-colors font-medium"
+                                              >
+                                                + Add
+                                              </Button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </Card>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                       </div>
