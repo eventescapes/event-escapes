@@ -6,9 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
-import { Plane, Plus, X, Calendar, Users } from 'lucide-react';
+import { Plane, Plus, X, Calendar } from 'lucide-react';
 import type { FlightSearchParams, TripType } from '@/types/flights';
 import AirportAutocomplete from '@/components/AirportAutocomplete';
+import PassengerSelector from '@/components/PassengerSelector';
 
 // Multi-city slice interface (matches types/flights.ts)
 interface MultiCitySlice {
@@ -63,6 +64,14 @@ const FlightSearchForm = () => {
 
   // Multi-city state - restored from sessionStorage
   const [multiCitySlices, setMultiCitySlices] = useState<MultiCitySlice[]>(getSavedMultiCitySlices());
+
+  // Passenger counts state - matches PassengerSelector interface
+  const [passengerCounts, setPassengerCounts] = useState({
+    adults: 1,
+    children: 0,
+    infantsOnLap: 0,
+    infantsWithSeat: 0
+  });
 
   // Save search params to sessionStorage whenever they change
   useEffect(() => {
@@ -137,6 +146,17 @@ const FlightSearchForm = () => {
 
   // Handle search submission
   const handleSearch = () => {
+    try {
+      localStorage.removeItem('selected_outbound');
+      localStorage.removeItem('selected_return');
+      localStorage.removeItem('selected_seats');
+      localStorage.removeItem('selected_baggage');
+      localStorage.removeItem('round_trip_offers'); // Clear stored round-trip offers
+      console.log('🔵 Cleared old trip data - starting fresh');
+    } catch (err) {
+      console.warn('Unable to clear stored selections:', err);
+    }
+
     // Airport code validation
     if (searchParams.tripType !== 'multi-city') {
       // Validate origin and destination airport codes
@@ -203,7 +223,13 @@ const FlightSearchForm = () => {
     // Build URL parameters
     const params = new URLSearchParams();
     params.append('tripType', searchParams.tripType);
-    params.append('passengers', searchParams.passengers.toString());
+    
+    // Calculate total passengers
+    const totalPassengers = passengerCounts.adults + passengerCounts.children + passengerCounts.infantsOnLap + passengerCounts.infantsWithSeat;
+    params.append('passengers', totalPassengers.toString());
+    params.append('adults', passengerCounts.adults.toString());
+    params.append('children', passengerCounts.children.toString());
+    params.append('infants', (passengerCounts.infantsOnLap + passengerCounts.infantsWithSeat).toString());
     params.append('cabinClass', searchParams.cabinClass || 'economy');
 
     if (searchParams.tripType === 'multi-city') {
@@ -281,25 +307,10 @@ const FlightSearchForm = () => {
                 />
               </div>
               <div>
-                <Label htmlFor="passengers" className="font-accent font-semibold text-primary mb-2 block">
-                  <Users className="w-4 h-4 inline mr-2" />
+                <Label className="font-accent font-semibold text-primary mb-2 block">
                   Passengers
                 </Label>
-                <Select
-                  value={searchParams.passengers.toString()}
-                  onValueChange={(value) => setSearchParams(prev => ({ ...prev, passengers: parseInt(value) }))}
-                >
-                  <SelectTrigger className="focus-luxury h-12" data-testid="select-passengers">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5, 6].map(num => (
-                      <SelectItem key={num} value={num.toString()}>
-                        {num} passenger{num > 1 ? 's' : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <PassengerSelector value={passengerCounts} onChange={setPassengerCounts} />
               </div>
               <div>
                 <Label htmlFor="cabinClass" className="font-accent font-semibold text-primary mb-2 block">
@@ -374,24 +385,9 @@ const FlightSearchForm = () => {
               </div>
               <div>
                 <Label className="font-accent font-semibold text-primary mb-2 block">
-                  <Users className="w-4 h-4 inline mr-2" />
                   Passengers
                 </Label>
-                <Select
-                  value={searchParams.passengers.toString()}
-                  onValueChange={(value) => setSearchParams(prev => ({ ...prev, passengers: parseInt(value) }))}
-                >
-                  <SelectTrigger className="focus-luxury h-12" data-testid="select-passengers-return">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5, 6].map(num => (
-                      <SelectItem key={num} value={num.toString()}>
-                        {num} passenger{num > 1 ? 's' : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <PassengerSelector value={passengerCounts} onChange={setPassengerCounts} />
               </div>
               <div>
                 <Label className="font-accent font-semibold text-primary mb-2 block">
@@ -501,24 +497,9 @@ const FlightSearchForm = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-glass-border">
               <div>
                 <Label className="font-accent font-semibold text-primary mb-2 block">
-                  <Users className="w-4 h-4 inline mr-2" />
                   Passengers
                 </Label>
-                <Select
-                  value={searchParams.passengers.toString()}
-                  onValueChange={(value) => setSearchParams(prev => ({ ...prev, passengers: parseInt(value) }))}
-                >
-                  <SelectTrigger className="focus-luxury h-12" data-testid="select-passengers-multi-city">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5, 6].map(num => (
-                      <SelectItem key={num} value={num.toString()}>
-                        {num} passenger{num > 1 ? 's' : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <PassengerSelector value={passengerCounts} onChange={setPassengerCounts} />
               </div>
               <div>
                 <Label className="font-accent font-semibold text-primary mb-2 block">

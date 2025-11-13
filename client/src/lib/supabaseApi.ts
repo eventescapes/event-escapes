@@ -123,42 +123,34 @@ async function callEdgeFunction(
   return await response.json();
 }
 
-// Get seat maps for an offer
+// ==========================================
+// SEAT MAPS
+// ==========================================
+
 export async function getSeatMaps(offerId: string): Promise<{
   success: boolean;
   seat_maps?: SeatMap[];
   error?: string;
 }> {
   try {
-    console.log('🎫 Fetching seat maps for offer:', offerId);
+    console.log('🪑 Fetching seat maps for offer:', offerId);
     
-    // Call the Duffel offer endpoint to get available services
-    const url = `${SUPABASE_URL}/functions/v1/get-offer-lite`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'apikey': SUPABASE_ANON_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ offerId }),
+    const data = await callEdgeFunction('duffel_seat_maps', {
+      offer_id: offerId
     });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch offer: ${response.status}`);
-    }
-
-    const data = await response.json();
     
-    // For seat maps, we need to call Duffel's seat maps API
-    // This is a placeholder - the actual implementation would need the seat maps endpoint
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to fetch seat maps');
+    }
+    
+    console.log('✅ Seat maps retrieved:', data.seat_maps?.length || 0);
+    
     return {
       success: true,
       seat_maps: data.seat_maps || [],
     };
   } catch (error) {
-    console.error('Error fetching seat maps:', error);
+    console.error('❌ Error fetching seat maps:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -166,7 +158,10 @@ export async function getSeatMaps(offerId: string): Promise<{
   }
 }
 
-// Get baggage services for an offer
+// ==========================================
+// BAGGAGE SERVICES
+// ==========================================
+
 export async function getBaggageServices(offerId: string): Promise<{
   success: boolean;
   available_services?: {
@@ -178,18 +173,23 @@ export async function getBaggageServices(offerId: string): Promise<{
   try {
     console.log('🧳 Fetching baggage services for offer:', offerId);
     
-    const data = await callEdgeFunction('get-offer-lite', { offerId });
+    const data = await callEdgeFunction('duffel_offer_services', {
+      offer_id: offerId
+    });
     
-    // Parse the response to extract baggage services
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to fetch baggage services');
+    }
+    
+    console.log('✅ Baggage services retrieved');
+    
     return {
       success: true,
-      available_services: {
-        baggage: data.available_services?.baggage || [],
-      },
+      available_services: data.available_services || { baggage: [] },
       included_baggage: data.included_baggage || [],
     };
   } catch (error) {
-    console.error('Error fetching baggage services:', error);
+    console.error('❌ Error fetching baggage services:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -363,5 +363,68 @@ export interface EdgeFunctionSegment {
   marketing_carrier_flight_number: string;
 }
 
-// Search flights - delegate to supabase.ts
-export { searchFlights } from './supabase';
+// ==========================================
+// FLIGHT SEARCH
+// ==========================================
+
+export async function searchFlights(params: any): Promise<{
+  success: boolean;
+  offers?: EdgeFunctionOffer[];
+  error?: string;
+}> {
+  try {
+    console.log('🔍 Searching flights with params:', params);
+    
+    // Transform frontend format to Duffel format
+    const duffelParams: any = {
+      cabin: params.cabinClass || 'economy',
+      adults: params.passengers?.adults || 1,
+      children: params.passengers?.children || 0,
+      infants: params.passengers?.infants || 0,
+      max_connections: 1,
+      max_results: 50
+    };
+
+    // Handle different trip types
+    if (params.tripType === 'one-way' && params.slices?.[0]) {
+      duffelParams.origin = params.slices[0].origin;
+      duffelParams.destination = params.slices[0].destination;
+      duffelParams.departure_date = params.slices[0].departureDate;
+      duffelParams.trip_type = 'one-way';  // ✅ Add trip_type
+    } else if (params.tripType === 'return' && params.slices?.length >= 2) {
+      duffelParams.origin = params.slices[0].origin;
+      duffelParams.destination = params.slices[0].destination;
+      duffelParams.departure_date = params.slices[0].departureDate;
+      duffelParams.return_date = params.slices[1].departureDate;
+      duffelParams.trip_type = 'return';  // ✅ Add trip_type
+    } else if (params.tripType === 'multi-city') {
+      duffelParams.slices = params.slices?.map((s: any) => ({
+        origin: s.origin,
+        destination: s.destination,
+        departure_date: s.departureDate
+      }));
+      duffelParams.trip_type = 'multi-city';  // ✅ Add trip_type
+    }
+
+    console.log('📤 Transformed to Duffel format:', duffelParams);
+    
+    const data = await callEdgeFunction('duffel_search', duffelParams);
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Search failed');
+    }
+    
+    console.log(`✅ Found ${data.offers?.length || 0} flights`);
+    
+    return {
+      success: true,
+      offers: data.offers || [],
+    };
+  } catch (error) {
+    console.error('❌ Flight search error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}

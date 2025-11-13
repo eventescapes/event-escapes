@@ -9,7 +9,10 @@ interface FlightSearchRequest {
   destination: string
   departureDate: string
   returnDate?: string
-  passengers: number
+  passengers?: number  // Total count for backward compatibility
+  adults: number
+  children?: number
+  infants?: number  // Combined lap + seat infants
   cabin?: string
 }
 
@@ -32,6 +35,14 @@ Deno.serve(async (req) => {
     
     const requestData: FlightSearchRequest = JSON.parse(body)
     console.log('[flights-search] Request data:', requestData)
+    
+    // Log passenger breakdown for Duffel API format
+    console.log('[flights-search] Passenger breakdown:', {
+      adults: requestData.adults || 0,
+      children: requestData.children || 0,
+      infants: requestData.infants || 0,
+      total: (requestData.adults || 0) + (requestData.children || 0) + (requestData.infants || 0)
+    })
 
     // Mock flight data for testing
     const mockOutboundFlights = [

@@ -10,9 +10,15 @@ import Home from "@/pages/home";
 import EventDetail from "@/pages/event-detail";
 import HotelResults from "@/pages/hotel-results";
 import FlightResults from "@/pages/flight-results";
+import SeatSelection from "@/pages/seat-selection";
+import BaggageSelection from "@/pages/baggage-selection";
+import PassengerDetails from "@/pages/passenger-details";
 import AncillaryChoicePage from "@/pages/AncillaryChoicePage";
 import CartPage from "@/pages/cart";
 import Checkout from "@/pages/checkout";
+import CheckoutNew from "@/pages/checkout-new";
+import CheckoutSuccess from "@/pages/checkout-success";
+import CheckoutCancel from "@/pages/checkout-cancel";
 import FindBooking from "@/pages/find-booking";
 import EventTickets from "@/pages/event-tickets";
 import Events from "@/pages/events";
@@ -38,6 +44,12 @@ function Router() {
           <Route path="/flights" component={FlightResults} />
 
           {/* Booking Flow */}
+          <Route path="/seat-selection" component={SeatSelection} />
+          <Route path="/baggage-selection" component={BaggageSelection} />
+          <Route path="/passenger-details" component={PassengerDetails} />
+          <Route path="/checkout" component={CheckoutNew} />
+          <Route path="/checkout/success" component={CheckoutSuccess} />
+          <Route path="/checkout/cancel" component={CheckoutCancel} />
           <Route path="/ancillaries/:offerId" component={AncillaryChoicePage} />
           <Route path="/checkout/:offerId" component={Checkout} />
           <Route path="/cart" component={CartPage} />

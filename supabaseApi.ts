@@ -1,4 +1,4 @@
-typescript; // client/src/lib/supabaseApi.ts
+// client/src/lib/supabaseApi.ts
 // Central API layer for all Supabase Edge Function calls
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -227,29 +227,168 @@ export async function checkRewardsConfig() {
 }
 
 // ==========================================
-// TYPES (for TypeScript)
+// FLIGHT SEARCH TYPES
+// ==========================================
+
+export interface FlightSearchRequest {
+  tripType: 'one-way' | 'return' | 'multi-city'
+  slices: Array<{
+    origin: string
+    destination: string
+    departureDate: string
+  }>
+  passengers: {
+    adults: number
+    children: number
+    infants: number
+  }
+  cabinClass: 'economy' | 'premium_economy' | 'business' | 'first'
+}
+
+export interface EdgeFunctionSegment {
+  id: string
+  origin: {
+    iata_code: string
+    city_name: string
+  }
+  destination: {
+    iata_code: string
+    city_name: string
+  }
+  departing_at: string
+  arriving_at: string
+  marketing_carrier: {
+    name: string
+    iata_code: string
+  }
+  marketing_carrier_flight_number: string
+  aircraft?: {
+    name: string
+  }
+  operating_carrier?: {
+    name: string
+    iata_code: string
+  }
+  duration?: string
+}
+
+export interface EdgeFunctionSlice {
+  id: string
+  origin: string
+  destination: string
+  duration: string
+  segments: EdgeFunctionSegment[]
+  origin_name?: string
+  destination_name?: string
+  airline?: string
+  airline_code?: string
+  airline_logo?: string
+  flight_number?: string
+  aircraft?: string
+  stops?: number
+  segments_count?: number
+  fare_brand_name?: string
+}
+
+export interface EdgeFunctionOffer {
+  id: string
+  total_amount: string
+  total_currency: string
+  base_amount?: string
+  tax_amount?: string
+  slices: EdgeFunctionSlice[]
+  passengers: Array<{
+    id: string
+    type: string
+    fare_type?: string | null
+    loyalty_programme_accounts?: any[]
+    family_name?: string | null
+    given_name?: string | null
+    age?: number | null
+  }>
+  expires_at?: string
+  payment_requirements?: {
+    requires_instant_payment: boolean
+    price_guarantee_expires_at?: string | null
+    payment_required_by?: string
+  }
+  ancillaries?: {
+    services: any[]
+  }
+}
+
+// ==========================================
+// ANCILLARY TYPES
 // ==========================================
 
 export interface SeatMap {
-  id: string;
-  slice_id: string;
-  segment_id: string;
+  id: string
+  slice_id: string
+  segment_id: string
   cabins: Array<{
-    cabin_class?: string;
-    rows: any[];
-  }>;
+    cabin_class?: string
+    aisles?: number
+    rows: Array<{
+      sections: Array<{
+        elements: Array<{
+          type: string
+          id?: string
+          designator?: string
+          name?: string | null
+          available: boolean
+          disclosures?: string[]
+          services?: Array<{
+            id: string
+            total_amount: string
+            total_currency: string
+          }>
+        }>
+      }>
+    }>
+  }>
 }
 
 export interface BaggageService {
-  id: string;
-  price: string;
-  currency: string;
-  passenger_id: string;
-  maximum_quantity: number;
+  id: string
+  price: string
+  currency: string
+  passenger_id: string
+  maximum_quantity: number
+  type?: string
   metadata: {
-    type: string;
-    maximum_weight_kg?: number;
-  };
+    type: string
+    maximum_weight_kg?: number
+    maximum_depth_cm?: number
+    maximum_height_cm?: number
+    maximum_length_cm?: number
+  }
+}
+
+export interface CheckoutRequest {
+  offerId: string
+  passengers: Array<{
+    id?: string
+    type: string
+    title?: string
+    given_name: string
+    family_name: string
+    gender?: string
+    born_on: string
+    email?: string
+    phone_number?: string
+  }>
+  services: Array<{
+    id: string
+    type: 'seat' | 'baggage'
+    quantity: number
+    passenger_id?: string
+    amount: string
+    currency: string
+    description?: string
+  }>
+  offerData: any
+  totalAmount: string
+  currency: string
 }
 
 // ==========================================
