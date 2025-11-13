@@ -57,12 +57,6 @@ interface Slice {
   segments?: Array<{ id: string }>;
 }
 
-type SelectedBaggageEntry = {
-  sliceIndex: number;
-  bag: BaggageService;
-  passengerNumber: number;
-};
-
 export default function BaggageSelection() {
   const [, setLocation] = useLocation();
   
@@ -74,7 +68,11 @@ export default function BaggageSelection() {
   const [passengers, setPassengers] = useState<Passenger[]>([]);
   const [baggageServices, setBaggageServices] = useState<BaggageService[]>([]);
   const [includedBaggage, setIncludedBaggage] = useState<IncludedBaggage[]>([]);
-  const [selectedBaggage, setSelectedBaggage] = useState<SelectedBaggageEntry[]>([]);
+  // Track selected bags by passenger (bags cover entire trip)
+  // Key = passenger ID, Value = the selected bag for that passenger
+  const [selectedBaggage, setSelectedBaggage] = useState<{
+    [passengerId: string]: BaggageService
+  }>({});
   const [slices, setSlices] = useState<Slice[]>([]);
   const [storedOffer, setStoredOffer] = useState<any | null>(null);
   const baggageCardsRef = useRef<HTMLDivElement | null>(null);
@@ -225,52 +223,31 @@ export default function BaggageSelection() {
   };
 
   const extractSliceSegmentIds = (slice: Slice): string[] => {
-    const ids: string[] = [];
+    if (!slice) return [];
 
-    // Helper to push id safely
-    const pushId = (value: any) => {
-      if (!value) return;
-      if (typeof value === 'string') {
-        ids.push(value);
-      } else if (typeof value === 'object' && value.id) {
-        ids.push(value.id);
+    try {
+      const segments = (slice as any)?.segments;
+
+      if (Array.isArray(segments)) {
+        return segments.map((segment) => segment?.id).filter(Boolean) as string[];
       }
-    };
 
-    // 1. segments property might be an array, object with data, etc.
-    const segments: any = (slice as any).segments;
-
-    if (Array.isArray(segments)) {
-      segments.forEach(pushId);
-    } else if (segments && typeof segments === 'object') {
-      if (Array.isArray(segments.data)) {
-        segments.data.forEach(pushId);
-      } else if (Array.isArray(segments.items)) {
-        segments.items.forEach(pushId);
-      } else {
-        Object.values(segments).forEach(value => {
-          if (Array.isArray(value)) {
-            value.forEach(pushId);
-          } else {
-            pushId(value);
-          }
-        });
+      if (segments && typeof segments === 'object') {
+        const values = Object.values(segments);
+        if (Array.isArray(values)) {
+          return values.map((segment: any) => segment?.id).filter(Boolean) as string[];
+        }
       }
-    }
 
-    // 2. Some responses include segment_ids directly on slice
-    if (Array.isArray((slice as any).segment_ids)) {
-      (slice as any).segment_ids.forEach(pushId);
-    } else if ((slice as any).segment_id) {
-      pushId((slice as any).segment_id);
-    }
+      if (slice.id) {
+        return [slice.id];
+      }
 
-    // 3. Fallback: infer from slice id (sli_xxx -> seg_xxx)
-    if (ids.length === 0 && slice.id?.startsWith('sli_')) {
-      ids.push(slice.id.replace('sli_', 'seg_'));
+      return [];
+    } catch (error) {
+      console.error('Error extracting segment IDs:', error);
+      return slice?.id ? [slice.id] : [];
     }
-
-    return Array.from(new Set(ids.filter(Boolean)));
   };
 
   const segmentIdsMatch = (bagSegmentId: string, flightSegmentId: string): boolean => {
@@ -285,97 +262,102 @@ export default function BaggageSelection() {
   };
 
   // PROPER IMPLEMENTATION: Group baggage by flight per Duffel docs
+  /**
+   * Organize baggage services by slice and passenger for display
+   * In per-passenger mode, same bags are shown on all flights
+   */
   const getBaggageBySlice = () => {
     const grouped: Record<number, { slice: Slice; baggage: BaggageService[]; baggageByPassenger: Record<string, BaggageService[]> }> = {};
-    const usedBagIds = new Set<string>();
 
-    console.log('📦 Total baggage services:', baggageServices.length);
-    console.log('✈️ Total slices:', slices.length);
+    console.log('🎒 ORGANIZING BAGGAGE FOR DISPLAY');
+    console.log('Total slices:', slices.length);
+    console.log('Total baggage services:', baggageServices.length);
+    console.log('Total passengers:', passengers.length);
 
-    const assignBagToSlice = (sliceIndex: number, slice: Slice, bag: BaggageService) => {
-      if (!grouped[sliceIndex]) {
-        grouped[sliceIndex] = {
-          slice,
-          baggage: [],
-          baggageByPassenger: {},
-        };
-      }
-
-      grouped[sliceIndex].baggage.push(bag);
-      const passengerId = bag.passenger_id || 'unknown';
-      if (!grouped[sliceIndex].baggageByPassenger[passengerId]) {
-        grouped[sliceIndex].baggageByPassenger[passengerId] = [];
-      }
-      grouped[sliceIndex].baggageByPassenger[passengerId].push(bag);
-      usedBagIds.add(bag.id);
-    };
-
+    // For each slice, show the same baggage options (per-passenger model)
     slices.forEach((slice, sliceIndex) => {
-      const sliceSegmentIds = extractSliceSegmentIds(slice);
-      console.log(`\n📍 Processing slice ${sliceIndex}:`, {
-        slice_id: slice.id,
-        segment_ids: sliceSegmentIds,
-      });
+      const baggageByPassenger: Record<string, BaggageService[]> = {};
 
-      baggageServices.forEach((bag) => {
-        if (usedBagIds.has(bag.id)) return;
+      // Organize bags by passenger
+      passengers.forEach((passenger) => {
+        // Find bags available for this passenger
+        const passengerBags = baggageServices.filter((bag) => {
+          // Match by passenger_id if available
+          if (bag.passenger_id) {
+            return bag.passenger_id === passenger.id;
+          }
+          // Otherwise assume first bag goes to first passenger, etc.
+          return false;
+        });
 
-        const bagSegmentIds = Array.isArray(bag.segment_ids) ? bag.segment_ids : [];
-        const bagSliceId = bag.metadata?.slice_id;
-
-        const matchesSliceId =
-          !!bagSliceId && segmentIdsMatch(bagSliceId, slice.id || '');
-
-        const matchesSegments =
-          bagSegmentIds.length > 0 &&
-          bagSegmentIds.some((bagSegId) =>
-            sliceSegmentIds.some((sliceSegId) => segmentIdsMatch(bagSegId, sliceSegId))
-          );
-
-        if (matchesSliceId || matchesSegments) {
-          console.log(`✅ Bag ${bag.id} assigned to slice ${sliceIndex}`);
-          assignBagToSlice(sliceIndex, slice, bag);
+        if (passengerBags.length > 0) {
+          baggageByPassenger[passenger.id] = passengerBags;
         }
       });
-    });
 
-    // Fall back: any unassigned baggage goes to first slice only
-    const unassignedBags = baggageServices.filter((bag) => !usedBagIds.has(bag.id));
-    if (unassignedBags.length > 0 && slices.length > 0) {
-      console.log('⚠️ Unassigned baggage detected, assigning to outbound flight:', unassignedBags.map((bag) => bag.id));
-      unassignedBags.forEach((bag) => {
-        assignBagToSlice(0, slices[0], bag);
-      });
-    }
-
-    // Ensure every slice key exists even if no baggage
-    slices.forEach((slice, index) => {
-      if (!grouped[index]) {
-        grouped[index] = {
-          slice,
-          baggage: [],
-          baggageByPassenger: {},
-        };
+      // If no bags matched by passenger_id, distribute evenly
+      if (Object.keys(baggageByPassenger).length === 0 && baggageServices.length > 0) {
+        console.log(`📦 Distributing ${baggageServices.length} bags evenly to ${passengers.length} passengers`);
+        baggageServices.forEach((bag, index) => {
+          const passenger = passengers[index % passengers.length];
+          if (passenger) {
+            if (!baggageByPassenger[passenger.id]) {
+              baggageByPassenger[passenger.id] = [];
+            }
+            baggageByPassenger[passenger.id].push(bag);
+          }
+        });
       }
+
+      grouped[sliceIndex] = {
+        slice,
+        baggage: baggageServices,
+        baggageByPassenger,
+      };
+
+      console.log(`Slice ${sliceIndex} (${slice.origin?.iata_code} → ${slice.destination?.iata_code}):`);
+      console.log(`  Available bags: ${Object.keys(baggageByPassenger).length} passenger(s)`);
     });
 
     return grouped;
   };
 
   // Handle add baggage
-  const isBagSelected = (bagId: string, sliceIndex: number) => {
-    return selectedBaggage.some(entry => entry.sliceIndex === sliceIndex && entry.bag.id === bagId);
+  const isBagSelected = (bagId: string, passengerId: string) => {
+    return selectedBaggage[passengerId]?.id === bagId;
   };
 
-  const toggleBaggageSelection = (bag: BaggageService, sliceIndex: number, passengerNumber: number) => {
-    setSelectedBaggage(prev => {
-      const exists = prev.some(entry => entry.sliceIndex === sliceIndex && entry.bag.id === bag.id);
-      if (exists) {
-        console.log('🗑️ Removing baggage:', { bagId: bag.id, sliceIndex });
-        return prev.filter(entry => !(entry.sliceIndex === sliceIndex && entry.bag.id === bag.id));
+  const handleAddBag = (bag: BaggageService, passengerId: string, passengerIndex: number) => {
+    setSelectedBaggage((prev) => {
+      const updated = {
+        ...prev,
+        [passengerId]: {
+          ...bag,
+          passenger_id: passengerId,
+        },
+      };
+
+      console.log(`✅ Added bag for passenger ${passengerIndex + 1} (${passengerId})`);
+      console.log('💼 This bag is valid for entire trip (all flights)');
+      console.log('Current selected bags:', Object.keys(updated).length);
+
+      return updated;
+    });
+  };
+
+  const handleRemoveBag = (passengerId: string, passengerIndex: number) => {
+    setSelectedBaggage((prev) => {
+      if (!prev[passengerId]) {
+        return prev;
       }
-      console.log('🎒 Adding baggage:', { bagId: bag.id, sliceIndex });
-      return [...prev, { sliceIndex, bag, passengerNumber }];
+
+      const updated = { ...prev };
+      delete updated[passengerId];
+
+      console.log(`🗑️ Removed bag for passenger ${passengerIndex + 1} (${passengerId})`);
+      console.log('Current selected bags:', Object.keys(updated).length);
+
+      return updated;
     });
   };
 
@@ -412,10 +394,19 @@ export default function BaggageSelection() {
   };
 
   const calculateBaggageTotal = () => {
-    return selectedBaggage.reduce((sum, entry) => {
-      const bag = entry.bag;
+    const selectedBags = Object.values(selectedBaggage);
+    const totalBaggage = selectedBags.reduce((sum, bag) => {
       return sum + parseFloat(bag.price || bag.total_amount || bag.amount || '0');
     }, 0);
+
+    if (selectedBags.length > 0) {
+      console.log('💰 Baggage Summary:');
+      console.log(`  📦 Bags selected: ${selectedBags.length}`);
+      console.log(`  💵 Total cost: $${totalBaggage.toFixed(2)}`);
+      console.log(`  ✅ No duplicates (stored by passenger)`);
+    }
+
+    return totalBaggage;
   };
 
   const calculateGrandTotal = () => {
@@ -424,12 +415,18 @@ export default function BaggageSelection() {
 
   // Continue to next step
   const handleContinue = () => {
-    console.log('📤 Continuing with baggage:', selectedBaggage);
+    console.group('🎒 BUILDING SERVICES ARRAY');
+    console.log('📤 Selected baggage state:', selectedBaggage);
 
-    // Save selected baggage to localStorage
-    const baggageForStorage = selectedBaggage.map(entry => {
-      const bag = entry.bag;
+    // Build services array from selected baggage
+    // Bags are now stored by passenger (no duplicates!)
+    const selectedEntries = Object.entries(selectedBaggage);
+    
+    console.log('📦 Selected baggage by passenger:', selectedEntries.length);
+
+    const baggageServices = selectedEntries.map(([passengerId, bag]) => {
       const amountValue = parseFloat((bag.price as any) || (bag.total_amount as any) || (bag.amount as any) || '0') || 0;
+      const passengerNumber = getPassengerNumber(passengerId);
 
       return {
         id: bag.id,
@@ -437,28 +434,36 @@ export default function BaggageSelection() {
         amount: amountValue,
         total_amount: amountValue,
         quantity: 1,
-        passenger_id: bag.passenger_id,
+        passenger_id: passengerId,
         currency: bag.currency || bag.total_currency || storedOffer?.total_currency || 'AUD',
-        slice_index: entry.sliceIndex,
-        slice_id: slices[entry.sliceIndex]?.id || null,
-        passenger_number: entry.passengerNumber,
+        slice_index: null,
+        slice_id: bag.metadata?.slice_id || null,
+        passenger_number: passengerNumber,
         description: bag.metadata?.type ? `${bag.metadata.type} bag` : 'Baggage'
       };
     });
 
-    console.log('💾 Saving services:', baggageForStorage);
-    console.log('Each service amount:', baggageForStorage.map(service => service.amount));
- 
-    localStorage.setItem('selected_baggage', JSON.stringify(baggageForStorage));
-    localStorage.setItem('baggage_total', calculateBaggageTotal().toFixed(2));
+    console.log('📦 Baggage services:', baggageServices.length);
+    console.log('Service IDs:', baggageServices.map(s => s.id));
+    console.log('✅ No deduplication needed - stored by passenger!');
 
-    console.log('💾 Saved baggage:', {
-      count: selectedBaggage.length,
-      total: calculateBaggageTotal().toFixed(2),
-      services: selectedBaggage.map(entry => entry.bag.id)
+    // Calculate baggage total
+    const baggageTotal = baggageServices.reduce((sum, s) => sum + s.amount, 0);
+    console.log('💰 Baggage total: $' + baggageTotal.toFixed(2));
+
+    console.log('📋 Services being saved:', baggageServices);
+    console.log('Each service amount:', baggageServices.map(service => service.amount));
+    console.groupEnd();
+ 
+    localStorage.setItem('selected_baggage', JSON.stringify(baggageServices));
+    localStorage.setItem('baggage_total', baggageTotal.toFixed(2));
+
+    console.log('💾 Saved to localStorage:', {
+      count: baggageServices.length,
+      total: baggageTotal.toFixed(2),
+      serviceIds: baggageServices.map(s => s.id)
     });
 
-    // Navigate to passenger details
     const target = offerId ? `/passenger-details?offer_id=${offerId}` : '/passenger-details';
     setLocation(target);
   };
@@ -518,6 +523,13 @@ export default function BaggageSelection() {
   };
 
   const baggageBySlice = getBaggageBySlice();
+  const selectedPassengerIds = Object.keys(selectedBaggage);
+  const selectedBaggageCount = selectedPassengerIds.length;
+  const selectedBaggageArray = selectedPassengerIds.map((passengerId) => ({
+    passengerId,
+    bag: selectedBaggage[passengerId],
+    passengerNumber: getPassengerNumber(passengerId),
+  }));
   const hasAnyBaggage = Object.values(baggageBySlice).some(slice => slice.baggage.length > 0);
 
   const storedSlices: any[] = storedOffer?.slices || [];
@@ -595,23 +607,28 @@ export default function BaggageSelection() {
               </p>
             </div>
 
-            {/* CRITICAL: Round-Trip Warning */}
-            {slices.length > 1 && (
-              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded-r-lg">
-                <div className="flex items-start gap-3">
-                  <div className="text-2xl">💡</div>
-                  <div>
-                    <h3 className="font-semibold text-blue-800 mb-1">
-                      Planning a round-trip?
-                    </h3>
-                    <p className="text-sm text-blue-700">
-                      Each extra bag needs to be added <strong>separately for each flight</strong>. 
-                      Need a bag for the entire trip? Add it for both outbound and return flights.
+            {/* Informational Banner */}
+            <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg shadow-sm">
+              <div className="flex items-start gap-3">
+                <span className="text-blue-600 text-2xl mt-0.5">💼</span>
+                <div className="flex-1">
+                  <p className="font-semibold text-blue-900 text-lg">
+                    About Extra Baggage
+                  </p>
+                  <div className="mt-2 space-y-2 text-sm text-blue-700">
+                    <p>
+                      Extra bags are valid for your <strong>entire trip</strong>. When you add 
+                      a bag for a passenger, it automatically covers all flights in this booking.
                     </p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>Each bag covers both outbound and return flights</li>
+                      <li>You only need to add it once per passenger</li>
+                      <li>Remove from any flight to remove from all flights</li>
+                    </ul>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Included Baggage Info */}
             {includedBaggage.length > 0 && (
@@ -708,7 +725,7 @@ export default function BaggageSelection() {
                               ) : (
                                 <div className="space-y-3">
                                   {passengerBags.map((bag) => {
-                                    const selected = isBagSelected(bag.id, sliceIdx);
+                                    const selected = isBagSelected(bag.id, passenger.id);
                                     const displayPrice = getPrice(bag);
                                     const displayCurrency = bag.currency || bag.total_currency || outbound?.currency || 'USD';
                                     const weightLimit = bag.metadata?.maximum_weight_kg || 23;
@@ -735,10 +752,17 @@ export default function BaggageSelection() {
                                               <p className="text-sm text-gray-600">
                                                 For Passenger {passengerDisplayNumber}
                                               </p>
-                                              <p className="text-xs text-orange-600 font-semibold mt-1 flex items-center gap-1">
-                                                <span>⚠️</span>
-                                                <span>For this flight only</span>
-                                              </p>
+                                              {selected ? (
+                                                <p className="text-xs text-blue-600 font-semibold mt-1 flex items-center gap-1">
+                                                  <span>💼</span>
+                                                  <span>Valid for entire trip (all flights)</span>
+                                                </p>
+                                              ) : (
+                                                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                                  <span>ℹ️</span>
+                                                  <span>Will be valid for all flights on this trip</span>
+                                                </p>
+                                              )}
                                             </div>
                                           </div>
                                           <div className="text-sm text-gray-600 ml-11 space-y-0.5">
@@ -759,14 +783,14 @@ export default function BaggageSelection() {
                                           <div>
                                             {selected ? (
                                               <Button
-                                                onClick={() => toggleBaggageSelection(bag, sliceIdx, passengerDisplayNumber)}
+                                                onClick={() => handleRemoveBag(passenger.id, passengerIdx)}
                                                 className="px-5 py-5 bg-red-500 text-white hover:bg-red-600 transition-colors font-medium"
                                               >
                                                 Remove
                                               </Button>
                                             ) : (
                                               <Button
-                                                onClick={() => toggleBaggageSelection(bag, sliceIdx, passengerDisplayNumber)}
+                                                onClick={() => handleAddBag(bag, passenger.id, passengerIdx)}
                                                 className="px-5 py-5 bg-green-500 text-white hover:bg-green-600 transition-colors font-medium"
                                               >
                                                 + Add
@@ -845,9 +869,12 @@ export default function BaggageSelection() {
                   </div>
                 )}
 
-                {selectedBaggage.length > 0 && (
-                  <div className="flex justify-between text-gray-700">
-                    <span>Baggage ({selectedBaggage.length} bag{selectedBaggage.length > 1 ? 's' : ''})</span>
+                {selectedBaggageCount > 0 && (
+                  <div className="flex justify-between items-center text-gray-700">
+                    <div className="flex items-center gap-2">
+                      <span>Extra Baggage ({selectedBaggageCount} bag{selectedBaggageCount !== 1 ? 's' : ''})</span>
+                      <span className="text-xs">💼</span>
+                    </div>
                     <span className="font-semibold text-green-600">
                       +${calculateBaggageTotal().toFixed(2)}
                     </span>
@@ -856,7 +883,7 @@ export default function BaggageSelection() {
               </div>
 
               {/* CRITICAL: Per-Flight Breakdown */}
-              {selectedBaggage.length > 0 && slices.length > 0 && (
+              {selectedBaggageCount > 0 && slices.length > 0 && (
                 <div className="mb-6 pb-6 border-b">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3">
                     Baggage Breakdown:
@@ -864,7 +891,7 @@ export default function BaggageSelection() {
                   <div className="space-y-3">
                     {Object.entries(baggageBySlice).map(([sliceIndex, { slice }]) => {
                       const sliceIdx = parseInt(sliceIndex);
-                      const sliceEntries = selectedBaggage.filter(entry => entry.sliceIndex === sliceIdx);
+                      const sliceEntries = selectedBaggageArray;
                       if (sliceEntries.length === 0) return null;
                       
                       const isOutbound = sliceIdx === 0;
@@ -873,9 +900,9 @@ export default function BaggageSelection() {
                       const destinationIata = storedSlice?.destination?.iata_code || slice.destination?.iata_code || slice.destination?.city_name || 'Destination';
                       const originCity = storedSlice?.origin?.city_name || slice.origin?.city_name;
                       const destinationCity = storedSlice?.destination?.city_name || slice.destination?.city_name;
-                      const sliceTotal = sliceEntries.reduce((sum, entry) => 
-                        sum + parseFloat(entry.bag.price || entry.bag.total_amount || entry.bag.amount || '0'), 0
-                      );
+                      const sliceTotal = sliceEntries.reduce((sum, entry) =>
+                        sum + parseFloat(entry.bag.price || entry.bag.total_amount || entry.bag.amount || '0'),
+                      0);
                       
                       return (
                         <div key={sliceIndex} className="text-sm">
@@ -889,7 +916,7 @@ export default function BaggageSelection() {
                             </div>
                           )}
                           {sliceEntries.map((entry) => (
-                            <div key={entry.bag.id} className="text-gray-600 ml-5 text-xs mb-1 flex justify-between">
+                            <div key={`${sliceIndex}-${entry.passengerId}`} className="text-gray-600 ml-5 text-xs mb-1 flex justify-between">
                               <span>Passenger {entry.passengerNumber}</span>
                               <span>${getPrice(entry.bag)}</span>
                             </div>
