@@ -124,8 +124,28 @@ export function ConfirmationPage() {
     const flightData = bookingData.offer_data || bookingData.offerData;
     const passengersData = bookingData.passengers_data || bookingData.passengersData || [];
     const servicesData = bookingData.services_data || bookingData.servicesData || [];
-    const totalAmount = bookingData.amount || bookingData.total_amount || 0;
+    
+    // Robust amount fetching - try multiple sources
+    let totalAmount = 0;
+    if (bookingData.amount && bookingData.amount > 0) {
+      totalAmount = bookingData.amount;
+    } else if (bookingData.total_amount && bookingData.total_amount > 0) {
+      totalAmount = bookingData.total_amount;
+    } else if (flightData?.total_amount) {
+      totalAmount = parseFloat(flightData.total_amount);
+    } else if (flightData?.base_amount) {
+      totalAmount = parseFloat(flightData.base_amount);
+    }
+    
     const currency = bookingData.currency || flightData?.total_currency || 'AUD';
+    
+    console.log('💰 Confirmation page - Amount details:', {
+      bookingAmount: bookingData.amount,
+      totalAmount: bookingData.total_amount,
+      flightAmount: flightData?.total_amount,
+      finalAmount: totalAmount,
+      currency
+    });
     
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4">

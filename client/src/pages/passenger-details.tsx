@@ -338,24 +338,11 @@ export default function PassengerDetails() {
   const [flightCurrency, setFlightCurrency] = useState<string>('AUD');
   const [phoneCountryCode, setPhoneCountryCode] = useState<string>(DEFAULT_PHONE_COUNTRY_CODE);
   const [phoneLocal, setPhoneLocal] = useState<string>('');
-  const [countrySearch, setCountrySearch] = useState<string>('');
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [isCheckoutLoading, setIsCheckoutLoading] = useState<boolean>(false);
 
-  const filteredCountries = useMemo(() => {
-    const query = countrySearch.trim().toLowerCase();
-    if (!query) {
-      return COUNTRIES;
-    }
-
-    const normalizedQuery = query.replace(/\s+/g, '');
-
-    return COUNTRIES.filter((country) => {
-      const nameMatch = country.name.toLowerCase().includes(query);
-      const codeMatch = country.code.replace(/\s+/g, '').toLowerCase().includes(normalizedQuery);
-      return nameMatch || codeMatch;
-    });
-  }, [countrySearch]);
+  // Show all countries in dropdown (search removed)
+  const filteredCountries = COUNTRIES;
 
   // Helper function to determine if flight is international
   const isInternationalFlight = () => {
@@ -1348,20 +1335,11 @@ export default function PassengerDetails() {
                           Country/Territory Code <span className="text-red-500">*</span>
                         </label>
 
-                        <input
-                          type="text"
-                          placeholder="🔍 Search country..."
-                          value={countrySearch}
-                          onChange={(e) => setCountrySearch(e.target.value)}
-                          className="w-full px-4 py-2 mb-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white"
-                        />
-
                         <select
                           value={phoneCountryCode}
                           onChange={(e) => {
                             const newCode = e.target.value;
                             setPhoneCountryCode(newCode);
-                            setCountrySearch('');
 
                             handlePassengerInput(passengerIndex, 'country_code', newCode);
                             handlePassengerInput(passengerIndex, 'phone_number', phoneLocal);
@@ -1383,7 +1361,7 @@ export default function PassengerDetails() {
                         </select>
 
                         <p className="text-xs text-gray-500 mt-1">
-                          {filteredCountries.length} of {COUNTRIES.length} countries
+                          240 of 240 countries
                         </p>
 
                         {errors[`passenger_${passengerIndex}_country_code`] && (

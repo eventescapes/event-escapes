@@ -85,7 +85,12 @@ const handler = async (req: Request) => {
     const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      payment_method_types: [
+        "card",
+        "afterpay_clearpay",  // AU, NZ, US, CA, UK - $1-$2k limit
+        "klarna",             // US, UK, EU (23 countries) - up to $10k
+        "affirm"              // US, CA - $50-$17.5k limit
+      ],
       line_items: lineItems,
       mode: 'payment',
       success_url: `${normalizedBaseUrl}/booking-success?session_id={CHECKOUT_SESSION_ID}`,

@@ -55,7 +55,7 @@ const handler = async (req: Request) => {
       );
 
       try {
-        const { offerId, passengers, services } = session.metadata || {};
+        const { offerId, passengers, services, offerData } = session.metadata || {};
 
         if (!offerId || !passengers) {
           throw new Error("Missing booking data in session metadata");
@@ -63,6 +63,7 @@ const handler = async (req: Request) => {
 
         const parsedPassengers = JSON.parse(passengers);
         const parsedServices = services ? JSON.parse(services) : [];
+        const parsedOfferData = offerData ? JSON.parse(offerData) : null;
 
         console.log("[stripe-webhook] Passengers:", parsedPassengers.length);
         console.log(
@@ -162,6 +163,7 @@ const handler = async (req: Request) => {
           currency: order.total_currency.toUpperCase(),
           passengers_data: duffelPassengers,
           services_data: enrichedServices,
+          offer_data: parsedOfferData,
           primary_email: duffelPassengers[0]?.email || "",
           timestamp: new Date().toISOString(),
         });
