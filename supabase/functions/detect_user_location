@@ -1,0 +1,214 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+};
+// Map countries to currencies
+const COUNTRY_CURRENCY_MAP = {
+  // Americas
+  'US': 'USD',
+  'CA': 'CAD',
+  'MX': 'MXN',
+  'BR': 'BRL',
+  'AR': 'ARS',
+  'CL': 'CLP',
+  'CO': 'COP',
+  'PE': 'PEN',
+  'VE': 'VES',
+  // Europe
+  'GB': 'GBP',
+  'CH': 'CHF',
+  'NO': 'NOK',
+  'SE': 'SEK',
+  'DK': 'DKK',
+  'PL': 'PLN',
+  'CZ': 'CZK',
+  'HU': 'HUF',
+  'RO': 'RON',
+  'RU': 'RUB',
+  'TR': 'TRY',
+  'UA': 'UAH',
+  'IS': 'ISK',
+  // Euro countries
+  'DE': 'EUR',
+  'FR': 'EUR',
+  'ES': 'EUR',
+  'IT': 'EUR',
+  'NL': 'EUR',
+  'BE': 'EUR',
+  'AT': 'EUR',
+  'PT': 'EUR',
+  'IE': 'EUR',
+  'GR': 'EUR',
+  'FI': 'EUR',
+  'EE': 'EUR',
+  'LV': 'EUR',
+  'LT': 'EUR',
+  'SK': 'EUR',
+  'SI': 'EUR',
+  'CY': 'EUR',
+  'MT': 'EUR',
+  'LU': 'EUR',
+  // Asia Pacific
+  'AU': 'AUD',
+  'NZ': 'NZD',
+  'SG': 'SGD',
+  'HK': 'HKD',
+  'JP': 'JPY',
+  'CN': 'CNY',
+  'KR': 'KRW',
+  'TW': 'TWD',
+  'TH': 'THB',
+  'MY': 'MYR',
+  'ID': 'IDR',
+  'PH': 'PHP',
+  'VN': 'VND',
+  'IN': 'INR',
+  'PK': 'PKR',
+  'BD': 'BDT',
+  'LK': 'LKR',
+  'NP': 'NPR',
+  'MM': 'MMK',
+  'KH': 'KHR',
+  'LA': 'LAK',
+  'MN': 'MNT',
+  'KZ': 'KZT',
+  'UZ': 'UZS',
+  // Middle East
+  'AE': 'AED',
+  'SA': 'SAR',
+  'QA': 'QAR',
+  'KW': 'KWD',
+  'BH': 'BHD',
+  'OM': 'OMR',
+  'IL': 'ILS',
+  'JO': 'JOD',
+  'LB': 'LBP',
+  'EG': 'EGP',
+  'IQ': 'IQD',
+  'IR': 'IRR',
+  'SY': 'SYP',
+  'YE': 'YER',
+  // Africa
+  'ZA': 'ZAR',
+  'NG': 'NGN',
+  'KE': 'KES',
+  'GH': 'GHS',
+  'UG': 'UGX',
+  'TZ': 'TZS',
+  'ET': 'ETB',
+  'MA': 'MAD',
+  'DZ': 'DZD',
+  'TN': 'TND',
+  'AO': 'AOA',
+  'MZ': 'MZN',
+  'ZM': 'ZMW',
+  'ZW': 'ZWL',
+  'BW': 'BWP',
+  'NA': 'NAD',
+  'MU': 'MUR',
+  'SC': 'SCR',
+  'RE': 'EUR'
+};
+serve(async (req)=>{
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+  try {
+    // Get user's IP from headers
+    const forwarded = req.headers.get('x-forwarded-for');
+    const realIP = req.headers.get('x-real-ip');
+    const userIP = forwarded ? forwarded.split(',')[0].trim() : realIP || 'unknown';
+    console.log(`[Geo Detect] Detecting location for IP: ${userIP}`);
+    // Handle localhost/development
+    if (userIP === 'unknown' || userIP === '127.0.0.1' || userIP.startsWith('192.168.') || userIP.startsWith('10.')) {
+      console.log('[Geo Detect] Local IP detected, using default AU');
+      return new Response(JSON.stringify({
+        success: true,
+        ip: userIP,
+        country: 'AU',
+        countryName: 'Australia',
+        city: 'Melbourne',
+        currency: 'AUD',
+        timezone: 'Australia/Melbourne',
+        detected: false,
+        fallback: true,
+        reason: 'Local IP - using default'
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+    // Call FREE IP geolocation API (no key required, 1000/day limit)
+    console.log(`[Geo Detect] Calling ipapi.co for ${userIP}`);
+    const geoResponse = await fetch(`https://ipapi.co/${userIP}/json/`);
+    if (!geoResponse.ok) {
+      throw new Error(`Geo API returned ${geoResponse.status}`);
+    }
+    const geoData = await geoResponse.json();
+    // Check if API returned error (rate limit, etc.)
+    if (geoData.error) {
+      console.warn(`[Geo Detect] API Error: ${geoData.reason}`);
+      // Fallback to default
+      return new Response(JSON.stringify({
+        success: true,
+        ip: userIP,
+        country: 'AU',
+        countryName: 'Australia',
+        currency: 'AUD',
+        detected: false,
+        fallback: true,
+        reason: geoData.reason || 'API error'
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+    const countryCode = geoData.country_code || 'AU';
+    const detectedCurrency = COUNTRY_CURRENCY_MAP[countryCode] || geoData.currency || 'USD';
+    console.log(`[Geo Detect] ✅ Country: ${countryCode}, Currency: ${detectedCurrency}`);
+    return new Response(JSON.stringify({
+      success: true,
+      ip: userIP,
+      country: countryCode,
+      countryName: geoData.country_name,
+      city: geoData.city,
+      region: geoData.region,
+      currency: detectedCurrency,
+      timezone: geoData.timezone,
+      latitude: geoData.latitude,
+      longitude: geoData.longitude,
+      detected: true,
+      fallback: false
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error('[Geo Detect] Error:', error);
+    // Always return success with fallback
+    return new Response(JSON.stringify({
+      success: true,
+      ip: 'unknown',
+      country: 'AU',
+      countryName: 'Australia',
+      currency: 'AUD',
+      detected: false,
+      fallback: true,
+      error: error.message
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
+  }
+});
