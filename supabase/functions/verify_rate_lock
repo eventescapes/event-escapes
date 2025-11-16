@@ -1,0 +1,100 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+};
+serve(async (req)=>{
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { sessionId, lockId } = await req.json();
+    if (!sessionId && !lockId) {
+      throw new Error('sessionId or lockId required');
+    }
+    console.log(`[Verify Lock] Checking lock for ${lockId || sessionId}`);
+    let query = supabase.from('exchange_rate_locks').select('*');
+    if (lockId) {
+      query = query.eq('id', lockId);
+    } else {
+      query = query.eq('session_id', sessionId);
+    }
+    const { data: lock, error } = await query.eq('is_valid', true).order('created_at', {
+      ascending: false
+    }).limit(1).single();
+    if (error || !lock) {
+      console.log('[Verify Lock] ❌ Lock not found or invalid');
+      return new Response(JSON.stringify({
+        valid: false,
+        reason: 'Lock not found or already used'
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+    const expiresAt = new Date(lock.expires_at);
+    const now = new Date();
+    const isExpired = now > expiresAt;
+    if (isExpired) {
+      await supabase.from('exchange_rate_locks').update({
+        is_valid: false
+      }).eq('id', lock.id);
+      const minutesAgo = Math.floor((now.getTime() - expiresAt.getTime()) / 60000);
+      console.log(`[Verify Lock] ❌ Lock expired ${minutesAgo} minutes ago`);
+      return new Response(JSON.stringify({
+        valid: false,
+        reason: 'Lock expired',
+        expiredAt: lock.expires_at,
+        minutesAgo: minutesAgo
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+    const minutesRemaining = Math.floor((expiresAt.getTime() - now.getTime()) / 60000);
+    const secondsRemaining = Math.floor((expiresAt.getTime() - now.getTime()) / 1000);
+    console.log(`[Verify Lock] ✅ Lock valid for ${minutesRemaining} more minutes`);
+    return new Response(JSON.stringify({
+      valid: true,
+      lock: {
+        id: lock.id,
+        sessionId: lock.session_id,
+        currency: lock.target_currency,
+        rate: parseFloat(lock.locked_rate),
+        usdAmount: lock.usd_amount ? parseFloat(lock.usd_amount) : null,
+        displayAmount: lock.display_amount ? parseFloat(lock.display_amount) : null,
+        lockedAt: lock.locked_at,
+        expiresAt: lock.expires_at,
+        minutesRemaining: minutesRemaining,
+        secondsRemaining: secondsRemaining
+      }
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error('[Verify Lock] Error:', error);
+    return new Response(JSON.stringify({
+      valid: false,
+      error: error.message
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 500
+    });
+  }
+});
