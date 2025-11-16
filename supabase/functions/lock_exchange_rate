@@ -1,0 +1,81 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const RATE_LOCK_DURATION_MINUTES = 30;
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+};
+serve(async (req)=>{
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { sessionId, currency, usdAmount } = await req.json();
+    if (!sessionId || !currency) {
+      throw new Error('sessionId and currency required');
+    }
+    console.log(`[Rate Lock] Locking ${currency} rate for session ${sessionId}`);
+    const { data: rateData, error: rateError } = await supabase.from('exchange_rates').select('rate, last_updated').eq('base_currency', 'USD').eq('target_currency', currency.toUpperCase()).order('valid_from', {
+      ascending: false
+    }).limit(1).single();
+    if (rateError || !rateData) {
+      throw new Error(`Exchange rate not found for ${currency}`);
+    }
+    const lockedRate = parseFloat(rateData.rate);
+    const displayAmount = usdAmount ? usdAmount * lockedRate : null;
+    const expiresAt = new Date(Date.now() + RATE_LOCK_DURATION_MINUTES * 60 * 1000);
+    const { data: lock, error: lockError } = await supabase.from('exchange_rate_locks').insert({
+      session_id: sessionId,
+      source_currency: 'USD',
+      target_currency: currency.toUpperCase(),
+      locked_rate: lockedRate,
+      usd_amount: usdAmount || null,
+      display_amount: displayAmount,
+      expires_at: expiresAt.toISOString(),
+      is_valid: true
+    }).select().single();
+    if (lockError) {
+      console.error('[Rate Lock] Error:', lockError);
+      throw lockError;
+    }
+    console.log(`[Rate Lock] ✅ Rate locked: ${lockedRate} until ${expiresAt.toISOString()}`);
+    return new Response(JSON.stringify({
+      success: true,
+      lock: {
+        id: lock.id,
+        sessionId: sessionId,
+        currency: currency.toUpperCase(),
+        rate: lockedRate,
+        usdAmount: usdAmount || null,
+        displayAmount: displayAmount,
+        lockedAt: lock.locked_at,
+        expiresAt: expiresAt.toISOString(),
+        validForMinutes: RATE_LOCK_DURATION_MINUTES,
+        rateLastUpdated: rateData.last_updated
+      }
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 200
+    });
+  } catch (error) {
+    console.error('[Rate Lock] Error:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 500
+    });
+  }
+});
