@@ -1,0 +1,259 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const RATEHAWK_KEY_ID = Deno.env.get('RATEHAWK_KEY_ID');
+const RATEHAWK_API_KEY = Deno.env.get('RATEHAWK_API_KEY');
+const RATEHAWK_API_URL = Deno.env.get('RATEHAWK_API_URL') || 'https://api.worldota.net';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+};
+// =====================================================
+// GET EXCHANGE RATE FROM DATABASE
+// =====================================================
+async function getExchangeRate(supabase, targetCurrency) {
+  if (targetCurrency === 'USD') return 1.0;
+  try {
+    const { data } = await supabase.from('exchange_rates').select('rate').eq('base_currency', 'USD').eq('target_currency', targetCurrency.toUpperCase()).order('valid_from', {
+      ascending: false
+    }).limit(1).single();
+    if (data) {
+      console.log(`[Exchange Rate] ${targetCurrency}: ${data.rate}`);
+      return parseFloat(data.rate);
+    }
+    console.warn(`[Exchange Rate] Not found for ${targetCurrency}, using 1:1`);
+    return 1.0;
+  } catch (error) {
+    console.error(`[Exchange Rate] Error fetching ${targetCurrency}:`, error);
+    return 1.0;
+  }
+}
+async function logApiCall(supabase, endpoint, requestData, responseData, responseStatus, startTime, error) {
+  const responseTime = Date.now() - startTime;
+  try {
+    await supabase.from('ratehawk_api_logs').insert({
+      endpoint,
+      method: 'POST',
+      request_data: requestData,
+      response_data: responseData,
+      response_status: responseStatus,
+      response_time_ms: responseTime,
+      error: error || null
+    });
+  } catch (logError) {
+    console.error('Failed to log API call:', logError);
+  }
+}
+function calculateNights(checkIn, checkOut) {
+  const checkInDate = new Date(checkIn);
+  const checkOutDate = new Date(checkOut);
+  const diffTime = Math.abs(checkOutDate.getTime() - checkInDate.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+}
+async function searchHotels(searchParams, supabase) {
+  const startTime = Date.now();
+  const searchType = searchParams.searchType || 'hotels';
+  const nights = calculateNights(searchParams.checkIn, searchParams.checkOut);
+  // Get exchange rate for display currency
+  const displayCurrency = searchParams.currency || 'AUD';
+  const exchangeRate = await getExchangeRate(supabase, displayCurrency);
+  let endpoint = '';
+  let requestBody = {};
+  if (searchType === 'hotels' && searchParams.hotelIds) {
+    endpoint = '/api/b2b/v3/search/serp/hotels/';
+    requestBody = {
+      checkin: searchParams.checkIn,
+      checkout: searchParams.checkOut,
+      residency: searchParams.residency || 'au',
+      language: searchParams.language || 'en',
+      guests: searchParams.guests,
+      hids: searchParams.hotelIds,
+      currency: 'USD'
+    };
+  } else if (searchType === 'region' && searchParams.regionId) {
+    endpoint = '/api/b2b/v3/search/serp/region/';
+    requestBody = {
+      checkin: searchParams.checkIn,
+      checkout: searchParams.checkOut,
+      residency: searchParams.residency || 'au',
+      language: searchParams.language || 'en',
+      guests: searchParams.guests,
+      ids: [
+        searchParams.regionId
+      ],
+      currency: 'USD'
+    };
+  } else {
+    throw new Error('Invalid search parameters. Provide hotelIds or regionId.');
+  }
+  if (searchParams.timeout) {
+    requestBody.timeout = searchParams.timeout;
+  }
+  console.log(`[RateHawk Search] Endpoint: ${endpoint}`);
+  console.log(`[RateHawk Search] Display Currency: ${displayCurrency} (Rate: ${exchangeRate})`);
+  try {
+    const authString = `${RATEHAWK_KEY_ID}:${RATEHAWK_API_KEY}`;
+    const encodedAuth = btoa(authString);
+    const response = await fetch(`${RATEHAWK_API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${encodedAuth}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+    const data = await response.json();
+    await logApiCall(supabase, endpoint, requestBody, data, response.status, startTime, response.ok ? undefined : 'API Error');
+    if (!response.ok) {
+      console.error('[RateHawk Search] API Error:', data);
+      throw new Error(data.error?.message || JSON.stringify(data));
+    }
+    console.log(`[RateHawk Search] Success: ${data.data?.hotels?.length || 0} hotels found`);
+    // Cache search results
+    try {
+      await supabase.from('hotel_searches').insert({
+        search_type: searchType,
+        region_id: searchParams.regionId?.toString() || null,
+        hotel_ids: searchParams.hotelIds || null,
+        check_in: searchParams.checkIn,
+        check_out: searchParams.checkOut,
+        nights: nights,
+        adults: searchParams.guests.reduce((sum, room)=>sum + room.adults, 0),
+        children: searchParams.guests.reduce((sum, room)=>sum + (room.children?.length || 0), 0),
+        children_ages: searchParams.guests.flatMap((room)=>room.children || []),
+        rooms: searchParams.guests.length,
+        residency: searchParams.residency || 'au',
+        language: searchParams.language || 'en',
+        currency: displayCurrency,
+        search_results: data,
+        match_hash: data.debug?.match_hash || null,
+        book_hash: data.data?.hotels?.[0]?.rates?.[0]?.book_hash || null,
+        rg_ext: data.data?.hotels?.[0]?.rates?.[0]?.rg_ext || null,
+        cached_until: new Date(Date.now() + 5 * 60 * 1000)
+      });
+    } catch (cacheError) {
+      console.error('[RateHawk Search] Cache error:', cacheError);
+    }
+    return formatSearchResponse(data, searchParams, nights, exchangeRate, displayCurrency);
+  } catch (error) {
+    console.error('[RateHawk Search] Error:', error);
+    await logApiCall(supabase, endpoint, requestBody, null, 0, startTime, error.message);
+    throw error;
+  }
+}
+function formatSearchResponse(rawData, searchParams, nights, exchangeRate, displayCurrency) {
+  const hotels = rawData.data?.hotels || [];
+  const formattedHotels = hotels.map((hotel)=>{
+    const rates = hotel.rates || [];
+    const cheapestRate = rates.sort((a, b)=>parseFloat(a.payment_options?.payment_types?.[0]?.show_amount || '999999') - parseFloat(b.payment_options?.payment_types?.[0]?.show_amount || '999999'))[0];
+    if (!cheapestRate) return null;
+    const paymentType = cheapestRate.payment_options?.payment_types?.[0] || {};
+    const usdAmount = parseFloat(paymentType.show_amount || '0');
+    const displayAmount = usdAmount * exchangeRate;
+    return {
+      hotelId: hotel.id,
+      name: hotel.name,
+      address: hotel.address,
+      starRating: hotel.star_rating,
+      location: {
+        latitude: hotel.latitude,
+        longitude: hotel.longitude,
+        city: hotel.region?.name,
+        country: hotel.region?.country_code
+      },
+      images: hotel.images || [],
+      mainImage: hotel.images?.[0]?.url || null,
+      pricing: {
+        displayAmount: Math.round(displayAmount * 100) / 100,
+        displayCurrency: displayCurrency,
+        displayPerNight: Math.round(displayAmount / nights * 100) / 100,
+        sourceAmount: usdAmount,
+        sourceCurrency: 'USD',
+        exchangeRate: exchangeRate,
+        totalAmount: Math.round(displayAmount * 100) / 100,
+        currency: displayCurrency,
+        pricePerNight: Math.round(displayAmount / nights * 100) / 100,
+        nights: nights
+      },
+      room: {
+        name: cheapestRate.room_name,
+        roomGroupId: cheapestRate.room_data_trans?.main_room_type,
+        mealType: cheapestRate.meal,
+        mealData: cheapestRate.meal_data,
+        rg_ext: cheapestRate.rg_ext
+      },
+      cancellation: {
+        isCancellable: cheapestRate.payment_options?.cancellation_penalties?.free_cancellation_before ? true : false,
+        deadline: cheapestRate.payment_options?.cancellation_penalties?.free_cancellation_before || null,
+        policies: cheapestRate.payment_options?.cancellation_penalties?.policies || []
+      },
+      matchHash: rawData.debug?.match_hash,
+      rateId: cheapestRate.id,
+      bookHash: cheapestRate.book_hash,
+      _rawRate: cheapestRate,
+      _rawHotel: hotel
+    };
+  }).filter(Boolean);
+  return {
+    success: true,
+    searchParams: {
+      checkIn: searchParams.checkIn,
+      checkOut: searchParams.checkOut,
+      nights: nights,
+      guests: searchParams.guests,
+      currency: displayCurrency
+    },
+    currencyInfo: {
+      display: displayCurrency,
+      source: 'USD',
+      rate: exchangeRate,
+      rateTimestamp: new Date().toISOString()
+    },
+    hotels: formattedHotels,
+    totalResults: formattedHotels.length,
+    matchHash: rawData.debug?.match_hash,
+    _rawResponse: rawData
+  };
+}
+serve(async (req)=>{
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const searchParams = await req.json();
+    console.log('[RateHawk Search] Received request');
+    if (!searchParams.checkIn || !searchParams.checkOut) {
+      throw new Error('checkIn and checkOut dates are required');
+    }
+    if (!searchParams.guests || searchParams.guests.length === 0) {
+      throw new Error('At least one guest room is required');
+    }
+    const result = await searchHotels(searchParams, supabase);
+    return new Response(JSON.stringify(result), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 200
+    });
+  } catch (error) {
+    console.error('[RateHawk Search] Handler error:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message,
+      details: error.toString()
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 500
+    });
+  }
+});
