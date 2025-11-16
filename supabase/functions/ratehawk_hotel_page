@@ -1,0 +1,222 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const RATEHAWK_KEY_ID = Deno.env.get('RATEHAWK_KEY_ID');
+const RATEHAWK_API_KEY = Deno.env.get('RATEHAWK_API_KEY');
+const RATEHAWK_API_URL = Deno.env.get('RATEHAWK_API_URL') || 'https://api.worldota.net';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+};
+// =====================================================
+// GET EXCHANGE RATE FROM DATABASE
+// =====================================================
+async function getExchangeRate(supabase, targetCurrency) {
+  if (targetCurrency === 'USD') return 1.0;
+  try {
+    const { data } = await supabase.from('exchange_rates').select('rate').eq('base_currency', 'USD').eq('target_currency', targetCurrency.toUpperCase()).order('valid_from', {
+      ascending: false
+    }).limit(1).single();
+    if (data) {
+      console.log(`[Exchange Rate] ${targetCurrency}: ${data.rate}`);
+      return parseFloat(data.rate);
+    }
+    console.warn(`[Exchange Rate] Not found for ${targetCurrency}, using 1:1`);
+    return 1.0;
+  } catch (error) {
+    console.error(`[Exchange Rate] Error fetching ${targetCurrency}:`, error);
+    return 1.0;
+  }
+}
+async function logApiCall(supabase, endpoint, requestData, responseData, responseStatus, startTime, error) {
+  const responseTime = Date.now() - startTime;
+  try {
+    await supabase.from('ratehawk_api_logs').insert({
+      endpoint,
+      method: 'POST',
+      request_data: requestData,
+      response_data: responseData,
+      response_status: responseStatus,
+      response_time_ms: responseTime,
+      error: error || null
+    });
+  } catch (logError) {
+    console.error('Failed to log API call:', logError);
+  }
+}
+function calculateNights(checkIn, checkOut) {
+  const checkInDate = new Date(checkIn);
+  const checkOutDate = new Date(checkOut);
+  const diffTime = Math.abs(checkOutDate.getTime() - checkInDate.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+}
+async function getHotelPage(request, supabase) {
+  const startTime = Date.now();
+  const endpoint = '/api/b2b/v3/search/hp/';
+  const nights = calculateNights(request.checkIn, request.checkOut);
+  // Get exchange rate for display currency
+  const displayCurrency = request.currency || 'AUD';
+  const exchangeRate = await getExchangeRate(supabase, displayCurrency);
+  const requestBody = {
+    checkin: request.checkIn,
+    checkout: request.checkOut,
+    residency: request.residency || 'au',
+    language: request.language || 'en',
+    guests: request.guests,
+    id: request.hotelId.toString(),
+    currency: 'USD' // Always request USD, convert to display currency
+  };
+  console.log(`[RateHawk HP] Hotel ID: ${request.hotelId}`);
+  console.log(`[RateHawk HP] Display Currency: ${displayCurrency} (Rate: ${exchangeRate})`);
+  try {
+    const authString = `${RATEHAWK_KEY_ID}:${RATEHAWK_API_KEY}`;
+    const encodedAuth = btoa(authString);
+    const response = await fetch(`${RATEHAWK_API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${encodedAuth}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+    const data = await response.json();
+    await logApiCall(supabase, endpoint, requestBody, data, response.status, startTime, response.ok ? undefined : 'API Error');
+    if (!response.ok) {
+      console.error('[RateHawk HP] API Error:', data);
+      throw new Error(data.error?.message || JSON.stringify(data));
+    }
+    const hotel = data.data?.hotels?.[0];
+    if (!hotel) {
+      console.log('[RateHawk HP] Full response:', JSON.stringify(data, null, 2));
+      throw new Error(`Hotel not found in response. Got: ${JSON.stringify(data.data)}`);
+    }
+    console.log(`[RateHawk HP] Success: ${hotel.rates?.length || 0} rates found`);
+    return formatHotelPageResponse(data, request, nights, exchangeRate, displayCurrency);
+  } catch (error) {
+    console.error('[RateHawk HP] Error:', error);
+    await logApiCall(supabase, endpoint, requestBody, null, 0, startTime, error.message);
+    throw error;
+  }
+}
+function formatHotelPageResponse(rawData, request, nights, exchangeRate, displayCurrency) {
+  const hotel = rawData.data.hotels[0];
+  const rates = hotel.rates || [];
+  // Group rates by room type
+  const roomGroups = new Map();
+  rates.forEach((rate)=>{
+    const roomKey = rate.room_data_trans?.main_room_type || rate.room_name;
+    if (!roomGroups.has(roomKey)) {
+      roomGroups.set(roomKey, {
+        roomName: rate.room_name,
+        roomGroupId: rate.room_data_trans?.main_room_type,
+        roomDescription: rate.room_data_trans?.bedding_type || '',
+        rates: []
+      });
+    }
+    const paymentType = rate.payment_options?.payment_types?.[0] || {};
+    const usdAmount = parseFloat(paymentType.show_amount || '0');
+    const displayAmount = usdAmount * exchangeRate;
+    roomGroups.get(roomKey).rates.push({
+      rateId: rate.id,
+      bookHash: rate.book_hash,
+      rgExt: rate.rg_ext,
+      mealType: rate.meal,
+      mealName: rate.meal_data?.name || 'Room Only',
+      pricing: {
+        displayAmount: Math.round(displayAmount * 100) / 100,
+        displayCurrency: displayCurrency,
+        displayPerNight: Math.round(displayAmount / nights * 100) / 100,
+        sourceAmount: usdAmount,
+        sourceCurrency: 'USD',
+        exchangeRate: exchangeRate,
+        nights: nights
+      },
+      cancellation: {
+        isCancellable: rate.payment_options?.cancellation_penalties?.free_cancellation_before ? true : false,
+        deadline: rate.payment_options?.cancellation_penalties?.free_cancellation_before || null,
+        policies: rate.payment_options?.cancellation_penalties?.policies || []
+      },
+      paymentType: paymentType.type || 'unknown',
+      _rawRate: rate
+    });
+  });
+  // Sort rates within each room by price
+  roomGroups.forEach((room)=>{
+    room.rates.sort((a, b)=>a.pricing.displayAmount - b.pricing.displayAmount);
+  });
+  return {
+    success: true,
+    hotel: {
+      id: hotel.id,
+      name: hotel.name,
+      address: hotel.address,
+      starRating: hotel.star_rating,
+      location: {
+        latitude: hotel.latitude,
+        longitude: hotel.longitude,
+        city: hotel.region?.name,
+        country: hotel.region?.country_code
+      },
+      images: hotel.images || [],
+      mainImage: hotel.images?.[0]?.url || null,
+      checkIn: request.checkIn,
+      checkOut: request.checkOut,
+      nights: nights
+    },
+    currencyInfo: {
+      display: displayCurrency,
+      source: 'USD',
+      rate: exchangeRate,
+      rateTimestamp: new Date().toISOString()
+    },
+    rooms: Array.from(roomGroups.values()),
+    totalRates: rates.length,
+    matchHash: rawData.debug?.match_hash,
+    _rawResponse: rawData
+  };
+}
+serve(async (req)=>{
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const request = await req.json();
+    console.log('[RateHawk HP] Received request');
+    if (!request.hotelId) {
+      throw new Error('hotelId is required');
+    }
+    if (!request.checkIn || !request.checkOut) {
+      throw new Error('checkIn and checkOut dates are required');
+    }
+    if (!request.guests || request.guests.length === 0) {
+      throw new Error('At least one guest room is required');
+    }
+    const result = await getHotelPage(request, supabase);
+    return new Response(JSON.stringify(result), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 200
+    });
+  } catch (error) {
+    console.error('[RateHawk HP] Handler error:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message,
+      details: error.toString()
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 500
+    });
+  }
+});
