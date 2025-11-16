@@ -1,0 +1,86 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+// FREE API - No key required, 1,500 requests/month
+const EXCHANGE_API_URL = 'https://api.exchangerate-api.com/v4/latest/USD';
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
+};
+serve(async (req)=>{
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    console.log('[Exchange Rates] Fetching latest rates from API...');
+    const response = await fetch(EXCHANGE_API_URL);
+    if (!response.ok) {
+      throw new Error(`API responded with status ${response.status}`);
+    }
+    const data = await response.json();
+    if (!data.rates) {
+      throw new Error('Invalid response: no rates data');
+    }
+    console.log(`[Exchange Rates] Received ${Object.keys(data.rates).length} currency rates`);
+    const now = new Date().toISOString();
+    const updates = [];
+    for (const [currency, rate] of Object.entries(data.rates)){
+      const rateValue = rate;
+      updates.push({
+        base_currency: 'USD',
+        target_currency: currency,
+        rate: rateValue,
+        inverse_rate: 1 / rateValue,
+        source: 'exchangerate-api',
+        valid_from: now,
+        last_updated: now
+      });
+    }
+    console.log(`[Exchange Rates] Upserting ${updates.length} rates...`);
+    const { error } = await supabase.from('exchange_rates').upsert(updates, {
+      onConflict: 'base_currency,target_currency,valid_from',
+      ignoreDuplicates: false
+    });
+    if (error) {
+      console.error('[Exchange Rates] Database error:', error);
+      throw error;
+    }
+    console.log(`[Exchange Rates] ✅ Successfully updated ${updates.length} exchange rates`);
+    return new Response(JSON.stringify({
+      success: true,
+      rates_updated: updates.length,
+      timestamp: now,
+      source: 'exchangerate-api.com',
+      sample_rates: {
+        AUD: updates.find((u)=>u.target_currency === 'AUD')?.rate,
+        GBP: updates.find((u)=>u.target_currency === 'GBP')?.rate,
+        EUR: updates.find((u)=>u.target_currency === 'EUR')?.rate,
+        CNY: updates.find((u)=>u.target_currency === 'CNY')?.rate,
+        JPY: updates.find((u)=>u.target_currency === 'JPY')?.rate
+      }
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 200
+    });
+  } catch (error) {
+    console.error('[Exchange Rates] Error:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 500
+    });
+  }
+});
