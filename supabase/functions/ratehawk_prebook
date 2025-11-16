@@ -1,0 +1,201 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const RATEHAWK_KEY_ID = Deno.env.get('RATEHAWK_KEY_ID');
+const RATEHAWK_API_KEY = Deno.env.get('RATEHAWK_API_KEY');
+const RATEHAWK_API_URL = Deno.env.get('RATEHAWK_API_URL') || 'https://api.worldota.net';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+};
+async function getExchangeRate(supabase, targetCurrency) {
+  if (targetCurrency === 'USD') return 1.0;
+  try {
+    const { data } = await supabase.from('exchange_rates').select('rate').eq('base_currency', 'USD').eq('target_currency', targetCurrency.toUpperCase()).order('valid_from', {
+      ascending: false
+    }).limit(1).single();
+    if (data) {
+      console.log(`[Exchange Rate] ${targetCurrency}: ${data.rate}`);
+      return parseFloat(data.rate);
+    }
+    console.warn(`[Exchange Rate] Not found for ${targetCurrency}, using 1:1`);
+    return 1.0;
+  } catch (error) {
+    console.error(`[Exchange Rate] Error fetching ${targetCurrency}:`, error);
+    return 1.0;
+  }
+}
+async function logApiCall(supabase, endpoint, requestData, responseData, responseStatus, startTime, error) {
+  const responseTime = Date.now() - startTime;
+  try {
+    await supabase.from('ratehawk_api_logs').insert({
+      endpoint,
+      method: 'POST',
+      request_data: requestData,
+      response_data: responseData,
+      response_status: responseStatus,
+      response_time_ms: responseTime,
+      error: error || null
+    });
+  } catch (logError) {
+    console.error('Failed to log API call:', logError);
+  }
+}
+async function prebookRate(request, supabase) {
+  const startTime = Date.now();
+  const endpoint = '/api/b2b/v3/hotel/prebook';
+  const displayCurrency = request.currency || 'AUD';
+  const exchangeRate = await getExchangeRate(supabase, displayCurrency);
+  const requestBody = {
+    hash: request.bookHash,
+    price_increase_percent: request.priceIncreasePercent || 0
+  };
+  console.log(`[Prebook] Hash: ${request.bookHash}`);
+  console.log(`[Prebook] Price increase: ${request.priceIncreasePercent || 0}%`);
+  console.log(`[Prebook] Display Currency: ${displayCurrency} (Rate: ${exchangeRate})`);
+  try {
+    const authString = `${RATEHAWK_KEY_ID}:${RATEHAWK_API_KEY}`;
+    const encodedAuth = btoa(authString);
+    const response = await fetch(`${RATEHAWK_API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${encodedAuth}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+    const data = await response.json();
+    await logApiCall(supabase, endpoint, requestBody, data, response.status, startTime, response.ok ? undefined : 'API Error');
+    if (!response.ok) {
+      console.error('[Prebook] API Error:', data);
+      throw new Error(data.error?.message || JSON.stringify(data));
+    }
+    console.log(`[Prebook] Success: ${data.status}`);
+    return formatPrebookResponse(data, request, exchangeRate, displayCurrency);
+  } catch (error) {
+    console.error('[Prebook] Error:', error);
+    await logApiCall(supabase, endpoint, requestBody, null, 0, startTime, error.message);
+    throw error;
+  }
+}
+function formatPrebookResponse(rawData, request, exchangeRate, displayCurrency) {
+  const hotel = rawData.data?.hotels?.[0];
+  const rate = hotel?.rates?.[0];
+  const changes = rawData.data?.changes;
+  const hasError = rawData.error !== null && rawData.error !== undefined;
+  const isAvailable = rawData.status === 'ok' && !hasError;
+  const priceChanged = changes?.price_changed || false;
+  // Get payment info
+  const paymentType = rate?.payment_options?.payment_types?.[0];
+  const usdAmount = parseFloat(paymentType?.show_amount || '0');
+  const displayAmount = usdAmount * exchangeRate;
+  // Determine status for frontend
+  let finalStatus;
+  if (!isAvailable) {
+    finalStatus = 'not_available';
+  } else if (priceChanged) {
+    finalStatus = 'price_changed';
+  } else {
+    finalStatus = 'available';
+  }
+  return {
+    success: isAvailable,
+    status: finalStatus,
+    available: isAvailable,
+    priceChanged: priceChanged,
+    // CRITICAL: NEW book_hash for booking step
+    bookHash: rate?.book_hash,
+    matchHash: rate?.match_hash,
+    pricing: {
+      displayAmount: Math.round(displayAmount * 100) / 100,
+      displayCurrency: displayCurrency,
+      sourceAmount: usdAmount,
+      sourceCurrency: paymentType?.show_currency_code || 'USD',
+      exchangeRate: exchangeRate
+    },
+    hotel: {
+      id: hotel?.id,
+      hid: hotel?.hid,
+      name: rate?.legal_info?.hotel?.name
+    },
+    rate: {
+      roomName: rate?.room_name,
+      mealType: rate?.meal,
+      mealData: rate?.meal_data,
+      cancellation: {
+        freeCancellationBefore: paymentType?.cancellation_penalties?.free_cancellation_before,
+        policies: paymentType?.cancellation_penalties?.policies || []
+      },
+      payment: {
+        type: paymentType?.type,
+        amount: paymentType?.amount,
+        showAmount: paymentType?.show_amount,
+        currencyCode: paymentType?.currency_code,
+        needCreditCard: paymentType?.is_need_credit_card_data,
+        needCvc: paymentType?.is_need_cvc
+      },
+      allotment: rate?.allotment,
+      amenities: rate?.amenities_data || []
+    },
+    // Error info if any
+    error: hasError ? {
+      code: rawData.error,
+      message: getErrorMessage(rawData.error)
+    } : null,
+    _rawResponse: rawData
+  };
+}
+function getErrorMessage(errorCode) {
+  const errorMessages = {
+    'no_available_rates': 'Rate not available at requested price. Try increasing price_increase_percent.',
+    'rate_not_found': 'Rate expired or not found. Please search again.',
+    'invalid_params': 'Invalid parameters in request.',
+    'unknown': 'Service timeout. Please try again.',
+    'prebook_disabled': 'Prebook not enabled for your account.',
+    'contract_mismatch': 'Contract mismatch. Contact support.'
+  };
+  return errorMessages[errorCode] || 'Unknown error occurred';
+}
+serve(async (req)=>{
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: corsHeaders
+    });
+  }
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const request = await req.json();
+    console.log('[Prebook] Received request');
+    if (!request.bookHash) {
+      throw new Error('bookHash is required');
+    }
+    if (request.priceIncreasePercent !== undefined) {
+      if (request.priceIncreasePercent < 0 || request.priceIncreasePercent > 100) {
+        throw new Error('priceIncreasePercent must be between 0 and 100');
+      }
+    }
+    const result = await prebookRate(request, supabase);
+    return new Response(JSON.stringify(result), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 200
+    });
+  } catch (error) {
+    console.error('[Prebook] Handler error:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message,
+      details: error.toString()
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
+      status: 500
+    });
+  }
+});
